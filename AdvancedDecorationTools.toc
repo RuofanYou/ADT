@@ -1,0 +1,13 @@
+## Interface: 110207, 120000
+## Title: AdvancedDecorationTools
+## Notes: Housing – Hover name and one-key duplicate (Alt/Ctrl). 仅住宅：悬停显示名称与按键复制。
+## Notes-zhCN: 住宅功能：悬停显示装饰名称与库存，并支持按键（Alt/Ctrl）复制同款装饰。
+## Author: 瑟瑟
+## Version: 251206.8
+## SavedVariables: ADT_DB
+
+# 加载顺序：先核心与本地化，再住宅模块（XML 会引用 Lua）
+Core.lua
+UI.lua
+Locales/Localization.xml
+Housing/Housing.xml
