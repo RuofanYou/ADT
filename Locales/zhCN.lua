@@ -10,3 +10,6 @@ L["Duplicate Decor Key"] = "\"复制\" 热键"
 L["Enable Duplicate"] = "启用 \"复制\""
 L["Enable Duplicate tooltip"] = "在装饰模式下，鼠标悬停装饰后按下热键，可直接放置一个同款新实例。"
 
+L["SC Housing"] = "住宅"
+L["List Is Empty"] = "暂无结果"
+L["Category Colon"] = "分类："

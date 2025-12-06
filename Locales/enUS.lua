@@ -10,3 +10,6 @@ L["Duplicate Decor Key"] = "\"Duplicate\" Key"
 L["Enable Duplicate"] = "Enable \"Duplicate\""
 L["Enable Duplicate tooltip"] = "While in Decorate Mode, you can hover the cursor over a decor and then press a key to place another instance of this object."
 
+L["SC Housing"] = "Housing"
+L["List Is Empty"] = "No results"
+L["Category Colon"] = "Category: "

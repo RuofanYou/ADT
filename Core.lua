@@ -66,18 +66,22 @@ local function RegisterSettingsCategory()
     Settings.RegisterAddOnCategory(category)
 
     BlizzardPanel:SetScript("OnShow", function(self)
-        if ADT and ADT.UI and ADT.UI.ShowInContainer then
-            ADT.UI:ShowInContainer(self)
+        local Main = ADT and ADT.ControlCenter and ADT.ControlCenter.SettingsPanel
+        if Main and Main.ShowUI then
+            Main:Hide()
+            Main:SetParent(self)
+            Main:ClearAllPoints()
+            Main:SetPoint("TOPLEFT", self, "TOPLEFT", -10, 6)
+            Main:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 0, 0)
+            Main:ShowUI("blizzard")
         end
     end)
 
     BlizzardPanel:SetScript("OnHide", function(self)
-        if ADT and ADT.UI and ADT.UI.Hide then
-            ADT.UI:Hide()
-        end
+        local Main = ADT and ADT.ControlCenter and ADT.ControlCenter.SettingsPanel
+        if Main then Main:Hide() end
     end)
 
-    -- 保存分类 ID 以便 slash 跳转
     ADT.SettingsCategory = category
 end
 
