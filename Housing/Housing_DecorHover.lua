@@ -116,14 +116,17 @@ local function Blizzard_HouseEditor_OnLoaded()
     if not DisplayFrame then
         DisplayFrame = CreateFrame("Frame", nil, container, "ADT_HouseEditorInstructionTemplate")
         DisplayFrame:SetPoint("RIGHT", HouseEditorFrame.BasicDecorModeFrame, "RIGHT", -30, 0)
+        DisplayFrame:SetWidth(420)
         Mixin(DisplayFrame, DisplayFrameMixin)
         DisplayFrame:OnLoad()
 
         local SubFrame = CreateFrame("Frame", nil, DisplayFrame, "ADT_HouseEditorInstructionTemplate")
         DisplayFrame.SubFrame = SubFrame
         SubFrame:SetPoint("TOPRIGHT", DisplayFrame, "BOTTOMRIGHT", 0, 0)
+        SubFrame:SetWidth(420)
         Mixin(SubFrame, DisplayFrameMixin)
         SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or "ALT")
+        if SubFrame.LockStatusText then SubFrame.LockStatusText:Hide() end
     end
 
     container.UnselectedInstructions = { DisplayFrame }
@@ -299,4 +302,3 @@ bootstrap:SetScript("OnEvent", function()
     ADT.Housing:SetEnabled(true)
     bootstrap:UnregisterEvent("PLAYER_LOGIN")
 end)
-

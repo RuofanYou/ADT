@@ -13,3 +13,9 @@ L["Enable Duplicate tooltip"] = "在装饰模式下，鼠标悬停装饰后按�
 L["SC Housing"] = "住宅"
 L["List Is Empty"] = "暂无结果"
 L["Category Colon"] = "分类："
+
+-- 交互/锁定
+L["LOCKED"] = "已锁定"
+L["UNLOCKED"] = "未锁定"
+L["ADT: Decor %s"] = "ADT：装饰 %s"
+L["This item is LOCKED by ADT."] = "该物体已被 ADT 锁定。"

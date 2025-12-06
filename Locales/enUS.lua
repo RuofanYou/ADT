@@ -13,3 +13,9 @@ L["Enable Duplicate tooltip"] = "While in Decorate Mode, you can hover the curso
 L["SC Housing"] = "Housing"
 L["List Is Empty"] = "No results"
 L["Category Colon"] = "Category: "
+
+-- Interaction / Locking
+L["LOCKED"] = "LOCKED"
+L["UNLOCKED"] = "UNLOCKED"
+L["ADT: Decor %s"] = "ADT: Decor %s"
+L["This item is LOCKED by ADT."] = "This item is LOCKED by ADT."

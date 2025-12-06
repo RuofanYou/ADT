@@ -344,6 +344,7 @@ ADT.ControlCenter = ControlCenter
 
 local L = ADT.L
 
+-- 内部：构建默认模块，并初始化映射
 local function buildModules()
     local modules = {}
     local data = {
@@ -364,22 +365,95 @@ local function buildModules()
         modules = { data },
         numModules = 1,
     }
+
+    -- 初始化映射
+    ControlCenter._dbKeyMap = { [data.dbKey] = data }
     return modules
 end
 
-function ControlCenter:GetSortedModules()
+local function ensureSorted(self)
     if not self._sorted then self._sorted = buildModules() end
+    if not self._dbKeyMap then self._dbKeyMap = {} end
+end
+
+function ControlCenter:GetSortedModules()
+    ensureSorted(self)
     return self._sorted
 end
 
-function ControlCenter:GetModule(dbKey)
-    if dbKey == 'EnableDupe' then
-        return self:GetSortedModules()[1].modules[1]
+local function getCategoryDisplayName(key)
+    if key == 'Housing' then
+        return (L and L['SC Housing']) or 'Housing'
     end
+    return tostring(key)
+end
+
+local function sortCategory(cat)
+    table.sort(cat.modules, function(a, b)
+        local ao, bo = tonumber(a.uiOrder) or 9999, tonumber(b.uiOrder) or 9999
+        if ao ~= bo then return ao < bo end
+        local at, bt = tonumber(a.moduleAddedTime) or 0, tonumber(b.moduleAddedTime) or 0
+        if at ~= bt then return at > bt end
+        local an, bn = tostring(a.name or ''), tostring(b.name or '')
+        return an < bn
+    end)
+    cat.numModules = #cat.modules
+end
+
+-- 动态注册模块（供各功能文件调用）
+function ControlCenter:AddModule(moduleData)
+    if type(moduleData) ~= 'table' then return end
+    ensureSorted(self)
+
+    local dbKey = moduleData.dbKey
+    if dbKey and self._dbKeyMap and self._dbKeyMap[dbKey] then
+        -- 已存在则先从原分类移除，保证单一权威（DRY）
+        for _, cat in ipairs(self._sorted) do
+            for i, m in ipairs(cat.modules) do
+                if m.dbKey == dbKey then
+                    table.remove(cat.modules, i)
+                    sortCategory(cat)
+                    break
+                end
+            end
+        end
+    end
+
+    local catKey = (moduleData.categoryKeys and moduleData.categoryKeys[1]) or 'Misc'
+    local category
+    for _, cat in ipairs(self._sorted) do
+        if cat.key == catKey then category = cat break end
+    end
+    if not category then
+        category = {
+            key = catKey,
+            categoryName = getCategoryDisplayName(catKey),
+            modules = {},
+            numModules = 0,
+        }
+        table.insert(self._sorted, category)
+    end
+
+    table.insert(category.modules, moduleData)
+    sortCategory(category)
+    if dbKey then self._dbKeyMap[dbKey] = moduleData end
+end
+
+function ControlCenter:GetModule(dbKey)
+    ensureSorted(self)
+    return dbKey and self._dbKeyMap and self._dbKeyMap[dbKey]
 end
 
 function ControlCenter:GetModuleCategoryName(dbKey)
-    if dbKey == 'EnableDupe' then return (L and L['SC Housing']) or 'Housing' end
+    ensureSorted(self)
+    if not dbKey then return end
+    for _, cat in ipairs(self._sorted) do
+        for _, m in ipairs(cat.modules) do
+            if m.dbKey == dbKey then
+                return cat.categoryName
+            end
+        end
+    end
 end
 
 function ControlCenter:UpdateCurrentSortMethod() return 1 end
@@ -389,12 +463,27 @@ function ControlCenter:AnyNewFeatureMarker() return false end
 function ControlCenter:FlagCurrentNewFeatureMarkerSeen() end
 
 function ControlCenter:GetSearchResult(text)
+    ensureSorted(self)
     text = string.lower(tostring(text or ''))
     if text == '' then return self:GetSortedModules() end
-    local m = self:GetSortedModules()[1]
-    local hay = table.concat({ m.categoryName or '', m.modules[1].name or '', m.modules[1].description or '' }, ' ')
-    if string.find(string.lower(hay), text, 1, true) then
-        return { m }
+    local results = {}
+    for _, cat in ipairs(self._sorted) do
+        local matched = { key = cat.key, categoryName = cat.categoryName, modules = {}, numModules = 0 }
+        for _, m in ipairs(cat.modules) do
+            local hay = table.concat({
+                m.name or '',
+                m.description or '',
+                table.concat(m.searchTags or {}, ' '),
+                cat.categoryName or '',
+            }, ' ')
+            if string.find(string.lower(hay), text, 1, true) then
+                table.insert(matched.modules, m)
+            end
+        end
+        if #matched.modules > 0 then
+            matched.numModules = #matched.modules
+            table.insert(results, matched)
+        end
     end
-    return {}
+    return results
 end

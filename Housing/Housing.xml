@@ -1,5 +1,6 @@
 <Ui xsi:schemaLocation="http://www.blizzard.com/wow/ui/..\FrameXML\UI.xsd">
     <Script file="Housing_DecorHover.lua"/>
+    <Script file="Housing_PaintMode.lua"/>
 
     <!-- 复用与 Plumber 相同的指示条模板，但前缀改为 ADT_ 以避免冲突 -->
     <Frame name="ADT_HouseEditorInstructionTemplate" virtual="true">
@@ -59,4 +60,3 @@
         </Frames>
     </Frame>
 </Ui>
-
