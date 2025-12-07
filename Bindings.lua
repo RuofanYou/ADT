@@ -26,7 +26,7 @@ function ADT_ToggleHistory()
     if ADT and ADT.HistoryPopup and ADT.HistoryPopup.Toggle then
         ADT.HistoryPopup:Toggle()
     else
-        if ADT and ADT.Notify then ADT.Notify("历史模块未加载", 'error') end
+        if ADT and ADT.Notify then ADT.Notify((ADT.L and ADT.L["History module not loaded"]) or "History module not loaded", 'error') end
     end
 end
 
