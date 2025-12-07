@@ -208,6 +208,45 @@
         </Layers>
     </Button>
 
+    <!-- 装饰项按钮模板：图标 + 名称 + 库存数量 -->
+    <Button name="ADTDecorItemEntryTemplate" virtual="true">
+        <Size x="128" y="36"/>
+        <Layers>
+            <Layer level="BACKGROUND">
+                <Texture parentKey="Highlight" hidden="true">
+                    <Color r="1" g="1" b="1" a="0.1"/>
+                    <Anchors>
+                        <Anchor point="TOPLEFT"/>
+                        <Anchor point="BOTTOMRIGHT"/>
+                    </Anchors>
+                </Texture>
+            </Layer>
+            <Layer level="ARTWORK">
+                <Texture parentKey="Icon">
+                    <Size x="28" y="28"/>
+                    <Anchors>
+                        <Anchor point="LEFT" relativeKey="$parent" relativePoint="LEFT" x="4"/>
+                    </Anchors>
+                    <TexCoords left="0.08" right="0.92" top="0.08" bottom="0.92"/>
+                </Texture>
+            </Layer>
+            <Layer level="OVERLAY">
+                <FontString parentKey="Name" justifyH="LEFT" inherits="GameFontNormal">
+                    <Anchors>
+                        <Anchor point="LEFT" relativeKey="$parent.Icon" relativePoint="RIGHT" x="8"/>
+                        <Anchor point="RIGHT" relativeKey="$parent" relativePoint="RIGHT" x="-40"/>
+                    </Anchors>
+                </FontString>
+                <FontString parentKey="Count" justifyH="RIGHT" inherits="GameFontHighlightSmall">
+                    <Size x="32" y="20"/>
+                    <Anchors>
+                        <Anchor point="RIGHT" relativeKey="$parent" relativePoint="RIGHT" x="-6"/>
+                    </Anchors>
+                </FontString>
+            </Layer>
+        </Layers>
+    </Button>
+
     <!-- 选中高亮动画模板 -->
     <Frame name="ADTSettingsAnimSelectionTemplate" virtual="true" useParentLevel="true">
         <Size x="128" y="28"/>

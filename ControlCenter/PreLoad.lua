@@ -347,6 +347,8 @@ local L = ADT.L
 -- 内部：构建默认模块，并初始化映射
 local function buildModules()
     local modules = {}
+    
+    -- 住宅设置模块（原有）
     local data = {
         name = L["ModuleName Housing_DecorHover"] or "住宅：名称与复制",
         dbKey = 'EnableDupe',
@@ -361,9 +363,78 @@ local function buildModules()
 
     modules[1] = {
         key = 'Housing',
-        categoryName = (L and L['SC Housing']) or 'Housing',
+        categoryName = (L and L['SC Housing']) or '住宅',
+        categoryType = 'settings', -- 设置类分类
         modules = { data },
         numModules = 1,
+    }
+
+    -- 临时板分类（装饰列表类）
+    modules[2] = {
+        key = 'Clipboard',
+        categoryName = (L and L['SC Clipboard']) or '📋 临时板',
+        categoryType = 'decorList', -- 装饰列表类分类
+        modules = {},
+        numModules = 0,
+        -- 获取列表数据的回调
+        getListData = function()
+            if ADT and ADT.Clipboard and ADT.Clipboard.GetAll then
+                return ADT.Clipboard:GetAll() or {}
+            end
+            return {}
+        end,
+        -- 点击装饰项的回调
+        onItemClick = function(decorID, button)
+            if button == 'RightButton' then
+                -- 右键：从列表移除
+                if ADT and ADT.Clipboard then
+                    local list = ADT.Clipboard:GetAll()
+                    for i, item in ipairs(list) do
+                        if item.decorID == decorID then
+                            ADT.Clipboard:RemoveAt(i)
+                            break
+                        end
+                    end
+                end
+            else
+                -- 左键：开始放置
+                if ADT and ADT.Clipboard and ADT.Clipboard.StartPlacing then
+                    ADT.Clipboard:StartPlacing(decorID)
+                end
+            end
+        end,
+        -- 空列表提示
+        emptyText = "临时板为空\nCtrl+S 存入；Ctrl+R 取出",
+    }
+
+    -- 最近放置分类（装饰列表类）
+    modules[3] = {
+        key = 'History',
+        categoryName = (L and L['SC History']) or '📜 最近放置',
+        categoryType = 'decorList', -- 装饰列表类分类
+        modules = {},
+        numModules = 0,
+        -- 获取列表数据的回调
+        getListData = function()
+            if ADT and ADT.History and ADT.History.GetAll then
+                return ADT.History:GetAll() or {}
+            end
+            return {}
+        end,
+        -- 点击装饰项的回调
+        onItemClick = function(decorID, button)
+            if button == 'RightButton' then
+                -- 右键：暂不支持从历史移除单项
+                return
+            else
+                -- 左键：开始放置
+                if ADT and ADT.History and ADT.History.StartPlacing then
+                    ADT.History:StartPlacing(decorID)
+                end
+            end
+        end,
+        -- 空列表提示
+        emptyText = "暂无放置记录\n放置装饰后会自动记录",
     }
 
     -- 初始化映射
@@ -383,7 +454,11 @@ end
 
 local function getCategoryDisplayName(key)
     if key == 'Housing' then
-        return (L and L['SC Housing']) or 'Housing'
+        return (L and L['SC Housing']) or '住宅'
+    elseif key == 'Clipboard' then
+        return (L and L['SC Clipboard']) or '📋 临时板'
+    elseif key == 'History' then
+        return (L and L['SC History']) or '📜 最近放置'
     end
     return tostring(key)
 end
@@ -461,6 +536,28 @@ function ControlCenter:SetCurrentSortMethod(_) end
 function ControlCenter:GetNumFilters() return 1 end
 function ControlCenter:AnyNewFeatureMarker() return false end
 function ControlCenter:FlagCurrentNewFeatureMarkerSeen() end
+
+-- 获取指定 key 的分类信息（包括装饰列表分类）
+function ControlCenter:GetCategoryByKey(key)
+    ensureSorted(self)
+    if not key then return nil end
+    for _, cat in ipairs(self._sorted) do
+        if cat.key == key then
+            return cat
+        end
+    end
+    return nil
+end
+
+-- 获取装饰列表分类的列表项数量（用于角标显示）
+function ControlCenter:GetDecorListCount(key)
+    local cat = self:GetCategoryByKey(key)
+    if cat and cat.categoryType == 'decorList' and cat.getListData then
+        local list = cat.getListData()
+        return type(list) == 'table' and #list or 0
+    end
+    return 0
+end
 
 function ControlCenter:GetSearchResult(text)
     ensureSorted(self)

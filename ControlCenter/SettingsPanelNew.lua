@@ -377,16 +377,20 @@ do
     end
 
     function CategoryButtonMixin:OnClick()
-        if ActiveCategoryInfo[self.categoryKey] then
+        local cat = ControlCenter:GetCategoryByKey(self.categoryKey)
+        if cat and cat.categoryType == 'decorList' then
+            -- 装饰列表分类：切换到装饰列表视图
+            MainFrame:ShowDecorListCategory(self.categoryKey)
+            ADT.LandingPageUtil.PlayUISound("ScrollBarStep")
+        elseif ActiveCategoryInfo[self.categoryKey] then
+            -- 设置类分类：滚动到对应位置
             MainFrame.ModuleTab.ScrollView:ScrollTo(ActiveCategoryInfo[self.categoryKey].scrollOffset)
             ADT.LandingPageUtil.PlayUISound("ScrollBarStep")
         end
     end
 
     function CategoryButtonMixin:OnMouseDown()
-        if ActiveCategoryInfo[self.categoryKey] then
-            self.Label:SetPoint("LEFT", self, "LEFT", self.labelOffset + 1, -1)
-        end
+        self.Label:SetPoint("LEFT", self, "LEFT", self.labelOffset + 1, -1)
     end
 
     function CategoryButtonMixin:OnMouseUp()
@@ -622,6 +626,115 @@ do
 end
 
 
+-- 装饰项按钮（用于临时板和历史记录列表）
+local CreateDecorItemEntry
+do
+    local DecorItemMixin = {}
+
+    function DecorItemMixin:SetData(item, categoryInfo)
+        self.decorID = item.decorID
+        self.categoryInfo = categoryInfo
+        self.itemData = item
+        
+        -- 设置图标
+        self.Icon:SetTexture(item.icon or 134400)
+        
+        -- 获取库存数量
+        local entryInfo = C_HousingCatalog and C_HousingCatalog.GetCatalogEntryInfoByRecordID 
+            and C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, item.decorID, true)
+        local available = 0
+        local displayName = item.name or ("装饰 #" .. tostring(item.decorID))
+        
+        if entryInfo then
+            available = (entryInfo.quantity or 0) + (entryInfo.remainingRedeemable or 0)
+            if not item.name and entryInfo.name then
+                displayName = entryInfo.name
+            end
+            if not item.icon and entryInfo.iconTexture then
+                self.Icon:SetTexture(entryInfo.iconTexture)
+            end
+        end
+        
+        -- 临时板显示计数前缀
+        if item.count and item.count > 1 then
+            displayName = string.format("[x%d] %s", item.count, displayName)
+        end
+        
+        self.Name:SetText(displayName)
+        self.Count:SetText(tostring(available))
+        self.available = available
+        
+        -- 禁用状态
+        self.isDisabled = available <= 0
+        self:UpdateVisual()
+    end
+
+    function DecorItemMixin:UpdateVisual()
+        if self.isDisabled then
+            self.Name:SetTextColor(0.5, 0.5, 0.5)
+            if self.Icon.SetDesaturated then self.Icon:SetDesaturated(true) end
+        else
+            SetTextColor(self.Name, Def.TextColorNormal)
+            if self.Icon.SetDesaturated then self.Icon:SetDesaturated(false) end
+        end
+    end
+
+    function DecorItemMixin:OnEnter()
+        if not self.isDisabled then
+            self.Highlight:Show()
+            SetTextColor(self.Name, Def.TextColorHighlight)
+        end
+        -- 右侧预览
+        MainFrame:ShowDecorPreview(self.itemData, self.available)
+        -- Tooltip
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(self.Name:GetText() or "", 1, 1, 1)
+        if self.available > 0 then
+            GameTooltip:AddLine("库存：" .. self.available, 0, 1, 0)
+        else
+            GameTooltip:AddLine("库存：0（不可放置）", 1, 0.2, 0.2)
+        end
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("左键：开始放置", 0.8, 0.8, 0.8)
+        if self.categoryInfo and self.categoryInfo.key == 'Clipboard' then
+            GameTooltip:AddLine("右键：从临时板移除", 1, 0.4, 0.4)
+        end
+        GameTooltip:Show()
+    end
+
+    function DecorItemMixin:OnLeave()
+        self.Highlight:Hide()
+        self:UpdateVisual()
+        GameTooltip:Hide()
+    end
+
+    function DecorItemMixin:OnClick(button)
+        if self.isDisabled and button ~= "RightButton" then return end
+        if self.categoryInfo and self.categoryInfo.onItemClick then
+            self.categoryInfo.onItemClick(self.decorID, button)
+            -- 刷新列表
+            C_Timer.After(0.1, function()
+                if MainFrame.currentDecorCategory then
+                    MainFrame:ShowDecorListCategory(MainFrame.currentDecorCategory)
+                end
+            end)
+        end
+    end
+
+    function CreateDecorItemEntry(parent)
+        local f = CreateFrame("Button", nil, parent, "ADTDecorItemEntryTemplate")
+        Mixin(f, DecorItemMixin)
+        f:SetSize(200, 36)
+        f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        f:SetScript("OnEnter", f.OnEnter)
+        f:SetScript("OnLeave", f.OnLeave)
+        f:SetScript("OnClick", f.OnClick)
+        SetTextColor(f.Name, Def.TextColorNormal)
+        return f
+    end
+end
+
+
 local CreateSelectionHighlight
 do
     local SelectionHighlightMixin = {}
@@ -701,6 +814,33 @@ do  -- Right Section
         end
         self.FeatureDescription:SetText(desc)
         self.FeaturePreview:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/Preview_"..(parentDBKey or moduleData.dbKey))
+    end
+
+    -- 显示装饰项预览（用于装饰列表分类）
+    function MainFrame:ShowDecorPreview(itemData, available)
+        if not itemData then return end
+        -- 设置预览图标
+        local icon = itemData.icon or 134400
+        local entryInfo = C_HousingCatalog and C_HousingCatalog.GetCatalogEntryInfoByRecordID
+            and C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, itemData.decorID, true)
+        if entryInfo and entryInfo.iconTexture then
+            icon = entryInfo.iconTexture
+        end
+        self.FeaturePreview:SetTexture(icon)
+        
+        -- 构建描述文本
+        local name = itemData.name or (entryInfo and entryInfo.name) or ("装饰 #" .. tostring(itemData.decorID))
+        local desc = name .. "\n\n"
+        if available and available > 0 then
+            desc = desc .. "|cff00ff00库存：" .. available .. "|r\n\n"
+        else
+            desc = desc .. "|cffff3333库存：0（不可放置）|r\n\n"
+        end
+        desc = desc .. "|cffaaaaaa左键：开始放置|r"
+        if self.currentDecorCategory == 'Clipboard' then
+            desc = desc .. "\n|cffff6666右键：从临时板移除|r"
+        end
+        self.FeatureDescription:SetText(desc)
     end
 end
 
@@ -836,11 +976,109 @@ do  -- Central
             local categoryButton = self.primaryCategoryPool:Acquire()
             categoryButton:SetCategory(categoryInfo.key, categoryInfo.categoryName, categoryInfo.anyNewFeature)
             categoryButton:SetPoint("TOPLEFT", self.LeftSection, self.primaryCategoryPool.offsetX, self.primaryCategoryPool.leftListFromY - (index - 1) * Def.ButtonSize)
+            
+            -- 装饰列表分类显示数量角标
+            if categoryInfo.categoryType == 'decorList' then
+                local count = ControlCenter:GetDecorListCount(categoryInfo.key)
+                categoryButton:ShowCount(count > 0 and count or nil)
+            end
         end
     end
 
     function MainFrame:UpdateSettingsEntries()
         self.ModuleTab.ScrollView:CallObjectMethod("Entry", "UpdateState")
+    end
+
+    -- 显示装饰列表分类（临时板或最近放置）
+    function MainFrame:ShowDecorListCategory(categoryKey)
+        local cat = ControlCenter:GetCategoryByKey(categoryKey)
+        if not cat or cat.categoryType ~= 'decorList' then return end
+        
+        self.currentDecorCategory = categoryKey
+        
+        local list = cat.getListData and cat.getListData() or {}
+        local content = {}
+        local n = 0
+        local buttonHeight = 36 -- 装饰项按钮高度
+        local fromOffsetY = Def.ButtonSize
+        local offsetY = fromOffsetY
+        local buttonGap = 2
+        local offsetX = 0
+        
+        -- 添加标题
+        n = n + 1
+        content[n] = {
+            dataIndex = n,
+            templateKey = "Header",
+            setupFunc = function(obj)
+                obj:SetText(cat.categoryName)
+            end,
+            top = offsetY,
+            bottom = offsetY + Def.ButtonSize,
+            offsetX = offsetX,
+        }
+        offsetY = offsetY + Def.ButtonSize
+        
+        -- 添加装饰项或空列表提示
+        if #list == 0 then
+            -- 空列表：显示提示文本
+            n = n + 1
+            content[n] = {
+                dataIndex = n,
+                templateKey = "Header",
+                setupFunc = function(obj)
+                    obj:SetText(cat.emptyText or "列表为空")
+                    SetTextColor(obj.Label, Def.TextColorDisabled)
+                end,
+                top = offsetY,
+                bottom = offsetY + Def.ButtonSize * 2,
+                offsetX = offsetX,
+            }
+        else
+            -- 有装饰项：渲染列表
+            for i, item in ipairs(list) do
+                n = n + 1
+                local top = offsetY
+                local bottom = offsetY + buttonHeight + buttonGap
+                local capCat = cat -- 捕获当前分类信息
+                local capItem = item -- 捕获当前项
+                content[n] = {
+                    dataIndex = n,
+                    templateKey = "DecorItem",
+                    setupFunc = function(obj)
+                        obj:SetData(capItem, capCat)
+                    end,
+                    top = top,
+                    bottom = bottom,
+                    offsetX = offsetX,
+                }
+                offsetY = bottom
+            end
+        end
+        
+        self.ModuleTab.ScrollView:SetContent(content, false)
+        
+        -- 显示第一个装饰项的预览
+        if #list > 0 then
+            local firstItem = list[1]
+            local entryInfo = C_HousingCatalog and C_HousingCatalog.GetCatalogEntryInfoByRecordID
+                and C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, firstItem.decorID, true)
+            local available = 0
+            if entryInfo then
+                available = (entryInfo.quantity or 0) + (entryInfo.remainingRedeemable or 0)
+            end
+            self:ShowDecorPreview(firstItem, available)
+        else
+            -- 空列表时显示提示
+            self.FeaturePreview:SetTexture(134400) -- 问号图标
+            self.FeatureDescription:SetText(cat.emptyText or "列表为空")
+        end
+    end
+
+    -- 返回设置列表视图
+    function MainFrame:ShowSettingsView()
+        self.currentDecorCategory = nil
+        self:RefreshFeatureList()
     end
 end
 
@@ -1029,6 +1267,16 @@ local function CreateUI()
         end
 
         ScrollView:AddTemplate("Header", Header_Create)
+
+
+        -- 装饰项模板（用于临时板和最近放置列表）
+        local function DecorItem_Create()
+            local obj = CreateDecorItemEntry(ScrollView)
+            obj:SetSize(centerButtonWidth, 36)
+            return obj
+        end
+
+        ScrollView:AddTemplate("DecorItem", DecorItem_Create)
     end
 
 
