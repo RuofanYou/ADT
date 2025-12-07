@@ -9,6 +9,8 @@ local DEFAULTS = {
     EnableDupe = true,
     -- 1: Ctrl, 2: Alt
     DuplicateKey = 2,
+    -- 放置历史记录
+    PlacementHistory = {},
 }
 
 local function CopyDefaults(dst, src)

@@ -1,0 +1,7 @@
+<Bindings>
+    <!-- 在“按键绑定”中创建一组 ADT 的快捷键 -->
+    <Binding name="ADT_TOGGLE_HISTORY" header="ADT">
+        ADT_ToggleHistory();
+    </Binding>
+</Bindings>
+
