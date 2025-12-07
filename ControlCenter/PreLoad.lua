@@ -449,6 +449,7 @@ local function buildModules()
                 if canRefresh then
                     if Main.RefreshCategoryList then Main:RefreshCategoryList() end
                     if Main.RefreshFeatureList then Main:RefreshFeatureList() end
+                    if Main.RefreshLanguageLayout then Main:RefreshLanguageLayout(true) end
                 end
             end
         end,
@@ -547,13 +548,21 @@ local function buildModules()
             elseif GetAddOnMetadata then
                 ver = GetAddOnMetadata("AdvancedDecorationTools", "Version") or ver
             end
+            -- 文本本地化：除“瑟小瑟”保留中文外，其他均跟随语言表
+            local name = (L and L['Addon Full Name']) or '高级装修工具'
+            local versionLabelFmt = (L and L['Version Label']) or '版本：%s'
+            local creditsLabel = (L and L['Credits Label']) or '制作信息'
+            local biliLabel = (L and L['Bilibili Label']) or 'bilibili:'
             -- 不使用空行，避免产生多余分隔符
             return string.format(
-                "|cffffcc00高级装修工具|r\n" ..
-                "|cffaaaaaa版本：%s|r\n" ..
-                "|cffcccccc制作信息|r\n" ..
-                "|cff00aaffbilibili:|r 瑟小瑟",
-                ver
+                "|cffffcc00%s|r\n" ..
+                "|cffaaaaaa" .. versionLabelFmt .. "|r\n" ..
+                "|cffcccccc%s|r\n" ..
+                "|cff00aaff%s|r 瑟小瑟",
+                name,
+                ver,
+                creditsLabel,
+                biliLabel
             )
         end,
     }

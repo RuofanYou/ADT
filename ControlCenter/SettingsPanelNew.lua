@@ -33,6 +33,19 @@ local Def = {
 }
 
 
+-- 依据当前语言返回左侧栏目标宽度（单一权威）
+local function GetSideSectionWidthByLocale()
+    local lang = tostring((ADT and ADT.CurrentLocale) or (GetLocale and GetLocale()) or "enUS")
+    if lang:sub(1, 2) == "en" or lang == "enUS" or lang == "enGB" then
+        return 180 -- 英文更宽，避免单词截断
+    elseif lang == "zhCN" then
+        return 140 -- 中文更紧凑
+    else
+        return 150 -- 其他语言兜底
+    end
+end
+
+
 local MainFrame = CreateFrame("Frame", nil, UIParent, "ADTSettingsPanelLayoutTemplate")
 ControlCenter.SettingsPanel = MainFrame
 do
@@ -1149,6 +1162,87 @@ do  -- Left Section
             CategoryHighlight:FadeIn()
         end
     end
+
+    -- 运行时根据语言调整左侧栏宽度，并联动更新相关控件尺寸
+    function MainFrame:_ApplySideWidth(sideWidth)
+        sideWidth = API.Round(sideWidth)
+        local LeftSection = self.LeftSection
+        if not LeftSection then return end
+
+        LeftSection:SetWidth(sideWidth)
+
+        -- 分类按钮宽度与高亮条宽度
+        local btnWidth = sideWidth - 2*Def.WidgetGap
+        if CategoryHighlight and CategoryHighlight.SetSize then
+            CategoryHighlight:SetSize(btnWidth, Def.ButtonSize)
+        end
+        if self.primaryCategoryPool and self.primaryCategoryPool.EnumerateActive then
+            for _, button in self.primaryCategoryPool:EnumerateActive() do
+                if button and button.SetSize then
+                    button:SetSize(btnWidth, Def.ButtonSize)
+                end
+                if button and button.Label and button.labelOffset then
+                    button.Label:SetWidth(btnWidth - 2*button.labelOffset - 14)
+                end
+            end
+        end
+
+        -- 右侧预览图尺寸与滚动区联动（中央区随锚点自动伸缩，但滚动条需手动刷新）
+        local previewSize = math.max(64, sideWidth - 2*Def.ButtonSize)
+        if self.FeaturePreview and self.FeaturePreview.SetSize then
+            self.FeaturePreview:SetSize(previewSize, previewSize)
+        end
+
+        if self.CentralSection and self.ModuleTab and self.ModuleTab.ScrollView then
+            local CentralSection = self.CentralSection
+            local newWidth = API.Round(CentralSection:GetWidth() - 2*Def.ButtonSize)
+            if newWidth > 0 then
+                self.centerButtonWidth = newWidth
+                local ScrollView = self.ModuleTab.ScrollView
+                ScrollView:CallObjectMethod("Entry", "SetWidth", newWidth)
+                ScrollView:CallObjectMethod("Header", "SetWidth", newWidth)
+                ScrollView:CallObjectMethod("DecorItem", "SetWidth", newWidth)
+                ScrollView:OnSizeChanged(true)
+                if self.ModuleTab.ScrollBar and self.ModuleTab.ScrollBar.UpdateThumbRange then
+                    self.ModuleTab.ScrollBar:UpdateThumbRange()
+                end
+            end
+        end
+    end
+
+    function MainFrame:AnimateSideWidthTo(targetWidth)
+        local from = self.LeftSection and self.LeftSection:GetWidth() or targetWidth
+        if not from or math.abs(from - targetWidth) < 1 then
+            self:_ApplySideWidth(targetWidth)
+            return
+        end
+        local t, d = 0, 0.25
+        local ease = ADT.EasingFunctions and ADT.EasingFunctions.outQuint
+        self:SetScript("OnUpdate", function(_, elapsed)
+            t = t + (elapsed or 0)
+            if t >= d then
+                self:SetScript("OnUpdate", nil)
+                self:_ApplySideWidth(targetWidth)
+                return
+            end
+            local cur
+            if ease then
+                cur = ease(t, from, targetWidth - from, d)
+            else
+                cur = API.Lerp(from, targetWidth, t/d)
+            end
+            self:_ApplySideWidth(cur)
+        end)
+    end
+
+    function MainFrame:RefreshLanguageLayout(animated)
+        local target = GetSideSectionWidthByLocale()
+        if animated then
+            self:AnimateSideWidthTo(target)
+        else
+            self:_ApplySideWidth(target)
+        end
+    end
 end
 
 
@@ -1572,8 +1666,8 @@ end
 local function CreateUI()
     local pageHeight = Def.PageHeight
     
-    -- 紧凑布局：左侧固定宽度，中间动态宽度
-    local sideSectionWidth = 130  -- 左侧：5个汉字(约75px) + 边距 + 数量角标
+    -- 紧凑布局：左侧固定宽度，中间动态宽度（宽度由语言决定，单一权威：GetSideSectionWidthByLocale）
+    local sideSectionWidth = GetSideSectionWidthByLocale()
     local centralSectionWidth = 340  -- 中间：图标 + 长装饰名称(如"小型锯齿奥格瑞玛栅栏") + 数量
     
     MainFrame:SetSize(sideSectionWidth + centralSectionWidth, pageHeight)

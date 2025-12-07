@@ -60,6 +60,12 @@ ADT.Locales.enUS = {
     ["History Empty Line1"] = "No placements yet",
     ["History Empty Line2"] = "Will record automatically after a placement",
     ["List Is Empty"] = "No results",
+
+    -- About 面板
+    ["Addon Full Name"] = "Advanced Decoration Tools",
+    ["Version Label"] = "Version: %s",
+    ["Credits Label"] = "Credits",
+    ["Bilibili Label"] = "bilibili:",
 }
 
 -- 中文语言表
@@ -91,6 +97,12 @@ ADT.Locales.zhCN = {
     ["SC About"] = "信息",
     ["List Is Empty"] = "暂无结果",
     ["Category Colon"] = "分类：",
+
+    -- About 面板
+    ["Addon Full Name"] = "高级装修工具",
+    ["Version Label"] = "版本：%s",
+    ["Credits Label"] = "制作信息",
+    ["Bilibili Label"] = "bilibili:",
     
     -- 交互/锁定
     ["LOCKED"] = "已锁定",
