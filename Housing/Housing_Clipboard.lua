@@ -68,7 +68,7 @@ function Clipboard:AddItem(decorID, name, icon, count)
         table.insert(list, 1, { decorID = decorID, name = name, icon = icon, count = n })
     end
     if ADT and ADT.Notify and name then
-        ADT.Notify(string.format("已加入剪切板：%s x%d", name, n), 'success')
+        ADT.Notify(string.format(ADT.L["Added to clipboard: %s x%d"], name, n), 'success')
     end
     if type(self.OnChanged) == 'function' then self:OnChanged() end
 end
@@ -79,14 +79,14 @@ function Clipboard:StoreSelectedAndRemove()
     if not ADT.Housing or not ADT.Housing.GetSelectedDecorRecordIDAndName then return end
     local id, name, icon = ADT.Housing:GetSelectedDecorRecordIDAndName()
     if not id then
-        if ADT.Notify then ADT.Notify("请先点击选中要存入的装饰", 'info') end
+        if ADT.Notify then ADT.Notify(ADT.L["Please select a decor to store"], 'info') end
         return
     end
     -- 尝试移除当前选中（由 Housing 模块提供单一权威的移除实现）
     if ADT.Housing and ADT.Housing.RemoveSelectedDecor then
         local ok = ADT.Housing:RemoveSelectedDecor()
         if not ok then
-            if ADT.Notify then ADT.Notify("无法移除该装饰，请确认处于可移除模式", 'error') end
+            if ADT.Notify then ADT.Notify(ADT.L["Cannot remove, check mode"], 'error') end
             return
         end
     end
@@ -98,7 +98,7 @@ end
 function Clipboard:RecallTopStartPlacing()
     local list = GetList()
     if #list == 0 then
-        if ADT and ADT.Notify then ADT.Notify("临时板为空", 'info') end
+        if ADT and ADT.Notify then ADT.Notify(ADT.L["Clipboard is empty"], 'info') end
         return
     end
     local top = list[1]
@@ -138,14 +138,14 @@ function Clipboard:AddFromHovered()
     if not (IsHouseEditorActive and IsHouseEditorActive()) then return end
     if not ADT.Housing or not ADT.Housing.GetHoveredDecorRecordIDAndName then return end
     local id, name, icon = ADT.Housing:GetHoveredDecorRecordIDAndName()
-    if id then self:AddItem(id, name, icon, 1) else if ADT.Notify then ADT.Notify("未检测到悬停装饰", 'info') end end
+    if id then self:AddItem(id, name, icon, 1) else if ADT.Notify then ADT.Notify(ADT.L["No hovered decor"], 'info') end end
 end
 
 function Clipboard:AddFromSelected()
     if not (IsHouseEditorActive and IsHouseEditorActive()) then return end
     if not ADT.Housing or not ADT.Housing.GetSelectedDecorRecordIDAndName then return end
     local id, name, icon = ADT.Housing:GetSelectedDecorRecordIDAndName()
-    if id then self:AddItem(id, name, icon, 1) else if ADT.Notify then ADT.Notify("当前未选中装饰", 'info') end end
+    if id then self:AddItem(id, name, icon, 1) else if ADT.Notify then ADT.Notify(ADT.L["No selected decor"], 'info') end end
 end
 
 -- 采集：从高级编辑的选集（按 guid 去重 → decorID 聚合计数）
@@ -153,7 +153,7 @@ function Clipboard:AddFromSelectionSet()
     if not (IsHouseEditorActive and IsHouseEditorActive()) then return end
     local AE = ADT.AdvancedEdit
     if not (AE and AE.selectionList) then
-        if ADT.Notify then ADT.Notify("选集为空（或高级编辑未开启）", 'info') end
+        if ADT.Notify then ADT.Notify(ADT.L["Selection empty or AE off"], 'info') end
         return
     end
     local temp = {} -- decorID -> {name, icon, count}
@@ -170,7 +170,7 @@ function Clipboard:AddFromSelectionSet()
         self:AddItem(decorID, rec.name, rec.icon, rec.count)
         added = added + 1
     end
-    if added == 0 and ADT.Notify then ADT.Notify("选集中没有有效装饰", 'info') end
+    if added == 0 and ADT.Notify then ADT.Notify(ADT.L["Selection has no valid decor"], 'info') end
 end
 
 -- 进入放置
@@ -182,7 +182,7 @@ function Clipboard:StartPlacing(decorID)
         if ok then
             Clipboard._placingDecorID = decorID
         else
-            if ADT.Notify then ADT.Notify("无法进入放置（库存不足或达到上限）", 'error') end
+            if ADT.Notify then ADT.Notify(ADT.L["Cannot start placing 2"], 'error') end
         end
     end)
 end
@@ -219,7 +219,7 @@ function Clipboard:Toggle()
         return
     end
     -- 兜底：如果 ClipboardPopup 未加载，提示使用 /adthistory 或检查加载顺序
-    if ADT and ADT.Notify then ADT.Notify("剪切板UI未加载，请重载界面或报告问题", 'error') end
+    if ADT and ADT.Notify then ADT.Notify(ADT.L["Clipboard UI not loaded"], 'error') end
 end
 
 -- 启动提示命令

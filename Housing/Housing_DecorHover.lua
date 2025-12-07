@@ -54,6 +54,129 @@ function EL:GetClipboard()
 end
 
 --
+-- 误操作保护模块（L 键锁定/解锁，选中时弹窗确认）
+--
+local Protection = {}
+EL.Protection = Protection
+
+-- 检查装饰是否受保护（返回 isProtected, protectedName）
+function Protection:IsProtected(decorGUID, decorID)
+    local db = ADT.GetDBValue("ProtectedDecors") or {}
+    if decorGUID and db[decorGUID] then
+        return true, db[decorGUID].name
+    end
+    return false, nil
+end
+
+-- 添加保护（单个实例）
+function Protection:ProtectInstance(decorGUID, name)
+    if not decorGUID then return false end
+    local db = ADT.GetDBValue("ProtectedDecors") or {}
+    db[decorGUID] = { name = name or "未知", protectedAt = time() }
+    ADT.SetDBValue("ProtectedDecors", db)
+    return true
+end
+
+-- 移除保护（单个实例）
+function Protection:UnprotectInstance(decorGUID)
+    if not decorGUID then return false end
+    local db = ADT.GetDBValue("ProtectedDecors") or {}
+    if db[decorGUID] then
+        db[decorGUID] = nil
+        ADT.SetDBValue("ProtectedDecors", db)
+        return true
+    end
+    return false
+end
+
+-- 获取所有受保护装饰列表
+function Protection:GetAllProtected()
+    return ADT.GetDBValue("ProtectedDecors") or {}
+end
+
+-- 清除所有保护
+function Protection:ClearAll()
+    ADT.SetDBValue("ProtectedDecors", {})
+end
+
+-- 切换悬停装饰的保护状态
+function EL:ToggleProtection()
+    if not IsHouseEditorActive() then return end
+    
+    -- 获取悬停的装饰
+    local info = GetHoveredDecorInfo()
+    if not info or not info.decorGUID then
+        if ADT and ADT.Notify then
+            ADT.Notify(L["Hover a decor to lock"] or "请先将鼠标悬停在装饰上", "warning")
+        end
+        return
+    end
+    
+    -- 切换保护状态
+    local isProtected = self.Protection:IsProtected(info.decorGUID, info.decorID)
+    if isProtected then
+        self.Protection:UnprotectInstance(info.decorGUID)
+        if ADT and ADT.Notify then
+            ADT.Notify("🔓 " .. (L["Unlocked"] or "已解锁") .. "「" .. (info.name or "装饰") .. "」", "success")
+        end
+    else
+        self.Protection:ProtectInstance(info.decorGUID, info.name)
+        if ADT and ADT.Notify then
+            ADT.Notify("🔒 " .. (L["Locked"] or "已锁定") .. "「" .. (info.name or "装饰") .. "」", "success")
+        end
+    end
+end
+
+-- 确认弹窗定义
+StaticPopupDialogs["ADT_CONFIRM_EDIT_PROTECTED"] = {
+    text = "⚠️ " .. (L and L["Decor is locked"] or "该装饰已被锁定保护") .. "\n\n「%s」\n\n" .. (L and L["Confirm edit?"] or "确认要编辑吗？"),
+    button1 = L and L["Continue Edit"] or "继续编辑",
+    button2 = L and L["Cancel Select"] or "取消选中",
+    button3 = L and L["Unlock"] or "解除保护",
+    
+    OnAccept = function(self, data)
+        -- 用户选择"继续编辑"，不做任何事，保持当前选中
+        if ADT and ADT.Notify then
+            ADT.Notify(L and L["Edit allowed"] or "已允许本次编辑", "info")
+        end
+    end,
+    
+    OnCancel = function(self, data, reason)
+        -- 用户选择"取消选中"
+        if reason == "clicked" then
+            pcall(function()
+                if C_HousingBasicMode and C_HousingBasicMode.CancelActiveEditing then
+                    C_HousingBasicMode.CancelActiveEditing()
+                elseif C_HousingExpertMode and C_HousingExpertMode.CancelActiveEditing then
+                    C_HousingExpertMode.CancelActiveEditing()
+                end
+            end)
+            if ADT and ADT.Notify then
+                ADT.Notify(L and L["Selection cancelled"] or "已取消选中", "info")
+            end
+        end
+    end,
+    
+    OnAlt = function(self, data)
+        -- 用户选择"解除保护"
+        if data and data.decorGUID then
+            if ADT and ADT.Housing and ADT.Housing.Protection then
+                ADT.Housing.Protection:UnprotectInstance(data.decorGUID)
+            end
+            if ADT and ADT.Notify then
+                ADT.Notify("🔓 " .. (L and L["Unlocked"] or "已解锁") .. "「" .. (data.name or "装饰") .. "」", "success")
+            end
+        end
+    end,
+    
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    showAlert = true,
+    preferredIndex = 3,
+}
+
+--
 -- UI
 --
 local DisplayFrameMixin = {}
@@ -229,6 +352,8 @@ do
     EL.dynamicEvents = {
         "HOUSE_EDITOR_MODE_CHANGED",
         "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED",
+        "HOUSING_BASIC_MODE_SELECTED_TARGET_CHANGED",
+        "HOUSING_EXPERT_MODE_SELECTED_TARGET_CHANGED",
     }
 
     function EL:SetEnabled(state)
@@ -267,6 +392,40 @@ do
             self:OnEditorModeChanged()
         elseif event == "MODIFIER_STATE_CHANGED" then
             self:OnModifierStateChanged(...)
+        elseif event == "HOUSING_BASIC_MODE_SELECTED_TARGET_CHANGED" 
+            or event == "HOUSING_EXPERT_MODE_SELECTED_TARGET_CHANGED" then
+            self:OnSelectedTargetChanged(...)
+        end
+    end
+
+    -- 误操作保护：选中事件处理
+    function EL:OnSelectedTargetChanged(hasSelected, targetType)
+        if not hasSelected then return end
+        -- 检查开关是否启用
+        local protectionEnabled = ADT.GetDBValue("EnableProtection")
+        if protectionEnabled == nil then protectionEnabled = true end
+        if not protectionEnabled then return end
+        
+        -- 获取选中装饰的信息
+        local info = (C_HousingBasicMode and C_HousingBasicMode.GetSelectedDecorInfo and C_HousingBasicMode.GetSelectedDecorInfo())
+            or (C_HousingExpertMode and C_HousingExpertMode.GetSelectedDecorInfo and C_HousingExpertMode.GetSelectedDecorInfo())
+        if not info or not info.decorGUID then return end
+        
+        -- 检查是否受保护
+        local isProtected, protectedName = self.Protection:IsProtected(info.decorGUID, info.decorID)
+        if not isProtected then return end
+        
+        -- 弹出确认对话框
+        local popup = StaticPopup_Show(
+            "ADT_CONFIRM_EDIT_PROTECTED",
+            info.name or protectedName or (L and L["Unknown decor"] or "未知装饰")
+        )
+        if popup then
+            popup.data = {
+                decorGUID = info.decorGUID,
+                decorID = info.decorID,
+                name = info.name,
+            }
         end
     end
 
@@ -465,7 +624,7 @@ do
                 [4] = nil,  -- Store (CTRL+S) - 始终显示
                 [5] = nil,  -- Recall (CTRL+R) - 始终显示
                 [6] = { dbKey = "EnableBatchPlace", default = false }, -- Batch Place (CTRL)
-                [7] = nil,  -- Reset (T) - 始终显示（专家模式）
+                [7] = { dbKey = "EnableResetT", default = true }, -- Reset (T)
                 [8] = nil,  -- Reset All (CTRL+T) - 始终显示（专家模式）
             }
             for i, frame in ipairs(DisplayFrame.HintFrames) do
@@ -642,6 +801,12 @@ end
 -- 一键重置变换（T / Ctrl+T）
 --
 function EL:ResetCurrentSubmode()
+    -- 检查“启用 T 重置默认属性”开关（默认启用）
+    do
+        local enabled = ADT.GetDBValue("EnableResetT")
+        if enabled == nil then enabled = true end
+        if not enabled then return end
+    end
     if not IsHouseEditorActive() then return end
     -- 仅在专家模式下可用
     local mode = C_HouseEditor.GetActiveHouseEditorMode and C_HouseEditor.GetActiveHouseEditorMode()
@@ -815,7 +980,13 @@ do
         -- 注意：优先级覆盖，确保高于默认与其他非优先覆盖
         for _, cfg in ipairs(OVERRIDE_KEYS) do
             local btn = cfg.button()
-            if btn then
+            local allowed = true
+            if cfg.key == "T" then
+                local en = ADT.GetDBValue("EnableResetT")
+                if en == nil then en = true end
+                allowed = en
+            end
+            if btn and allowed then
                 SetOverrideBindingClick(owner, true, cfg.key, btn:GetName())
             end
         end

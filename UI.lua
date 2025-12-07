@@ -47,8 +47,11 @@ SlashCmdList["ADT"] = function(msg)
                 -- toggle
                 ADT.SetDBValue("DebugEnabled", not ADT.IsDebugEnabled())
             end
-            local state = ADT.IsDebugEnabled() and "开启" or "关闭"
-            ADT.Notify("ADT 调试已"..state, ADT.IsDebugEnabled() and 'success' or 'info')
+            if ADT.IsDebugEnabled() then
+                ADT.Notify(ADT.L["ADT Debug Enabled"], 'success')
+            else
+                ADT.Notify(ADT.L["ADT Debug Disabled"], 'info')
+            end
             if ADT and ADT.DebugPrint then
                 ADT.DebugPrint("[Debug] DebugEnabled="..tostring(ADT.IsDebugEnabled()))
             end

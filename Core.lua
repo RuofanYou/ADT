@@ -7,6 +7,10 @@ ADT.L = ADT.L or {}
 -- 默认配置（单一权威）
 local DEFAULTS = {
     EnableDupe = true,
+    -- 是否启用 T 重置默认属性（专家模式下重置当前子模式）
+    EnableResetT = true,
+    -- 是否启用 Ctrl+T 全部重置
+    EnableResetAll = true,
     -- 1: Ctrl, 2: Alt, 3: Ctrl+D（默认，释放 Alt）
     DuplicateKey = 3,
     -- 记住控制中心上次选中的分类（'Housing'/'Clipboard'/'History'/...）

@@ -29,6 +29,10 @@ ADT.Locales.enUS = {
     ["Enable Cut tooltip"] = "Remove the selected decor and copy it to the clipboard with Ctrl+X.",
     ["Enable Batch Place"] = "Enable CTRL Batch Place",
     ["Enable Batch Place tooltip"] = "Hold Ctrl to continuously place the same decor after selecting it.",
+    ["Enable T Reset"] = "Enable T Reset (Current)",
+    ["Enable T Reset tooltip"] = "In Expert Mode, pressing T resets the current transform submode. Turn off to keep only Ctrl+T (reset all).",
+    ["Enable CTRL+T Reset All"] = "Enable CTRL+T Reset All",
+    ["Enable CTRL+T Reset All tooltip"] = "In Expert Mode, pressing Ctrl+T resets all transforms. Turn off to disable the hotkey and hide the hint.",
     
     ["SC Housing"] = "General",
     ["SC Clipboard"] = "Clipboard",
@@ -49,6 +53,51 @@ ADT.Locales.enUS = {
     ["Left Click: Place"] = "Left Click: Place",
     ["Right Click: Remove from Clipboard"] = "Right Click: Remove from Clipboard",
     ["Cannot Place Decor"] = "Unable to place this decor (out of stock or not owned)",
+
+    -- Top notices & prompts
+    ["Hover a decor to lock"] = "Hover a decor to lock.",
+    ["Unlocked %s"] = "Unlocked \"%s\"",
+    ["Locked %s"] = "Locked \"%s\"",
+    ["Decor is locked"] = "This decor is protected.",
+    ["Confirm edit?"] = "Proceed with editing?",
+    ["Continue Edit"] = "Continue",
+    ["Cancel Select"] = "Cancel Selection",
+    ["Unlock"] = "Unlock",
+    ["Edit allowed"] = "Editing allowed this time.",
+    ["Selection cancelled"] = "Selection cancelled.",
+    ["No decor to copy"] = "No hovered or selected decor to copy.",
+    ["Copied to clipboard"] = "Copied to clipboard.",
+    ["Clipboard empty, cannot paste"] = "Clipboard is empty, cannot paste.",
+    ["Cannot start placing"] = "Cannot start placing (stock 0 or at limit).",
+    ["Saved to clipboard tip"] = "Saved to clipboard; select it then press Ctrl+X again to remove.",
+    ["Select then press Ctrl+X"] = "Please select a decor, then press Ctrl+X.",
+    ["Removed and saved to clipboard"] = "Removed and added to clipboard.",
+    ["Removed %s and saved to clipboard"] = "Removed \"%s\" and added to clipboard.",
+    ["Cannot remove decor"] = "Cannot remove this decor (not removable or not selected).",
+    ["Reset requires Expert Mode"] = "Switch to Expert Mode first (press 2).",
+    ["No decor selected"] = "No decor selected.",
+    ["Current transform reset"] = "Current transform reset.",
+    ["All transforms reset"] = "All transforms reset (rotation + scale).",
+
+    -- Clipboard module
+    ["Added to clipboard: %s x%d"] = "Added to clipboard: %s x%d",
+    ["Please select a decor to store"] = "Please select a decor to store.",
+    ["Cannot remove, check mode"] = "Unable to remove this decor; ensure removable mode.",
+    ["Clipboard is empty"] = "Clipboard is empty.",
+    ["No hovered decor"] = "No hovered decor detected.",
+    ["No selected decor"] = "No selected decor.",
+    ["Selection empty or AE off"] = "Selection set is empty (or Advanced Edit disabled).",
+    ["Selection has no valid decor"] = "No valid decor in selection.",
+    ["Cannot start placing 2"] = "Cannot start placing (insufficient stock or at limit).",
+    ["Clipboard UI not loaded"] = "Clipboard UI not loaded; please /reload or report this issue.",
+
+    -- History
+    ["Enter editor then choose history"] = "Enter the house editor first, then choose from history.",
+    ["History module not loaded"] = "History module not loaded.",
+
+    -- Debug
+    ["ADT Debug Enabled"] = "ADT Debug: Enabled",
+    ["ADT Debug Disabled"] = "ADT Debug: Disabled",
     
     -- 语言选择
     ["Language"] = "Language",
@@ -90,6 +139,10 @@ ADT.Locales.zhCN = {
     ["Enable Cut tooltip"] = "选中装饰后按 Ctrl+X 将其移除并复制到剪切板。",
     ["Enable Batch Place"] = "启用 CTRL 批量放置",
     ["Enable Batch Place tooltip"] = "选中装饰后按住 Ctrl 点击，可连续放置多个相同装饰。",
+    ["Enable T Reset"] = "启用 T 重置默认属性",
+    ["Enable T Reset tooltip"] = "在专家模式下，按 T 重置当前子模式的变换；关闭后仅保留 Ctrl+T 的“全部重置”。",
+    ["Enable CTRL+T Reset All"] = "启用 CTRL+T 全部重置",
+    ["Enable CTRL+T Reset All tooltip"] = "在专家模式下，按 Ctrl+T 重置所有变换；关闭后禁用该热键并隐藏提示。",
     
     ["SC Housing"] = "通用",
     ["SC Clipboard"] = "临时板",
@@ -126,6 +179,50 @@ ADT.Locales.zhCN = {
     ["Clipboard Empty Line2"] = "Ctrl+S 存入；Ctrl+R 取出",
     ["History Empty Line1"] = "暂无放置记录",
     ["History Empty Line2"] = "放置装饰后会自动记录",
+    -- 顶部提示与弹窗
+    ["Hover a decor to lock"] = "请先将鼠标悬停在装饰上",
+    ["Unlocked %s"] = "已解锁「%s」",
+    ["Locked %s"] = "已锁定「%s」",
+    ["Decor is locked"] = "该装饰已被锁定保护",
+    ["Confirm edit?"] = "确认要编辑吗？",
+    ["Continue Edit"] = "继续编辑",
+    ["Cancel Select"] = "取消选中",
+    ["Unlock"] = "解除保护",
+    ["Edit allowed"] = "已允许本次编辑",
+    ["Selection cancelled"] = "已取消选中",
+    ["No decor to copy"] = "未检测到悬停或选中的装饰，无法复制",
+    ["Copied to clipboard"] = "已复制到剪切板",
+    ["Clipboard empty, cannot paste"] = "剪切板为空，无法粘贴",
+    ["Cannot start placing"] = "无法进入放置（可能库存为 0 或已达上限）",
+    ["Saved to clipboard tip"] = "已记录剪切板；请先点击选中该装饰后再按 Ctrl+X 完成移除",
+    ["Select then press Ctrl+X"] = "请先点击选中要移除的装饰，再按 Ctrl+X",
+    ["Removed and saved to clipboard"] = "已移除并加入剪切板",
+    ["Removed %s and saved to clipboard"] = "「%s」已移除，已加入剪切板",
+    ["Cannot remove decor"] = "无法移除该装饰（可能不在可移除模式或未被选中）",
+    ["Reset requires Expert Mode"] = "需先切换到专家模式（按 2）",
+    ["No decor selected"] = "请先选中一个装饰",
+    ["Current transform reset"] = "已重置当前变换",
+    ["All transforms reset"] = "已重置所有变换（旋转+缩放）",
+
+    -- 剪切板模块
+    ["Added to clipboard: %s x%d"] = "已加入剪切板：%s x%d",
+    ["Please select a decor to store"] = "请先点击选中要存入的装饰",
+    ["Cannot remove, check mode"] = "无法移除该装饰，请确认处于可移除模式",
+    ["Clipboard is empty"] = "临时板为空",
+    ["No hovered decor"] = "未检测到悬停装饰",
+    ["No selected decor"] = "当前未选中装饰",
+    ["Selection empty or AE off"] = "选集为空（或高级编辑未开启）",
+    ["Selection has no valid decor"] = "选集中没有有效装饰",
+    ["Cannot start placing 2"] = "无法进入放置（库存不足或达到上限）",
+    ["Clipboard UI not loaded"] = "剪切板 UI 未加载，请重载界面或报告问题",
+
+    -- 历史
+    ["Enter editor then choose history"] = "请先进入住宅编辑模式，再从历史选择。",
+    ["History module not loaded"] = "历史模块未加载",
+
+    -- 调试
+    ["ADT Debug Enabled"] = "ADT 调试已开启",
+    ["ADT Debug Disabled"] = "ADT 调试已关闭",
 }
 
 -- 应用指定语言到 ADT.L
@@ -133,8 +230,10 @@ function ADT.ApplyLocale(localeKey)
     local sourceTable = ADT.Locales[localeKey]
     if not sourceTable then
         sourceTable = ADT.Locales.enUS  -- 回退到英文
+        localeKey = "enUS"
     end
-    -- 将语言表的所有键复制到 ADT.L
+    -- 切换语言前清空旧表，避免残留（单一权威）
+    wipe(ADT.L)
     for k, v in pairs(sourceTable) do
         ADT.L[k] = v
     end

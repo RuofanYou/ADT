@@ -73,7 +73,7 @@ function History:StartPlacing(decorID)
         if C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive() then
             C_HousingBasicMode.StartPlacingNewDecor(entryInfo.entryID)
         else
-            if ADT and ADT.Notify then ADT.Notify("请先进入住宅编辑模式，再从历史选择。", 'info') end
+            if ADT and ADT.Notify then ADT.Notify(ADT.L["Enter editor then choose history"], 'info') end
         end
     end)
     return true

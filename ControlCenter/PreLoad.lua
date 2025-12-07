@@ -420,6 +420,37 @@ local function buildModules()
         categoryKeys = { 'Housing' },
         uiOrder = 5,
     }
+
+    -- 启用 T 重置默认属性
+    local moduleResetT = {
+        name = (L and L["Enable T Reset"]) or "启用 T 重置默认属性",
+        dbKey = 'EnableResetT',
+        description = (L and L["Enable T Reset tooltip"]) or "在专家模式下按 T 将重置当前子模式的变换；关闭后仅保留 Ctrl+T 的全部重置。",
+        toggleFunc = function(state)
+            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableResetT', state) end
+            dbgToggle('EnableResetT', state)
+            -- 切换后：刷新右侧提示显隐与热键覆盖
+            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
+            if ADT and ADT.Housing and ADT.Housing.RefreshOverrides then ADT.Housing:RefreshOverrides() end
+        end,
+        categoryKeys = { 'Housing' },
+        uiOrder = 6,
+    }
+
+    -- 启用 Ctrl+T 全部重置
+    local moduleResetAll = {
+        name = (L and L["Enable CTRL+T Reset All"]) or "启用 CTRL+T 全部重置",
+        dbKey = 'EnableResetAll',
+        description = (L and L["Enable CTRL+T Reset All tooltip"]) or "在专家模式下按 Ctrl+T 将重置所有变换；关闭后不再显示提示且禁用该热键。",
+        toggleFunc = function(state)
+            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableResetAll', state) end
+            dbgToggle('EnableResetAll', state)
+            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
+            if ADT and ADT.Housing and ADT.Housing.RefreshOverrides then ADT.Housing:RefreshOverrides() end
+        end,
+        categoryKeys = { 'Housing' },
+        uiOrder = 7,
+    }
     
     -- 语言选择下拉菜单模块
     local moduleLanguage = {
@@ -465,8 +496,8 @@ local function buildModules()
         key = 'Housing',
         categoryName = (L and L['SC Housing']) or '通用',
         categoryType = 'settings', -- 设置类分类
-        modules = { moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace, moduleLanguage },
-        numModules = 6,
+        modules = { moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace, moduleResetT, moduleResetAll, moduleLanguage },
+        numModules = 8,
     }
 
     -- 临时板分类（装饰列表类）
