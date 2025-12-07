@@ -134,15 +134,10 @@ do
         end
         self.ItemCountText:SetText(stored)
         self.ItemCountText:SetShown(stored > 0)
-        if self.SubFrame then
-            self.SubFrame:SetShown(EL.dupeEnabled and stored > 0)
-        end
-        -- 其它提示行总是显示（用户教育用途）
-        if self.HintFrames then
-            for _, line in ipairs(self.HintFrames) do
-                if not line.isDuplicate then line:Show() end
-            end
-        end
+        
+        -- 单一权威：始终由 UpdateHintVisibility 控制各提示行的显隐
+        -- 不再无条件显示，而是读取唯一的设置数据
+        EL:UpdateHintVisibility()
     end
 end
 
@@ -417,6 +412,68 @@ do
                 DisplayFrame.SubFrame:Hide()
             end
         end
+        
+        -- 初始加载时也更新提示可见性
+        self:UpdateHintVisibility()
+    end
+    
+    -- 根据设置更新各提示行的显隐（并自动重新排列位置，避免空隙）
+    function EL:UpdateHintVisibility()
+        if not DisplayFrame then return end
+        
+        -- 收集所有需要根据设置显隐的帧（按顺序）
+        -- SubFrame = Duplicate (CTRL+D)
+        -- HintFrames[1] = Cut (CTRL+X)
+        -- HintFrames[2] = Copy (CTRL+C)
+        -- HintFrames[3] = Paste (CTRL+V)
+        -- HintFrames[4] = Store (CTRL+S) - 始终显示
+        -- HintFrames[5] = Recall (CTRL+R) - 始终显示
+        
+        local allFrames = {}
+        local visibilityConfig = {}
+        
+        -- SubFrame (Duplicate)
+        if DisplayFrame.SubFrame then
+            table.insert(allFrames, DisplayFrame.SubFrame)
+            local dupeEnabled = ADT.GetDBValue("EnableDupe")
+            if dupeEnabled == nil then dupeEnabled = true end
+            table.insert(visibilityConfig, dupeEnabled)
+        end
+        
+        -- HintFrames
+        if DisplayFrame.HintFrames then
+            local hintSettings = {
+                [1] = { dbKey = "EnableCut", default = true },   -- Cut (CTRL+X)
+                [2] = { dbKey = "EnableCopy", default = true },  -- Copy (CTRL+C)
+                [3] = { dbKey = "EnablePaste", default = true }, -- Paste (CTRL+V)
+                [4] = nil,  -- Store (CTRL+S) - 始终显示
+                [5] = nil,  -- Recall (CTRL+R) - 始终显示
+            }
+            for i, frame in ipairs(DisplayFrame.HintFrames) do
+                table.insert(allFrames, frame)
+                local cfg = hintSettings[i]
+                if cfg then
+                    local enabled = ADT.GetDBValue(cfg.dbKey)
+                    if enabled == nil then enabled = cfg.default end
+                    table.insert(visibilityConfig, enabled)
+                else
+                    -- 没有开关的帧始终显示
+                    table.insert(visibilityConfig, true)
+                end
+            end
+        end
+        
+        -- 动态重新定位：只显示启用的帧，并链式排列（无空隙）
+        local prevVisible = DisplayFrame -- 第一个可见帧锚定到 DisplayFrame
+        for i, frame in ipairs(allFrames) do
+            local visible = visibilityConfig[i]
+            frame:SetShown(visible)
+            if visible then
+                frame:ClearAllPoints()
+                frame:SetPoint("TOPRIGHT", prevVisible, "BOTTOMRIGHT", 0, 0)
+                prevVisible = frame
+            end
+        end
     end
 end
 
@@ -424,6 +481,11 @@ end
 -- 绑定辅助：复制 / 粘贴 / 剪切
 --
 function EL:Binding_Copy()
+    -- 检查开关
+    local enabled = ADT.GetDBValue("EnableCopy")
+    if enabled == nil then enabled = true end
+    if not enabled then return end
+    
     if not IsHouseEditorActive() then return end
     -- 优先悬停
     local rid, name, icon = self:GetHoveredDecorRecordIDAndName()
@@ -443,6 +505,11 @@ function EL:Binding_Copy()
 end
 
 function EL:Binding_Paste()
+    -- 检查开关
+    local enabled = ADT.GetDBValue("EnablePaste")
+    if enabled == nil then enabled = true end
+    if not enabled then return end
+    
     if not IsHouseEditorActive() then return end
     local clip = self:GetClipboard()
     if not clip or not clip.decorID then
@@ -478,6 +545,11 @@ function EL:RemoveSelectedDecor()
 end
 
 function EL:Binding_Cut()
+    -- 检查开关
+    local enabled = ADT.GetDBValue("EnableCut")
+    if enabled == nil then enabled = true end
+    if not enabled then return end
+    
     if not IsHouseEditorActive() then return end
     -- 只能剪切“已选中”的装饰；无法直接操作“悬停”对象（选择API受保护）
     local rid, name, icon = self:GetSelectedDecorRecordIDAndName()

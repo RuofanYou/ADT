@@ -15,13 +15,16 @@ PaintMode.lastPlacedEntryID = nil
 
 -- Paint Mode Logic: If Ctrl is held when placing, continue placing same item
 function PaintMode:OnDecorPlaced()
-    if IsControlKeyDown() then
-        if self.lastPlacedEntryID then
-            C_Timer.After(0.1, function()
-                C_HousingBasicMode.StartPlacingNewDecor(self.lastPlacedEntryID)
-            end)
-        end
-    end
+    -- 读取开关：仅当用户在“通用”里勾选了“按住CTRL以批量放置”时才启用
+    local enabled = ADT and ADT.GetDBValue and ADT.GetDBValue('EnableBatchPlace')
+    if not enabled then return end
+
+    if not IsControlKeyDown() then return end
+    if not self.lastPlacedEntryID then return end
+
+    C_Timer.After(0.1, function()
+        C_HousingBasicMode.StartPlacingNewDecor(self.lastPlacedEntryID)
+    end)
 end
 
 -- Hook StartPlacing to capture EntryID

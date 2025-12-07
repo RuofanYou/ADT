@@ -774,6 +774,9 @@ do
         f:SetScript("OnLeave", f.OnLeave)
         f:SetScript("OnClick", f.OnClick)
         SetTextColor(f.Name, Def.TextColorNormal)
+        -- 名称仅单行显示，过长时自动省略号
+        if f.Name and f.Name.SetMaxLines then f.Name:SetMaxLines(1) end
+        if f.Name and f.Name.SetWordWrap then f.Name:SetWordWrap(false) end
         return f
     end
 end
@@ -972,6 +975,8 @@ do  -- Central
                         if obj.Right then obj.Right:Show() end
                         obj.Label:SetJustifyH("LEFT")
                     end,
+                    point = "TOPLEFT",
+                    relativePoint = "TOPLEFT",
                     top = top,
                     bottom = bottom,
                     offsetX = offsetX,
@@ -993,6 +998,8 @@ do  -- Central
                         obj.parentDBKey = nil
                         obj:SetData(data)
                     end,
+                    point = "TOPLEFT",
+                    relativePoint = "TOPLEFT",
                     top = top,
                     bottom = bottom,
                     offsetX = offsetX,
@@ -1011,6 +1018,8 @@ do  -- Central
                                 obj.parentDBKey = data.dbKey
                                 obj:SetData(v)
                             end,
+                            point = "TOPLEFT",
+                            relativePoint = "TOPLEFT",
                             top = top,
                             bottom = bottom,
                             offsetX = offsetX + 0.5*subOptionOffset,
@@ -1067,7 +1076,7 @@ do  -- Central
         local buttonGap = 2
         local offsetX = 0
         
-        -- 添加标题
+        -- 添加标题（左对齐锚点）
         n = n + 1
         content[n] = {
             dataIndex = n,
@@ -1079,6 +1088,8 @@ do  -- Central
                 if obj.Right then obj.Right:Show() end
                 obj.Label:SetJustifyH("LEFT")
             end,
+            point = "TOPLEFT",
+            relativePoint = "TOPLEFT",
             top = offsetY,
             bottom = offsetY + Def.ButtonSize,
             offsetX = offsetX,
@@ -1105,6 +1116,8 @@ do  -- Central
                     if obj.Right then obj.Right:Hide() end
                     obj.Label:SetJustifyH("LEFT")
                 end,
+                point = "TOPLEFT",
+                relativePoint = "TOPLEFT",
                 top = emptyTop,
                 bottom = emptyBottom,
                 offsetX = offsetX,
@@ -1126,6 +1139,8 @@ do  -- Central
                             if obj.Right then obj.Right:Hide() end
                             obj.Label:SetJustifyH("LEFT")
                         end,
+                        point = "TOPLEFT",
+                        relativePoint = "TOPLEFT",
                         top = offsetY,
                         bottom = offsetY + Def.ButtonSize,
                         offsetX = offsetX,
@@ -1146,6 +1161,8 @@ do  -- Central
                     setupFunc = function(obj)
                         obj:SetData(capItem, capCat)
                     end,
+                    point = "TOPLEFT",
+                    relativePoint = "TOPLEFT",
                     top = top,
                     bottom = bottom,
                     offsetX = offsetX,
@@ -1196,7 +1213,7 @@ do  -- Central
         local offsetY = fromOffsetY
         local offsetX = 0
         
-        -- 添加标题（保留分隔线）
+        -- 添加标题（保留分隔线，左对齐锚点）
         n = n + 1
         content[n] = {
             dataIndex = n,
@@ -1208,6 +1225,8 @@ do  -- Central
                 if obj.Right then obj.Right:Show() end
                 obj.Label:SetJustifyH("LEFT") -- 标题左对齐
             end,
+            point = "TOPLEFT",
+            relativePoint = "TOPLEFT",
             top = offsetY,
             bottom = offsetY + Def.ButtonSize,
             offsetX = offsetX,
@@ -1230,6 +1249,8 @@ do  -- Central
                         if obj.Left then obj.Left:Hide() end
                         if obj.Right then obj.Right:Hide() end
                     end,
+                    point = "TOPLEFT",
+                    relativePoint = "TOPLEFT",
                     top = offsetY,
                     bottom = offsetY + buttonHeight,
                     offsetX = offsetX,
@@ -1251,6 +1272,9 @@ local function CreateUI()
     local centralSectionWidth = 340  -- 中间：图标 + 长装饰名称(如"小型锯齿奥格瑞玛栅栏") + 数量
     
     MainFrame:SetSize(sideSectionWidth + centralSectionWidth, pageHeight)
+    if ADT and ADT.RestoreFrameSize then
+        ADT.RestoreFrameSize("SettingsPanelSize", MainFrame)
+    end
     MainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     MainFrame:SetToplevel(true)
     
@@ -1268,6 +1292,47 @@ local function CreateUI()
         end
     end)
     MainFrame:SetClampedToScreen(true)
+
+    -- 允许缩放 + 右下角手柄（仅改变右侧内容宽度）
+    do
+        -- 计算最小尺寸：高度至少能显示两行条目；
+        -- 宽度：左侧固定列宽 + 右侧至少能显示“艾尔..”
+        local meter = MainFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        meter:SetText("艾尔..")
+        local textMin = math.ceil(meter:GetStringWidth())
+        meter:SetText("")
+        meter:Hide()
+
+        local iconW, gapW, countW, padW = 28, 8, 40, 16
+        local rightMin = iconW + gapW + textMin + countW + padW
+        local minH = 160
+        local minW = sideSectionWidth + rightMin
+
+        MainFrame:SetResizable(true)
+        if MainFrame.SetResizeBounds then
+            MainFrame:SetResizeBounds(minW, minH)
+        else
+            -- 旧版本兼容：确保不会被缩到过小
+            if MainFrame.SetMinResize then MainFrame:SetMinResize(minW, minH) end
+        end
+
+        -- 右下角缩放手柄（使用聊天窗口的抓手贴图）
+        local grip = CreateFrame("Button", nil, MainFrame.BorderFrame or MainFrame)
+        grip:SetSize(16, 16)
+        grip:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
+        grip:SetNormalTexture("Interface/ChatFrame/UI-ChatIM-SizeGrabber-Up")
+        grip:SetHighlightTexture("Interface/ChatFrame/UI-ChatIM-SizeGrabber-Highlight")
+        grip:SetPushedTexture("Interface/ChatFrame/UI-ChatIM-SizeGrabber-Down")
+        grip:SetScript("OnMouseDown", function()
+            if MainFrame and MainFrame.StartSizing then MainFrame:StartSizing("BOTTOMRIGHT") end
+        end)
+        grip:SetScript("OnMouseUp", function()
+            if MainFrame and MainFrame.StopMovingOrSizing then MainFrame:StopMovingOrSizing() end
+            if ADT and ADT.SaveFrameSize then ADT.SaveFrameSize("SettingsPanelSize", MainFrame) end
+            if ADT and ADT.SaveFramePosition then ADT.SaveFramePosition("SettingsPanelPos", MainFrame) end
+        end)
+        MainFrame.ResizeGrip = grip
+    end
     
     MainFrame.FrameContainer:EnableMouse(true)
     MainFrame.FrameContainer:EnableMouseMotion(true)
@@ -1427,13 +1492,14 @@ local function CreateUI()
         ScrollView:SetNoContentAlertText(CATALOG_SHOP_NO_SEARCH_RESULTS or "")
 
 
-        local centerButtonWidth = API.Round(centralSectionWidth - 2*Def.ButtonSize)
-        Def.centerButtonWidth = centerButtonWidth
+        -- 初始右侧可用宽度，随着窗口缩放动态更新
+        MainFrame.centerButtonWidth = API.Round(CentralSection:GetWidth() - 2*Def.ButtonSize)
+        Def.centerButtonWidth = MainFrame.centerButtonWidth
 
 
         local function EntryButton_Create()
             local obj = CreateSettingsEntry(ScrollView)
-            obj:SetSize(centerButtonWidth, Def.ButtonSize)
+            obj:SetSize(MainFrame.centerButtonWidth or Def.centerButtonWidth, Def.ButtonSize)
             return obj
         end
 
@@ -1442,7 +1508,7 @@ local function CreateUI()
 
         local function Header_Create()
             local obj = CreateSettingsHeader(ScrollView)
-            obj:SetSize(centerButtonWidth, Def.ButtonSize)
+            obj:SetSize(MainFrame.centerButtonWidth or Def.centerButtonWidth, Def.ButtonSize)
             return obj
         end
 
@@ -1452,7 +1518,7 @@ local function CreateUI()
         -- 装饰项模板（用于临时板和最近放置列表）
         local function DecorItem_Create()
             local obj = CreateDecorItemEntry(ScrollView)
-            obj:SetSize(centerButtonWidth, 36)
+            obj:SetSize(MainFrame.centerButtonWidth or Def.centerButtonWidth, 36)
             return obj
         end
 
@@ -1503,6 +1569,25 @@ local function CreateUI()
                     end
                     MainFrame:HighlightCategoryByKey(key)
                 end)
+            end
+        end
+    end)
+
+    -- 单一 OnSizeChanged：当窗口缩放时，仅调整右侧内容宽度
+    MainFrame:SetScript("OnSizeChanged", function(self)
+        local CentralSection = self.CentralSection
+        if not CentralSection or not self.ModuleTab or not self.ModuleTab.ScrollView then return end
+        local newWidth = API.Round(CentralSection:GetWidth() - 2*Def.ButtonSize)
+        if newWidth <= 0 then return end
+        if self.centerButtonWidth ~= newWidth then
+            self.centerButtonWidth = newWidth
+            local ScrollView = self.ModuleTab.ScrollView
+            ScrollView:CallObjectMethod("Entry", "SetWidth", newWidth)
+            ScrollView:CallObjectMethod("Header", "SetWidth", newWidth)
+            ScrollView:CallObjectMethod("DecorItem", "SetWidth", newWidth)
+            ScrollView:OnSizeChanged(true)
+            if self.ModuleTab.ScrollBar and self.ModuleTab.ScrollBar.UpdateThumbRange then
+                self.ModuleTab.ScrollBar:UpdateThumbRange()
             end
         end
     end)
@@ -1596,6 +1681,8 @@ do
     MainFrame:HookScript("OnHide", function()
         CloseDummy:Hide()
     end)
+
+    -- 注意：OnSizeChanged 已在 CreateUI 中注册，此处不再重复绑定。
 end
 
 -- 编辑模式自动打开 GUI（替代独立弹窗）

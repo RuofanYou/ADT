@@ -348,25 +348,74 @@ local L = ADT.L
 local function buildModules()
     local modules = {}
     
-    -- 住宅设置模块（原有）
-    local data = {
-        name = L["ModuleName Housing_DecorHover"] or "装饰物：按下以重复",
+    -- 住宅快捷键设置模块（4 个独立开关）
+    local moduleRepeat = {
+        name = "启用：CTRL+D以重复装饰品",
         dbKey = 'EnableDupe',
-        description = L["ModuleDescription Housing_DecorHover"],
+        description = "悬停装饰时按 CTRL+D 可快速放置相同装饰",
         toggleFunc = function(state)
             if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableDupe', state) end
             if ADT and ADT.Housing and ADT.Housing.LoadSettings then ADT.Housing:LoadSettings() end
+            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
         end,
         categoryKeys = { 'Housing' },
         uiOrder = 1,
+    }
+    
+    local moduleCopy = {
+        name = "启用：CTRL+C以复制",
+        dbKey = 'EnableCopy',
+        description = "悬停或选中装饰时按 CTRL+C 可复制到剪切板",
+        toggleFunc = function(state)
+            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableCopy', state) end
+            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
+        end,
+        categoryKeys = { 'Housing' },
+        uiOrder = 2,
+    }
+    
+    local moduleCut = {
+        name = "启用：CTRL+X以剪切",
+        dbKey = 'EnableCut',
+        description = "选中装饰时按 CTRL+X 可剪切（移除并复制到剪切板）",
+        toggleFunc = function(state)
+            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableCut', state) end
+            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
+        end,
+        categoryKeys = { 'Housing' },
+        uiOrder = 3,
+    }
+    
+    local modulePaste = {
+        name = "启用：CTRL+V以粘贴",
+        dbKey = 'EnablePaste',
+        description = "按 CTRL+V 可从剪切板粘贴装饰",
+        toggleFunc = function(state)
+            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnablePaste', state) end
+            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
+        end,
+        categoryKeys = { 'Housing' },
+        uiOrder = 4,
+    }
+    
+    local moduleBatchPlace = {
+        name = "启用：按住CTRL以批量放置",
+        dbKey = 'EnableBatchPlace',
+        description = "选中装饰后按住 CTRL 点击可连续放置多个相同装饰",
+        toggleFunc = function(state)
+            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableBatchPlace', state) end
+            -- 该功能不需要更新 HintVisibility（不在悬停提示中显示）
+        end,
+        categoryKeys = { 'Housing' },
+        uiOrder = 5,
     }
 
     modules[1] = {
         key = 'Housing',
         categoryName = (L and L['SC Housing']) or '通用',
         categoryType = 'settings', -- 设置类分类
-        modules = { data },
-        numModules = 1,
+        modules = { moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace },
+        numModules = 5,
     }
 
     -- 临时板分类（装饰列表类）
@@ -463,8 +512,14 @@ local function buildModules()
         end,
     }
 
-    -- 初始化映射
-    ControlCenter._dbKeyMap = { [data.dbKey] = data }
+    -- 初始化映射（5 个快捷键开关）
+    ControlCenter._dbKeyMap = {
+        [moduleRepeat.dbKey] = moduleRepeat,
+        [moduleCopy.dbKey] = moduleCopy,
+        [moduleCut.dbKey] = moduleCut,
+        [modulePaste.dbKey] = modulePaste,
+        [moduleBatchPlace.dbKey] = moduleBatchPlace,
+    }
     return modules
 end
 

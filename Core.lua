@@ -23,6 +23,8 @@ local DEFAULTS = {
     HistoryPopupPos = nil,
     -- UI 位置持久化：控制中心主面板
     SettingsPanelPos = nil,
+    -- UI 尺寸持久化：控制中心主面板（w/h）
+    SettingsPanelSize = nil,
 }
 
 local function CopyDefaults(dst, src)
@@ -87,6 +89,23 @@ function ADT.RestoreFramePosition(dbKey, frame, fallback)
         else
             frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         end
+    end
+end
+
+-- Frame 尺寸保存/恢复（单一权威，独立于位置）
+function ADT.SaveFrameSize(dbKey, frame)
+    if not (dbKey and frame and frame.GetWidth) then return end
+    local w, h = math.floor(frame:GetWidth() + 0.5), math.floor(frame:GetHeight() + 0.5)
+    if w and h and w > 0 and h > 0 then
+        ADT.SetDBValue(dbKey, { w = w, h = h })
+    end
+end
+
+function ADT.RestoreFrameSize(dbKey, frame)
+    if not (dbKey and frame and frame.SetSize) then return end
+    local sz = ADT.GetDBValue(dbKey)
+    if type(sz) == "table" and (sz.w and sz.h) then
+        frame:SetSize(sz.w, sz.h)
     end
 end
 
