@@ -1722,8 +1722,25 @@ local function CreateUI()
         grip:SetNormalTexture("Interface/ChatFrame/UI-ChatIM-SizeGrabber-Up")
         grip:SetHighlightTexture("Interface/ChatFrame/UI-ChatIM-SizeGrabber-Highlight")
         grip:SetPushedTexture("Interface/ChatFrame/UI-ChatIM-SizeGrabber-Down")
+        -- 为了让“右下角抓手”在缩放时精准跟随鼠标，我们在开始缩放前
+        -- 将面板的锚点归一为 TOPLEFT（基于当前的屏幕绝对位置）。
+        -- 如果保持 CENTER 等锚点，StartSizing("BOTTOMRIGHT") 会以中心为基准放大，
+        -- 视觉上就会出现“右下角不在鼠标上”的错位感。
+        local function ReanchorToTopLeft(f)
+            if not (f and f.GetLeft and f.GetTop and f.ClearAllPoints) then return end
+            local parent = f:GetParent() or UIParent
+            local fScale = f.GetEffectiveScale and f:GetEffectiveScale() or 1
+            local pScale = parent.GetEffectiveScale and parent:GetEffectiveScale() or 1
+            local left = (f:GetLeft() or 0) * (fScale / pScale)
+            local top  = (f:GetTop() or 0)  * (fScale / pScale)
+            f:ClearAllPoints()
+            f:SetPoint("TOPLEFT", parent, "BOTTOMLEFT", left, top)
+        end
+
         grip:SetScript("OnMouseDown", function()
-            if MainFrame and MainFrame.StartSizing then MainFrame:StartSizing("BOTTOMRIGHT") end
+            if not MainFrame then return end
+            ReanchorToTopLeft(MainFrame)
+            if MainFrame.StartSizing then MainFrame:StartSizing("BOTTOMRIGHT") end
         end)
         grip:SetScript("OnMouseUp", function()
             if MainFrame and MainFrame.StopMovingOrSizing then MainFrame:StopMovingOrSizing() end
