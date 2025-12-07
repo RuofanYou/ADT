@@ -369,5 +369,3 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         end
     end
 end)
-
-print("|cff00ff00[ADT]|r 装饰物浏览器已加载。使用 /adtbrowser 或 /装饰浏览 打开。")

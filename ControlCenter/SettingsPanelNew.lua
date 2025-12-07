@@ -17,6 +17,8 @@ local DisableSharpening = API.DisableSharpening
 
 local Def = {
     TextureFile = "Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/SettingsPanel.png",
+    RemixFile = "Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/LegionRemixUI.png",   -- [NEW] Remix Atlas
+    BackgroundFile = "Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/CommonFrameWithHeader.tga", -- [NEW] HD Background
     ButtonSize = 28,
     WidgetGap = 14,
     PageHeight = 380,  -- 缩小高度：约10行文本+标题+边距
@@ -38,6 +40,32 @@ do
     for _, key in ipairs(frameKeys) do
         MainFrame[key] = MainFrame.FrameContainer[key]
     end
+
+    -- 创建专用边框Frame（确保在所有子内容之上）
+    local BorderFrame = CreateFrame("Frame", nil, MainFrame)
+    BorderFrame:SetAllPoints(MainFrame)
+    BorderFrame:SetFrameLevel(MainFrame:GetFrameLevel() + 100) -- 确保边框在最上层
+    MainFrame.BorderFrame = BorderFrame
+    
+    -- 使用 housing-wood-frame Atlas 九宫格边框
+    local border = BorderFrame:CreateTexture(nil, "OVERLAY")
+    border:SetPoint("TOPLEFT", BorderFrame, "TOPLEFT", -4, 4)
+    border:SetPoint("BOTTOMRIGHT", BorderFrame, "BOTTOMRIGHT", 4, -4)
+    border:SetAtlas("housing-wood-frame")
+    border:SetTextureSliceMargins(16, 16, 16, 16)
+    border:SetTextureSliceMode(Enum.UITextureSliceMode.Stretched)
+    BorderFrame.WoodFrame = border
+
+    -- 使用标准暴雪关闭按钮（与 housing 边框协调）
+    local CloseButton = CreateFrame("Button", nil, BorderFrame, "UIPanelCloseButton")
+    MainFrame.CloseButton = CloseButton
+    CloseButton:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 2, 2)
+    CloseButton:SetScript("OnClick", function()
+        MainFrame:Hide()
+        if ADT.LandingPageUtil and ADT.LandingPageUtil.PlayUISound then
+            ADT.LandingPageUtil.PlayUISound("CheckboxOff")
+        end
+    end)
 end
 local SearchBox
 local CategoryHighlight
@@ -548,7 +576,7 @@ do
         if self.virtual then
             self:Enable()
             self.OptionToggle:SetShown(self.hasOptions)
-            SetTexCoord(self.Box, 736, 784, 64, 112)
+            SetTexCoord(self.Box, 737, 783, 65, 111)  -- +1px inset 去除边缘伪影
             return
         end
 
@@ -559,16 +587,16 @@ do
 
         if GetDBBool(self.dbKey) then
             if disabled then
-                SetTexCoord(self.Box, 784, 832, 64, 112)
+                SetTexCoord(self.Box, 785, 831, 65, 111)  -- +1px inset
             else
-                SetTexCoord(self.Box, 736, 784, 16, 64)
+                SetTexCoord(self.Box, 737, 783, 17, 63)  -- +1px inset ✓ checked
             end
             self.OptionToggle:SetShown(self.hasOptions)
         else
             if disabled then
-                SetTexCoord(self.Box, 784, 832, 16, 64)
+                SetTexCoord(self.Box, 785, 831, 17, 63)  -- +1px inset
             else
-                SetTexCoord(self.Box, 688, 736, 16, 64)
+                SetTexCoord(self.Box, 689, 735, 17, 63)  -- +1px inset ☐ unchecked
             end
             self.OptionToggle:Hide()
         end
@@ -741,6 +769,7 @@ do
         Mixin(f, DecorItemMixin)
         f:SetSize(200, 36)
         f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        -- Icon border removed - user prefers clean icons without frames
         f:SetScript("OnEnter", f.OnEnter)
         f:SetScript("OnLeave", f.OnLeave)
         f:SetScript("OnClick", f.OnClick)
@@ -1071,9 +1100,9 @@ do  -- Central
                     local firstLine = text:match("^([^\n]*)")
                     obj:SetText(firstLine or text)
                     SetTextColor(obj.Label, Def.TextColorDisabled)
-                    -- 确保纹理可见
-                    if obj.Left then obj.Left:Show() end
-                    if obj.Right then obj.Right:Show() end
+                    -- 仅保留页面主标题的分隔纹理；空列表提示不显示分隔线
+                    if obj.Left then obj.Left:Hide() end
+                    if obj.Right then obj.Right:Hide() end
                     obj.Label:SetJustifyH("LEFT")
                 end,
                 top = emptyTop,
@@ -1092,9 +1121,9 @@ do  -- Central
                         setupFunc = function(obj)
                             obj:SetText(secondLine)
                             SetTextColor(obj.Label, Def.TextColorDisabled)
-                            -- 确保纹理可见
-                            if obj.Left then obj.Left:Show() end
-                            if obj.Right then obj.Right:Show() end
+                            -- 空列表第二行同样不显示分隔线
+                            if obj.Left then obj.Left:Hide() end
+                            if obj.Right then obj.Right:Hide() end
                             obj.Label:SetJustifyH("LEFT")
                         end,
                         top = offsetY,
@@ -1377,9 +1406,9 @@ local function CreateUI()
 
 
         local ScrollBar = ControlCenter.CreateScrollBarWithDynamicSize(Tab1)
-        ScrollBar:SetPoint("TOP", CentralSection, "TOPRIGHT", 0, -0.5*Def.WidgetGap)
-        ScrollBar:SetPoint("BOTTOM", CentralSection, "BOTTOMRIGHT", 0, 0.5*Def.WidgetGap)
-        ScrollBar:SetFrameLevel(20)
+        ScrollBar:SetPoint("TOP", CentralSection, "TOPRIGHT", -12, -0.5*Def.WidgetGap) -- -12 避免与边框重叠
+        ScrollBar:SetPoint("BOTTOM", CentralSection, "BOTTOMRIGHT", -12, 0.5*Def.WidgetGap)
+        ScrollBar:SetFrameLevel(120) -- 高于 BorderFrame (+100) 确保可见
         MainFrame.ModuleTab.ScrollBar = ScrollBar
         ScrollBar:UpdateThumbRange()
 
@@ -1431,14 +1460,18 @@ local function CreateUI()
     end
 
 
-    local NineSlice = ADT.LandingPageUtil.CreateExpansionThemeFrame(MainFrame.FrameContainer, 10)
-    MainFrame.NineSlice = NineSlice
-    NineSlice:CoverParent(-24)
-    NineSlice.Background:Hide()
-    NineSlice:SetUsingParentLevel(false)
-    NineSlice:SetFrameLevel(baseFrameLevel + 20)
-    NineSlice:ShowCloseButton(true)
-    NineSlice:SetCloseButtonOwner(MainFrame)
+    -- NineSlice frame removed in favor of custom background
+    -- local NineSlice = ADT.LandingPageUtil.CreateExpansionThemeFrame(MainFrame.FrameContainer, 10)
+    -- MainFrame.NineSlice = NineSlice
+    -- NineSlice:CoverParent(-24)
+    -- NineSlice.Background:Hide() -- This was hiding the bg, but the border might still be there/conflict
+    -- NineSlice:SetUsingParentLevel(false)
+    -- NineSlice:SetFrameLevel(baseFrameLevel + 20)
+    -- NineSlice:ShowCloseButton(true)
+    -- NineSlice:SetCloseButtonOwner(MainFrame)
+    MainFrame.NineSlice = {
+        ShowCloseButton = function() end
+    }
 
 
     -- 打开时恢复到上次选中的分类/视图
@@ -1603,7 +1636,22 @@ do
     
     EditorWatcher:RegisterEvent("HOUSE_EDITOR_MODE_CHANGED")
     EditorWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
-    EditorWatcher:SetScript("OnEvent", function()
-        C_Timer.After(0.15, UpdateEditorState)
+    EditorWatcher:SetScript("OnEvent", function(_, event)
+        if event == "HOUSE_EDITOR_MODE_CHANGED" then
+            -- 离开编辑模式时，立刻隐藏以避免可见闪烁；进入时再做轻微延迟以等待编辑器完成布局
+            local isActive = C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive()
+            if not isActive then
+                -- 立即隐藏，不等待
+                if MainFrame then
+                    MainFrame:SetParent(UIParent)
+                    MainFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+                    MainFrame:Hide()
+                end
+                wasEditorActive = false
+                return
+            end
+        end
+        -- 进入或其它情况：短延迟以确保编辑器框架已就位
+        C_Timer.After(0.05, UpdateEditorState)
     end)
 end
