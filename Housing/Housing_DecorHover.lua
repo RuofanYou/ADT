@@ -9,6 +9,7 @@ local GetActiveHouseEditorMode = C_HouseEditor.GetActiveHouseEditorMode
 local IsHouseEditorActive = C_HouseEditor.IsHouseEditorActive
 local GetCatalogEntryInfoByRecordID = C_HousingCatalog.GetCatalogEntryInfoByRecordID
 local IsDecorSelected = C_HousingBasicMode.IsDecorSelected
+-- 注意：SetPlacedDecorEntryHovered 是受保护 API，不能被第三方插件使用
 
 local DisplayFrame
 
@@ -20,6 +21,37 @@ end
 
 local EL = CreateFrame("Frame")
 ADT.Housing = EL
+
+-- 顶层：按 recordID 进入放置（供多处复用；单一权威）
+local function StartPlacingByRecordID(recordID)
+    if not recordID then return false end
+    local entryInfo = GetCatalogDecorInfo(recordID)
+    if not entryInfo or not entryInfo.entryID then return false end
+
+    local decorPlaced = C_HousingDecor.GetSpentPlacementBudget()
+    local maxDecor = C_HousingDecor.GetMaxPlacementBudget()
+    local hasMaxDecor = C_HousingDecor.HasMaxPlacementBudget()
+    if hasMaxDecor and decorPlaced >= maxDecor then
+        return false
+    end
+    C_HousingBasicMode.StartPlacingNewDecor(entryInfo.entryID)
+    return true
+end
+
+--
+-- 简易剪切板（仅当前会话，单一权威）
+--
+EL.clipboard = nil -- { decorID, name, icon }
+
+function EL:SetClipboard(recordID, name, icon)
+    if not recordID then return false end
+    self.clipboard = { decorID = recordID, name = name, icon = icon }
+    return true
+end
+
+function EL:GetClipboard()
+    return self.clipboard
+end
 
 --
 -- UI
@@ -241,6 +273,33 @@ do
         end
     end
 
+    function EL:GetHoveredDecorRecordIDAndName()
+        if not IsHoveringDecor() then return end
+        local info = GetHoveredDecorInfo()
+        if info and info.decorID then
+            return info.decorID, info.name, info.iconTexture or info.iconAtlas
+        end
+    end
+
+    function EL:GetSelectedDecorRecordIDAndName()
+        -- 尝试多源：不同模块的 GetSelectedDecorInfo 名称略有差异
+        local info
+        if C_HousingBasicMode and C_HousingBasicMode.GetSelectedDecorInfo then
+            info = C_HousingBasicMode.GetSelectedDecorInfo()
+        end
+        if (not info or not info.decorID) and C_HousingExpertMode and C_HousingExpertMode.GetSelectedDecorInfo then
+            info = C_HousingExpertMode.GetSelectedDecorInfo()
+        end
+        if (not info or not info.decorID) and C_HousingCustomizeMode and C_HousingCustomizeMode.GetSelectedDecorInfo then
+            info = C_HousingCustomizeMode.GetSelectedDecorInfo()
+        end
+        if info and info.decorID then
+            return info.decorID, info.name, info.iconTexture or info.iconAtlas
+        end
+    end
+
+    -- StartPlacingByRecordID 提升为顶层函数，避免局部作用域问题
+
     function EL:TryDuplicateItem()
         if not self.dupeEnabled then return end
         if not IsHouseEditorActive() then return end
@@ -279,6 +338,13 @@ do
         local dupeKeyIndex = ADT.GetDBValue("DuplicateKey") or 2
         self.dupeEnabled = dupeEnabled
 
+        -- 悬停高亮开关（默认开启）
+        local highlightEnabled = ADT.GetDBValue("EnableHoverHighlight")
+        if highlightEnabled == nil then
+            highlightEnabled = true  -- 默认开启
+        end
+        self.highlightEnabled = highlightEnabled
+
         if type(dupeKeyIndex) ~= "number" or not self.DuplicateKeyOptions[dupeKeyIndex] then
             dupeKeyIndex = 2
         end
@@ -295,10 +361,161 @@ do
     end
 end
 
+--
+-- 绑定辅助：复制 / 粘贴 / 剪切
+--
+function EL:Binding_Copy()
+    if not IsHouseEditorActive() then return end
+    -- 优先悬停
+    local rid, name, icon = self:GetHoveredDecorRecordIDAndName()
+    if not rid then
+        rid, name, icon = self:GetSelectedDecorRecordIDAndName()
+    end
+    if not rid then
+        print("ADT: 未检测到悬停或选中的装饰，无法复制")
+        return
+    end
+    self:SetClipboard(rid, name, icon)
+    if name then
+        print((L["ADT: Decor %s"] or "ADT：装饰 %s"):format(name).." 已复制到剪切板")
+    else
+        print("ADT: 装饰已复制到剪切板")
+    end
+end
+
+function EL:Binding_Paste()
+    if not IsHouseEditorActive() then return end
+    local clip = self:GetClipboard()
+    if not clip or not clip.decorID then
+        print("ADT: 剪切板为空，无法粘贴")
+        return
+    end
+    local ok = StartPlacingByRecordID(clip.decorID)
+    if not ok then
+        print("ADT: 无法进入放置（可能库存为 0 或已达上限）")
+    end
+end
+
+local function TryRemoveSelected()
+    -- 以最兼容的方式调用移除：不同模式下提供了不同入口
+    local removed
+    if C_HousingCleanupMode and C_HousingCleanupMode.RemoveSelectedDecor then
+        removed = select(2, pcall(C_HousingCleanupMode.RemoveSelectedDecor)) ~= nil or removed
+        if removed == nil then removed = true end -- 多数 API 无返回值
+    end
+    if not removed and C_HousingDecor and C_HousingDecor.RemoveSelectedDecor then
+        removed = select(2, pcall(C_HousingDecor.RemoveSelectedDecor)) ~= nil or removed
+        if removed == nil then removed = true end
+    end
+    if not removed and C_HousingExpertMode and C_HousingExpertMode.RemoveSelectedDecor then
+        removed = select(2, pcall(C_HousingExpertMode.RemoveSelectedDecor)) ~= nil or removed
+        if removed == nil then removed = true end
+    end
+    if not removed and C_HousingBasicMode and C_HousingBasicMode.RemoveSelectedDecor then
+        removed = select(2, pcall(C_HousingBasicMode.RemoveSelectedDecor)) ~= nil or removed
+        if removed == nil then removed = true end
+    end
+    return removed
+end
+
+function EL:Binding_Cut()
+    if not IsHouseEditorActive() then return end
+    -- 只能剪切“已选中”的装饰；无法直接操作“悬停”对象（选择API受保护）
+    local rid, name, icon = self:GetSelectedDecorRecordIDAndName()
+    if not rid then
+        -- 允许在悬停时先记录剪切板，提示用户点一下选中再按一次
+        local hrid, hname, hicon = self:GetHoveredDecorRecordIDAndName()
+        if hrid then
+            self:SetClipboard(hrid, hname, hicon)
+            print("ADT: 已记录剪切板；请先选中该装饰后再按 Ctrl+X 完成移除")
+        else
+            print("ADT: 请先选中要移除的装饰，再按 Ctrl+X")
+        end
+        return
+    end
+    self:SetClipboard(rid, name, icon)
+    local ok = TryRemoveSelected()
+    if ok then
+        if name then
+            print((L["ADT: Decor %s"] or "ADT：装饰 %s"):format(name).." 已移除，已加入剪切板")
+        else
+            print("ADT: 已移除并加入剪切板")
+        end
+    else
+        print("ADT: 无法移除该装饰（可能不在可移除模式或未被选中）")
+    end
+end
+
 -- 启用模块：加载后默认打开（只做这一项功能）
 local bootstrap = CreateFrame("Frame")
 bootstrap:RegisterEvent("PLAYER_LOGIN")
 bootstrap:SetScript("OnEvent", function()
     ADT.Housing:SetEnabled(true)
+    if ADT and ADT.Housing and ADT.Housing.RefreshOverrides then
+        ADT.Housing:RefreshOverrides()
+    end
     bootstrap:UnregisterEvent("PLAYER_LOGIN")
 end)
+
+--
+-- 在编辑模式下“强制覆盖”按键（合法 API）
+-- 使用 SetOverrideBindingClick(owner, true, key, buttonName) 以优先级覆盖
+-- 仅在房屋编辑器激活时生效，离开时清理，避免污染全局键位。
+do
+    local owner
+    local btnCopy, btnPaste, btnCut
+
+    local function EnsureOwner()
+        if owner then return end
+        owner = CreateFrame("Frame", "ADT_HousingOverrideOwner", UIParent)
+        -- 创建三个点击代理按钮
+        btnCopy = CreateFrame("Button", "ADT_HousingOverride_CopyButton", owner, "SecureActionButtonTemplate")
+        btnPaste = CreateFrame("Button", "ADT_HousingOverride_PasteButton", owner, "SecureActionButtonTemplate")
+        btnCut = CreateFrame("Button", "ADT_HousingOverride_CutButton", owner, "SecureActionButtonTemplate")
+
+        btnCopy:SetScript("OnClick", function() if ADT and ADT.Housing then ADT.Housing:Binding_Copy() end end)
+        btnPaste:SetScript("OnClick", function() if ADT and ADT.Housing then ADT.Housing:Binding_Paste() end end)
+        btnCut:SetScript("OnClick", function() if ADT and ADT.Housing then ADT.Housing:Binding_Cut() end end)
+    end
+
+    local OVERRIDE_KEYS = {
+        { key = "CTRL-C", button = function() return btnCopy end },
+        { key = "CTRL-V", button = function() return btnPaste end },
+        { key = "CTRL-X", button = function() return btnCut end },
+    }
+
+    function EL:ClearOverrides()
+        if not owner then return end
+        ClearOverrideBindings(owner)
+    end
+
+    function EL:ApplyOverrides()
+        EnsureOwner()
+        ClearOverrideBindings(owner)
+        -- 注意：优先级覆盖，确保高于默认与其他非优先覆盖
+        for _, cfg in ipairs(OVERRIDE_KEYS) do
+            local btn = cfg.button()
+            if btn then
+                SetOverrideBindingClick(owner, true, cfg.key, btn:GetName())
+            end
+        end
+    end
+
+    function EL:RefreshOverrides()
+        -- 仅在房屋编辑器激活时启用
+        local isActive = C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive()
+        if isActive then
+            -- 下一帧应用，避免与暴雪自身在同一事件中设置的覆盖发生顺序竞争
+            C_Timer.After(0, function() if ADT and ADT.Housing then ADT.Housing:ApplyOverrides() end end)
+        else
+            self:ClearOverrides()
+        end
+    end
+
+    -- 接管编辑器模式变化
+    hooksecurefunc(EL, "OnEditorModeChanged", function()
+        EL:RefreshOverrides()
+    end)
+
+    -- 其它刷新点：由 EL:OnEditorModeChanged() 的 hook 触发
+end

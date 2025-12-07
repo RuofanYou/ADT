@@ -1,7 +1,16 @@
 <Bindings>
     <!-- 在“按键绑定”中创建一组 ADT 的快捷键 -->
+    <!-- 仅在首条绑定声明 header，避免重复注册同一 Header（12.0 更严格） -->
     <Binding name="ADT_TOGGLE_HISTORY" header="ADT">
         ADT_ToggleHistory();
     </Binding>
+    <Binding name="ADT_COPY_DECOR">
+        ADT_CopyDecor();
+    </Binding>
+    <Binding name="ADT_PASTE_DECOR">
+        ADT_PasteDecor();
+    </Binding>
+    <Binding name="ADT_CUT_DECOR">
+        ADT_CutDecor();
+    </Binding>
 </Bindings>
-
