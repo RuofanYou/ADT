@@ -13,4 +13,21 @@
     <Binding name="ADT_CUT_DECOR">
         ADT_CutDecor();
     </Binding>
+    
+    <!-- 高级编辑：虚拟多选 -->
+    <Binding name="ADT_ADV_TOGGLE">
+        ADT_Adv_Toggle();
+    </Binding>
+    <Binding name="ADT_ADV_TOGGLE_HOVER">
+        ADT_Adv_ToggleHovered();
+    </Binding>
+    <Binding name="ADT_ADV_CLEAR">
+        ADT_Adv_ClearSelection();
+    </Binding>
+    <Binding name="ADT_ADV_ANCHOR_HOVER">
+        ADT_Adv_SetAnchor_Hovered();
+    </Binding>
+    <Binding name="ADT_ADV_ANCHOR_SELECTED">
+        ADT_Adv_SetAnchor_Selected();
+    </Binding>
 </Bindings>

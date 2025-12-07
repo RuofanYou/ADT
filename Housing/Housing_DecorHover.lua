@@ -372,14 +372,14 @@ function EL:Binding_Copy()
         rid, name, icon = self:GetSelectedDecorRecordIDAndName()
     end
     if not rid then
-        print("ADT: 未检测到悬停或选中的装饰，无法复制")
+        if ADT and ADT.Notify then ADT.Notify("未检测到悬停或选中的装饰，无法复制", 'error') end
         return
     end
     self:SetClipboard(rid, name, icon)
     if name then
-        print((L["ADT: Decor %s"] or "ADT：装饰 %s"):format(name).." 已复制到剪切板")
+        if ADT and ADT.Notify then ADT.Notify(((L["ADT: Decor %s"] or "装饰 %s"):format(name)) .. " 已复制到剪切板", 'success') end
     else
-        print("ADT: 装饰已复制到剪切板")
+        if ADT and ADT.Notify then ADT.Notify("装饰已复制到剪切板", 'success') end
     end
 end
 
@@ -387,12 +387,12 @@ function EL:Binding_Paste()
     if not IsHouseEditorActive() then return end
     local clip = self:GetClipboard()
     if not clip or not clip.decorID then
-        print("ADT: 剪切板为空，无法粘贴")
+        if ADT and ADT.Notify then ADT.Notify("剪切板为空，无法粘贴", 'error') end
         return
     end
     local ok = StartPlacingByRecordID(clip.decorID)
     if not ok then
-        print("ADT: 无法进入放置（可能库存为 0 或已达上限）")
+        if ADT and ADT.Notify then ADT.Notify("无法进入放置（可能库存为 0 或已达上限）", 'error') end
     end
 end
 
@@ -427,22 +427,19 @@ function EL:Binding_Cut()
         local hrid, hname, hicon = self:GetHoveredDecorRecordIDAndName()
         if hrid then
             self:SetClipboard(hrid, hname, hicon)
-            print("ADT: 已记录剪切板；请先选中该装饰后再按 Ctrl+X 完成移除")
+            if ADT and ADT.Notify then ADT.Notify("已记录剪切板；请先选中该装饰后再按 Ctrl+X 完成移除", 'info') end
         else
-            print("ADT: 请先选中要移除的装饰，再按 Ctrl+X")
+            if ADT and ADT.Notify then ADT.Notify("请先选中要移除的装饰，再按 Ctrl+X", 'info') end
         end
         return
     end
     self:SetClipboard(rid, name, icon)
     local ok = TryRemoveSelected()
     if ok then
-        if name then
-            print((L["ADT: Decor %s"] or "ADT：装饰 %s"):format(name).." 已移除，已加入剪切板")
-        else
-            print("ADT: 已移除并加入剪切板")
-        end
+        local tip = name and (((L["ADT: Decor %s"] or "装饰 %s"):format(name)) .. " 已移除，已加入剪切板") or "已移除并加入剪切板"
+        if ADT and ADT.Notify then ADT.Notify(tip, 'success') end
     else
-        print("ADT: 无法移除该装饰（可能不在可移除模式或未被选中）")
+        if ADT and ADT.Notify then ADT.Notify("无法移除该装饰（可能不在可移除模式或未被选中）", 'error') end
     end
 end
 
@@ -464,6 +461,8 @@ end)
 do
     local owner
     local btnCopy, btnPaste, btnCut
+    -- 高级编辑：虚拟多选 按键按钮
+    local btnAdvToggle, btnAdvToggleHovered, btnAdvClear, btnAdvAnchorHover, btnAdvAnchorSelected
 
     local function EnsureOwner()
         if owner then return end
@@ -473,15 +472,41 @@ do
         btnPaste = CreateFrame("Button", "ADT_HousingOverride_PasteButton", owner, "SecureActionButtonTemplate")
         btnCut = CreateFrame("Button", "ADT_HousingOverride_CutButton", owner, "SecureActionButtonTemplate")
 
+        -- 高级编辑按钮（调用 Bindings.lua 中的全局函数）
+        btnAdvToggle = CreateFrame("Button", "ADT_HousingOverride_AdvToggle", owner, "SecureActionButtonTemplate")
+        btnAdvToggleHovered = CreateFrame("Button", "ADT_HousingOverride_AdvToggleHovered", owner, "SecureActionButtonTemplate")
+        btnAdvClear = CreateFrame("Button", "ADT_HousingOverride_AdvClear", owner, "SecureActionButtonTemplate")
+        btnAdvAnchorHover = CreateFrame("Button", "ADT_HousingOverride_AdvAnchorHover", owner, "SecureActionButtonTemplate")
+        btnAdvAnchorSelected = CreateFrame("Button", "ADT_HousingOverride_AdvAnchorSelected", owner, "SecureActionButtonTemplate")
+
         btnCopy:SetScript("OnClick", function() if ADT and ADT.Housing then ADT.Housing:Binding_Copy() end end)
         btnPaste:SetScript("OnClick", function() if ADT and ADT.Housing then ADT.Housing:Binding_Paste() end end)
         btnCut:SetScript("OnClick", function() if ADT and ADT.Housing then ADT.Housing:Binding_Cut() end end)
+
+        -- 绑定高级编辑调用
+        btnAdvToggle:SetScript("OnClick", function() if _G.ADT_Adv_Toggle then ADT_Adv_Toggle() end end)
+        btnAdvToggleHovered:SetScript("OnClick", function() if _G.ADT_Adv_ToggleHovered then ADT_Adv_ToggleHovered() end end)
+        btnAdvClear:SetScript("OnClick", function() if _G.ADT_Adv_ClearSelection then ADT_Adv_ClearSelection() end end)
+        btnAdvAnchorHover:SetScript("OnClick", function() if _G.ADT_Adv_SetAnchor_Hovered then ADT_Adv_SetAnchor_Hovered() end end)
+        btnAdvAnchorSelected:SetScript("OnClick", function() if _G.ADT_Adv_SetAnchor_Selected then ADT_Adv_SetAnchor_Selected() end end)
     end
 
     local OVERRIDE_KEYS = {
+        -- 复制/粘贴/剪切
         { key = "CTRL-C", button = function() return btnCopy end },
         { key = "CTRL-V", button = function() return btnPaste end },
         { key = "CTRL-X", button = function() return btnCut end },
+        -- 高级编辑（硬编码测试键位）
+        -- 开关：Ctrl+G
+        { key = "CTRL-G", button = function() return btnAdvToggle end },
+        -- 将悬停装饰加入/移出选集：Ctrl+Shift+H
+        { key = "CTRL-SHIFT-H", button = function() return btnAdvToggleHovered end },
+        -- 清空选集：Ctrl+Shift+C
+        { key = "CTRL-SHIFT-C", button = function() return btnAdvClear end },
+        -- 设锚点=悬停：Ctrl+Shift+A
+        { key = "CTRL-SHIFT-A", button = function() return btnAdvAnchorHover end },
+        -- 设锚点=当前已选中：Ctrl+Shift+S
+        { key = "CTRL-SHIFT-S", button = function() return btnAdvAnchorSelected end },
     }
 
     function EL:ClearOverrides()

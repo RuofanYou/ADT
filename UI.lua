@@ -3,7 +3,16 @@ ADT = ADT or {}
 
 -- Slash：/adt 打开设置面板（自定义 ControlCenter 样式）
 SLASH_ADT1 = "/adt"
-SlashCmdList["ADT"] = function()
+SlashCmdList["ADT"] = function(msg)
+    msg = (msg or ""):lower():match("^%s*(.-)%s*$")
+    if msg == "debug" or msg == "dbg" then
+        if ADT and ADT.FlipDBBool and ADT.IsDebugEnabled and ADT.Notify then
+            ADT.FlipDBBool("DebugEnabled")
+            local state = ADT.IsDebugEnabled() and "开启" or "关闭"
+            ADT.Notify("ADT 调试已"..state, ADT.IsDebugEnabled() and 'success' or 'info')
+        end
+        return
+    end
     local Main = ADT and ADT.ControlCenter and ADT.ControlCenter.SettingsPanel
     if not Main then return end
     if Settings and ADT.SettingsCategory and SettingsPanel and SettingsPanel:IsShown() then

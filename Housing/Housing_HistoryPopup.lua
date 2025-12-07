@@ -32,7 +32,12 @@ local function CreatePopupFrame()
     MainFrame:EnableMouse(true)
     MainFrame:RegisterForDrag("LeftButton")
     MainFrame:SetScript("OnDragStart", MainFrame.StartMoving)
-    MainFrame:SetScript("OnDragStop", MainFrame.StopMovingOrSizing)
+    MainFrame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        if ADT and ADT.SaveFramePosition then
+            ADT.SaveFramePosition("HistoryPopupPos", self)
+        end
+    end)
     MainFrame:SetClampedToScreen(true)
     -- 关键：编辑模式下 Blizzard 的房屋编辑 UI 使用全屏层级，
     -- 我们需要把历史弹窗的层级抬高，否则会被遮住，看起来像“打不开”。
@@ -227,6 +232,10 @@ function HistoryPopup:Show()
     else
         frame:SetParent(UIParent)
         frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    end
+    -- 恢复位置（相对 UIParent 记忆）
+    if ADT and ADT.RestoreFramePosition then
+        ADT.RestoreFramePosition("HistoryPopupPos", frame)
     end
     self:Refresh()
     frame:Show()

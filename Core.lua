@@ -9,8 +9,16 @@ local DEFAULTS = {
     EnableDupe = true,
     -- 1: Ctrl, 2: Alt
     DuplicateKey = 2,
+    -- 悬停高亮（3D场景中高亮当前悬停的装饰物）
+    EnableHoverHighlight = true,
     -- 放置历史记录
     PlacementHistory = {},
+    -- 额外剪切板（持久化，可视化列表）
+    ExtraClipboard = {},
+    -- 调试开关：仅当开启时才向聊天框 print
+    DebugEnabled = false,
+    -- UI 位置持久化：历史弹窗
+    HistoryPopupPos = nil,
 }
 
 local function CopyDefaults(dst, src)
@@ -47,6 +55,118 @@ end
 
 function ADT.FlipDBBool(key)
     ADT.SetDBValue(key, not ADT.GetDBBool(key))
+end
+
+-- Frame 位置保存/恢复（单一权威）
+function ADT.SaveFramePosition(dbKey, frame)
+    if not (dbKey and frame and frame.GetPoint) then return end
+    local point, relTo, relPoint, xOfs, yOfs = frame:GetPoint(1)
+    if not point then return end
+    local relName = relTo and relTo:GetName() or "UIParent"
+    ADT.SetDBValue(dbKey, { point = point, rel = relName, relPoint = relPoint or point, x = xOfs or 0, y = yOfs or 0 })
+end
+
+function ADT.RestoreFramePosition(dbKey, frame, fallback)
+    if not (dbKey and frame and frame.SetPoint) then return end
+    local pos = ADT.GetDBValue(dbKey)
+    frame:ClearAllPoints()
+    if type(pos) == "table" and pos.point then
+        local rel = _G[pos.rel or "UIParent"] or UIParent
+        frame:SetPoint(pos.point, rel, pos.relPoint or pos.point, pos.x or 0, pos.y or 0)
+    else
+        if type(fallback) == "function" then
+            fallback(frame)
+        else
+            frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+        end
+    end
+end
+
+-- 调试打印（仅在 DebugEnabled 时输出到聊天框）
+function ADT.IsDebugEnabled()
+    return ADT.GetDBBool("DebugEnabled")
+end
+
+function ADT.DebugPrint(msg)
+    if ADT.IsDebugEnabled() then
+        print("ADT:", msg)
+    end
+end
+
+-- 顶部美观提示（暴雪风格），带简单节流
+do
+    local lastMsg, lastT = nil, 0
+    local function canShow(msg)
+        local now = GetTime and GetTime() or 0
+        if msg == lastMsg and (now - lastT) < 0.6 then
+            return false
+        end
+        lastMsg, lastT = msg, now
+        return true
+    end
+
+    local function AcquireNoticeFrame()
+        local parent = (HouseEditorFrame and HouseEditorFrame:IsShown()) and HouseEditorFrame or UIParent
+        local strata = (parent == HouseEditorFrame) and "TOOLTIP" or "FULLSCREEN_DIALOG"
+        if ADT.NoticeFrame and ADT.NoticeFrame.SetParent then
+            local f = ADT.NoticeFrame
+            f:SetParent(parent)
+            f:ClearAllPoints()
+            f:SetPoint("TOP", parent, "TOP", 0, -120)
+            f:SetFrameStrata(strata)
+            local base = (parent.GetFrameLevel and parent:GetFrameLevel()) or 0
+            pcall(f.SetFrameLevel, f, base + 1000)
+            f:SetToplevel(true)
+            return f
+        end
+        local f = CreateFrame("ScrollingMessageFrame", "ADT_NoticeFrame", parent)
+        f:SetSize(1024, 64)
+        f:SetPoint("TOP", parent, "TOP", 0, -120)
+        f:SetFrameStrata(strata)
+        local base = (parent.GetFrameLevel and parent:GetFrameLevel()) or 0
+        pcall(f.SetFrameLevel, f, base + 1000)
+        f:SetToplevel(true)
+        f:SetJustifyH("CENTER")
+        if GameFontHighlightLarge then f:SetFontObject(GameFontHighlightLarge)
+        elseif GameFontNormalLarge then f:SetFontObject(GameFontNormalLarge) end
+        f:SetShadowOffset(1, -1)
+        f:SetFading(true)
+        f:SetFadeDuration(0.5)
+        f:SetTimeVisible(2.0)
+        f:SetMaxLines(3)
+        f:EnableMouse(false)
+        ADT.NoticeFrame = f
+        return f
+    end
+
+    -- kind: 'success' | 'error' | 'info'
+    function ADT.Notify(msg, kind)
+        if not msg or msg == "" then return end
+        if not canShow(msg) then return end
+
+        local color
+        if kind == 'error' then
+            local c = ChatTypeInfo and ChatTypeInfo.ERROR_MESSAGE
+            color = c and { r = c.r, g = c.g, b = c.b } or { r = 1.0, g = 0.25, b = 0.25 }
+        else
+            -- 暴雪黄色信息
+            local c = _G.YELLOW_FONT_COLOR or (ChatTypeInfo and ChatTypeInfo.SYSTEM)
+            local r, g, b = 1, 0.82, 0
+            if c then
+                if c.r then r = c.r; g = c.g; b = c.b
+                elseif c.GetRGB then r, g, b = c:GetRGB() end
+            end
+            color = { r = r, g = g, b = b }
+        end
+
+        local frame = AcquireNoticeFrame()
+        if frame and frame.AddMessage then
+            frame:AddMessage(tostring(msg), color.r, color.g, color.b)
+            return
+        end
+        -- 兜底：在调试模式才打印
+        ADT.DebugPrint(msg)
+    end
 end
 
 -- 获取当前重复热键名

@@ -64,7 +64,7 @@ function History:StartPlacing(decorID)
     if not decorID then return false end
     local entryInfo = C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, decorID, true)
     if not entryInfo or not entryInfo.entryID then
-        print("ADT: 无法放置该装饰（可能已用完或未拥有）")
+        if ADT and ADT.Notify then ADT.Notify("无法放置该装饰（可能已用完或未拥有）", 'error') end
         return false
     end
     -- 关键点：延后一小段时间再开始放置，避免与点击列表同一鼠标事件重叠，
@@ -73,7 +73,7 @@ function History:StartPlacing(decorID)
         if C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive() then
             C_HousingBasicMode.StartPlacingNewDecor(entryInfo.entryID)
         else
-            print("ADT: 请先进入住宅编辑模式，再从历史选择。")
+            if ADT and ADT.Notify then ADT.Notify("请先进入住宅编辑模式，再从历史选择。", 'info') end
         end
     end)
     return true
@@ -84,7 +84,7 @@ function History:QuickPlaceAtCursor(decorID)
     if not decorID then return false end
     local entryInfo = C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, decorID, true)
     if not entryInfo or not entryInfo.entryID then
-        print("ADT: 无法放置该装饰（可能已用完或未拥有）")
+        if ADT and ADT.Notify then ADT.Notify("无法放置该装饰（可能已用完或未拥有）", 'error') end
         return false
     end
     -- 进入放置后，下一帧尝试直接确认（如果客户端支持）。
@@ -137,11 +137,11 @@ History:RegisterEvent("HOUSING_DECOR_PLACE_SUCCESS")
 -- 调试：打印历史
 function History:DebugPrint()
     local list = self:GetAll()
-    print("ADT 放置历史 (" .. #list .. " 条):")
+    if ADT and ADT.DebugPrint then ADT.DebugPrint("放置历史 (" .. #list .. " 条):") end
     for i, item in ipairs(list) do
-        print(string.format("  %d. %s (ID: %d)", i, item.name, item.decorID))
+        if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("  %d. %s (ID: %d)", i, item.name, item.decorID)) end
     end
 end
 
 -- 初始化消息
-print("ADT: 放置历史模块已加载。输入 /adthistory 打开历史面板。")
+if ADT and ADT.DebugPrint then ADT.DebugPrint("放置历史模块已加载。输入 /adthistory 打开历史面板。") end
