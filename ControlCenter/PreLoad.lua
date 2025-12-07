@@ -452,6 +452,10 @@ local function buildModules()
                     if Main.RefreshLanguageLayout then Main:RefreshLanguageLayout(true) end
                 end
             end
+            -- 通知 Housing 模块刷新右侧提示文本
+            if ADT and ADT.Housing and ADT.Housing.OnLocaleChanged then
+                ADT.Housing:OnLocaleChanged()
+            end
         end,
         categoryKeys = { 'Housing' },
         uiOrder = 100,  -- 放在最后

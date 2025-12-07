@@ -186,6 +186,9 @@ local function Blizzard_HouseEditor_OnLoaded()
         prev = addHint(prev, L["Hotkey Recall"] or "Recall", CTRL.."+R")
         -- 批量放置：按住 CTRL 连续放置
         prev = addHint(prev, L["Hotkey BatchPlace"] or "Batch Place", CTRL)
+        -- 一键重置变换（专家模式）
+        prev = addHint(prev, L["Reset Current"] or "Reset", "T")
+        prev = addHint(prev, L["Reset All"] or "Reset All", CTRL.."+T")
 
         -- 将所有“键帽”统一宽度，避免左侧文字参差不齐
         function DisplayFrame:NormalizeKeycapWidth()
@@ -462,6 +465,8 @@ do
                 [4] = nil,  -- Store (CTRL+S) - 始终显示
                 [5] = nil,  -- Recall (CTRL+R) - 始终显示
                 [6] = { dbKey = "EnableBatchPlace", default = false }, -- Batch Place (CTRL)
+                [7] = nil,  -- Reset (T) - 始终显示（专家模式）
+                [8] = nil,  -- Reset All (CTRL+T) - 始终显示（专家模式）
             }
             for i, frame in ipairs(DisplayFrame.HintFrames) do
                 table.insert(allFrames, frame)
@@ -489,6 +494,51 @@ do
             end
         end
     end
+end
+
+-- 语言切换时，刷新右侧提示行的本地化文本
+function EL:OnLocaleChanged()
+    if not DisplayFrame then return end
+    local L = ADT and ADT.L or {}
+    local CTRL = CTRL_KEY_TEXT or "CTRL"
+    -- 顶部重复提示（键帽文本可能因设置不同而变）
+    if DisplayFrame.SubFrame then
+        local keyName = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or (CTRL.."+D")
+        DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", keyName)
+    end
+    -- 其他提示行
+    local map = {
+        [1] = L["Hotkey Cut"]    or "Cut",
+        [2] = L["Hotkey Copy"]   or "Copy",
+        [3] = L["Hotkey Paste"]  or "Paste",
+        [4] = L["Hotkey Store"]  or "Store",
+        [5] = L["Hotkey Recall"] or "Recall",
+        [6] = L["Hotkey BatchPlace"] or "Batch Place",
+        [7] = L["Reset Current"] or "Reset",
+        [8] = L["Reset All"] or "Reset All",
+    }
+    local keycaps = {
+        [1] = CTRL.."+X",
+        [2] = CTRL.."+C",
+        [3] = CTRL.."+V",
+        [4] = CTRL.."+S",
+        [5] = CTRL.."+R",
+        [6] = CTRL,
+        [7] = "T",
+        [8] = CTRL.."+T",
+    }
+    if DisplayFrame.HintFrames then
+        for i, line in ipairs(DisplayFrame.HintFrames) do
+            if line and line.SetHotkey and map[i] and keycaps[i] then
+                line:SetHotkey(map[i], keycaps[i])
+            end
+        end
+    end
+    if DisplayFrame.NormalizeKeycapWidth then
+        DisplayFrame:NormalizeKeycapWidth()
+    end
+    -- 重新应用可见性（用户开关可能影响）
+    if self.UpdateHintVisibility then self:UpdateHintVisibility() end
 end
 
 --
@@ -588,6 +638,61 @@ function EL:Binding_Cut()
     end
 end
 
+--
+-- 一键重置变换（T / Ctrl+T）
+--
+function EL:ResetCurrentSubmode()
+    if not IsHouseEditorActive() then return end
+    -- 仅在专家模式下可用
+    local mode = C_HouseEditor.GetActiveHouseEditorMode and C_HouseEditor.GetActiveHouseEditorMode()
+    if mode ~= Enum.HouseEditorMode.ExpertDecor then
+        if ADT and ADT.Notify then
+            ADT.Notify(L["Reset requires Expert Mode"] or "需先切换到专家模式 (按 2)", "warning")
+        end
+        return
+    end
+    -- 必须有选中的装饰
+    if not (C_HousingExpertMode and C_HousingExpertMode.IsDecorSelected and C_HousingExpertMode.IsDecorSelected()) then
+        if ADT and ADT.Notify then
+            ADT.Notify(L["No decor selected"] or "请先选中一个装饰", "warning")
+        end
+        return
+    end
+    -- 仅重置当前子模式（activeSubmodeOnly = true）
+    if C_HousingExpertMode.ResetPrecisionChanges then
+        C_HousingExpertMode.ResetPrecisionChanges(true)
+        PlaySound(SOUNDKIT.HOUSING_EXPERTMODE_RESET_CHANGES or 220067)
+        if ADT and ADT.Notify then
+            ADT.Notify(L["Current transform reset"] or "已重置当前变换", "success")
+        end
+    end
+end
+
+function EL:ResetAllTransforms()
+    if not IsHouseEditorActive() then return end
+    local mode = C_HouseEditor.GetActiveHouseEditorMode and C_HouseEditor.GetActiveHouseEditorMode()
+    if mode ~= Enum.HouseEditorMode.ExpertDecor then
+        if ADT and ADT.Notify then
+            ADT.Notify(L["Reset requires Expert Mode"] or "需先切换到专家模式 (按 2)", "warning")
+        end
+        return
+    end
+    if not (C_HousingExpertMode and C_HousingExpertMode.IsDecorSelected and C_HousingExpertMode.IsDecorSelected()) then
+        if ADT and ADT.Notify then
+            ADT.Notify(L["No decor selected"] or "请先选中一个装饰", "warning")
+        end
+        return
+    end
+    -- 全部重置（activeSubmodeOnly = false）
+    if C_HousingExpertMode.ResetPrecisionChanges then
+        C_HousingExpertMode.ResetPrecisionChanges(false)
+        PlaySound(SOUNDKIT.HOUSING_EXPERTMODE_RESET_CHANGES or 220067)
+        if ADT and ADT.Notify then
+            ADT.Notify(L["All transforms reset"] or "已重置所有变换（旋转+缩放）", "success")
+        end
+    end
+end
+
 -- 启用模块：加载后默认打开（只做这一项功能）
 local bootstrap = CreateFrame("Frame")
 bootstrap:RegisterEvent("PLAYER_LOGIN")
@@ -610,6 +715,8 @@ do
     local btnDuplicate
     -- 住宅剪切板：复制/粘贴/剪切（强制覆盖）
     local btnCopy, btnPaste, btnCut
+    -- 一键重置变换（T / CTRL-T）
+    local btnResetSubmode, btnResetAll
     -- 高级编辑：虚拟多选 按键按钮（不做强制覆盖，仅提供绑定接口）
     local btnAdvToggle, btnAdvToggleHovered, btnAdvClear, btnAdvAnchorHover, btnAdvAnchorSelected
 
@@ -668,7 +775,15 @@ do
         btnAdvAnchorHover:SetScript("OnClick", function() if _G.ADT_Adv_SetAnchor_Hovered then ADT_Adv_SetAnchor_Hovered() end end)
         btnAdvAnchorSelected:SetScript("OnClick", function() if _G.ADT_Adv_SetAnchor_Selected then ADT_Adv_SetAnchor_Selected() end end)
 
-        -- 移除旧剪切板调用（不再设置）
+        -- 一键重置变换按钮
+        btnResetSubmode = CreateFrame("Button", "ADT_HousingOverride_ResetSub", owner, "SecureActionButtonTemplate")
+        btnResetAll = CreateFrame("Button", "ADT_HousingOverride_ResetAll", owner, "SecureActionButtonTemplate")
+        btnResetSubmode:SetScript("OnClick", function()
+            if ADT and ADT.Housing and ADT.Housing.ResetCurrentSubmode then ADT.Housing:ResetCurrentSubmode() end
+        end)
+        btnResetAll:SetScript("OnClick", function()
+            if ADT and ADT.Housing and ADT.Housing.ResetAllTransforms then ADT.Housing:ResetAllTransforms() end
+        end)
     end
 
     local OVERRIDE_KEYS = {
@@ -684,6 +799,9 @@ do
         { key = "CTRL-D", button = function() return btnDuplicate end },
         -- 设置面板：开关（等价 /adt）
         { key = "CTRL-Q", button = function() return btnToggleUI end },
+        -- 一键重置变换
+        { key = "T", button = function() return btnResetSubmode end },
+        { key = "CTRL-T", button = function() return btnResetAll end },
     }
 
     function EL:ClearOverrides()
