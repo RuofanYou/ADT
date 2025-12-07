@@ -32,11 +32,26 @@ end
 
 SlashCmdList["ADT"] = function(msg)
     msg = (msg or ""):lower():match("^%s*(.-)%s*$")
-    if msg == "debug" or msg == "dbg" then
-        if ADT and ADT.FlipDBBool and ADT.IsDebugEnabled and ADT.Notify then
-            ADT.FlipDBBool("DebugEnabled")
+    -- /adt debug [on|off|show]
+    if msg:match("^debug") or msg:match("^dbg") then
+        local _, arg = msg:match("^(%S+)%s*(.*)$")
+        arg = (arg or ""):lower()
+        if ADT and ADT.SetDBValue and ADT.IsDebugEnabled and ADT.Notify then
+            if arg == "on" then
+                ADT.SetDBValue("DebugEnabled", true)
+            elseif arg == "off" then
+                ADT.SetDBValue("DebugEnabled", false)
+            elseif arg == "show" then
+                -- 仅显示状态
+            else
+                -- toggle
+                ADT.SetDBValue("DebugEnabled", not ADT.IsDebugEnabled())
+            end
             local state = ADT.IsDebugEnabled() and "开启" or "关闭"
             ADT.Notify("ADT 调试已"..state, ADT.IsDebugEnabled() and 'success' or 'info')
+            if ADT and ADT.DebugPrint then
+                ADT.DebugPrint("[Debug] DebugEnabled="..tostring(ADT.IsDebugEnabled()))
+            end
         end
         return
     end

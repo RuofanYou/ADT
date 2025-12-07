@@ -347,14 +347,20 @@ local L = ADT.L
 -- 内部：构建默认模块，并初始化映射
 local function buildModules()
     local modules = {}
+    local function dbgToggle(dbKey, state)
+        if ADT and ADT.DebugPrint then
+            ADT.DebugPrint(string.format("[Toggle] %s=%s", tostring(dbKey), tostring(state)))
+        end
+    end
     
     -- 住宅快捷键设置模块（4 个独立开关）
     local moduleRepeat = {
-        name = "启用：CTRL+D以重复装饰品",
+        name = (L and L["Enable Duplicate"]) or "启用复制",
         dbKey = 'EnableDupe',
-        description = "悬停装饰时按 CTRL+D 可快速放置相同装饰",
+        description = (L and L["Enable Duplicate tooltip"]) or "悬停装饰时按 CTRL+D 可快速放置相同装饰",
         toggleFunc = function(state)
             if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableDupe', state) end
+            dbgToggle('EnableDupe', state)
             if ADT and ADT.Housing and ADT.Housing.LoadSettings then ADT.Housing:LoadSettings() end
             if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
         end,
@@ -363,11 +369,12 @@ local function buildModules()
     }
     
     local moduleCopy = {
-        name = "启用：CTRL+C以复制",
+        name = (L and L["Enable Copy"]) or "启用复制",
         dbKey = 'EnableCopy',
-        description = "悬停或选中装饰时按 CTRL+C 可复制到剪切板",
+        description = (L and L["Enable Copy tooltip"]) or "悬停或选中装饰时按 CTRL+C 可复制到剪切板",
         toggleFunc = function(state)
             if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableCopy', state) end
+            dbgToggle('EnableCopy', state)
             if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
         end,
         categoryKeys = { 'Housing' },
@@ -375,11 +382,12 @@ local function buildModules()
     }
     
     local moduleCut = {
-        name = "启用：CTRL+X以剪切",
+        name = (L and L["Enable Cut"]) or "启用剪切",
         dbKey = 'EnableCut',
-        description = "选中装饰时按 CTRL+X 可剪切（移除并复制到剪切板）",
+        description = (L and L["Enable Cut tooltip"]) or "选中装饰时按 CTRL+X 可剪切（移除并复制到剪切板）",
         toggleFunc = function(state)
             if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableCut', state) end
+            dbgToggle('EnableCut', state)
             if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
         end,
         categoryKeys = { 'Housing' },
@@ -387,11 +395,12 @@ local function buildModules()
     }
     
     local modulePaste = {
-        name = "启用：CTRL+V以粘贴",
+        name = (L and L["Enable Paste"]) or "启用粘贴",
         dbKey = 'EnablePaste',
-        description = "按 CTRL+V 可从剪切板粘贴装饰",
+        description = (L and L["Enable Paste tooltip"]) or "按 CTRL+V 可从剪切板粘贴装饰",
         toggleFunc = function(state)
             if ADT and ADT.SetDBValue then ADT.SetDBValue('EnablePaste', state) end
+            dbgToggle('EnablePaste', state)
             if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
         end,
         categoryKeys = { 'Housing' },
@@ -399,23 +408,60 @@ local function buildModules()
     }
     
     local moduleBatchPlace = {
-        name = "启用：按住CTRL以批量放置",
+        name = (L and L["Enable Batch Place"]) or "启用批量放置",
         dbKey = 'EnableBatchPlace',
-        description = "选中装饰后按住 CTRL 点击可连续放置多个相同装饰",
+        description = (L and L["Enable Batch Place tooltip"]) or "选中装饰后按住 CTRL 点击可连续放置多个相同装饰",
         toggleFunc = function(state)
             if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableBatchPlace', state) end
-            -- 该功能不需要更新 HintVisibility（不在悬停提示中显示）
+            dbgToggle('EnableBatchPlace', state)
+            -- 和其他热键选项保持一致：切换时刷新提示行显隐
+            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
         end,
         categoryKeys = { 'Housing' },
         uiOrder = 5,
+    }
+    
+    -- 语言选择下拉菜单模块
+    local moduleLanguage = {
+        name = (L and L["Language"]) or "语言 / Language",
+        dbKey = 'SelectedLanguage',
+        type = 'dropdown',  -- 下拉菜单类型
+        options = {
+            { value = nil, text = (L and L["Language Auto"]) or "自动 (跟随客户端)" },
+            { value = "zhCN", text = "中文" },
+            { value = "enUS", text = "English" },
+        },
+        description = (L and L["Language Reload Hint"]) or "部分文字可能需要 /reload 后更新",
+        toggleFunc = function(newValue)
+            if ADT and ADT.SetDBValue then ADT.SetDBValue('SelectedLanguage', newValue) end
+            -- 立即应用新语言
+            if ADT and ADT.ApplyLocale then
+                local locale = newValue or ADT.GetActiveLocale()
+                ADT.ApplyLocale(locale)
+            end
+            -- 重新构建设置模块并刷新当前 UI
+            if ADT and ADT.ControlCenter then
+                local CC = ADT.ControlCenter
+                CC._sorted = nil
+                CC._dbKeyMap = nil
+                local Main = CC.SettingsPanel
+                local canRefresh = Main and Main.ModuleTab and Main.ModuleTab.ScrollView
+                if canRefresh then
+                    if Main.RefreshCategoryList then Main:RefreshCategoryList() end
+                    if Main.RefreshFeatureList then Main:RefreshFeatureList() end
+                end
+            end
+        end,
+        categoryKeys = { 'Housing' },
+        uiOrder = 100,  -- 放在最后
     }
 
     modules[1] = {
         key = 'Housing',
         categoryName = (L and L['SC Housing']) or '通用',
         categoryType = 'settings', -- 设置类分类
-        modules = { moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace },
-        numModules = 5,
+        modules = { moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace, moduleLanguage },
+        numModules = 6,
     }
 
     -- 临时板分类（装饰列表类）
@@ -453,7 +499,7 @@ local function buildModules()
             end
         end,
         -- 空列表提示
-        emptyText = "临时板为空\nCtrl+S 存入；Ctrl+R 取出",
+        emptyText = string.format("%s\n%s", (L and L['Clipboard Empty Line1']) or '临时板为空', (L and L['Clipboard Empty Line2']) or 'Ctrl+S 存入；Ctrl+R 取出'),
     }
 
     -- 最近放置分类（装饰列表类）
@@ -483,7 +529,7 @@ local function buildModules()
             end
         end,
         -- 空列表提示
-        emptyText = "暂无放置记录\n放置装饰后会自动记录",
+        emptyText = string.format("%s\n%s", (L and L['History Empty Line1']) or '暂无放置记录', (L and L['History Empty Line2']) or '放置装饰后会自动记录'),
     }
 
     -- 信息分类（关于插件的信息）
@@ -512,13 +558,14 @@ local function buildModules()
         end,
     }
 
-    -- 初始化映射（5 个快捷键开关）
+    -- 初始化映射（6 个设置模块）
     ControlCenter._dbKeyMap = {
         [moduleRepeat.dbKey] = moduleRepeat,
         [moduleCopy.dbKey] = moduleCopy,
         [moduleCut.dbKey] = moduleCut,
         [modulePaste.dbKey] = modulePaste,
         [moduleBatchPlace.dbKey] = moduleBatchPlace,
+        [moduleLanguage.dbKey] = moduleLanguage,
     }
     return modules
 end

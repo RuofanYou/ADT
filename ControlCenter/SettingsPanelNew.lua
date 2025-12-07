@@ -191,6 +191,239 @@ do
 end
 
 
+-- ============================================================================
+-- 自定义下拉菜单系统（使用 SettingsPanel.png 素材）
+-- ============================================================================
+local ADTDropdownMenu
+do
+    -- 将常量存储在菜单对象上，避免闭包问题
+    local MENU_WIDTH = 160
+    local ITEM_HEIGHT = 24
+    local PADDING = 6
+    
+    -- 菜单项 Mixin
+    local DropdownItemMixin = {}
+    
+    function DropdownItemMixin:OnEnter()
+        self.Highlight:Show()
+        SetTextColor(self.Text, Def.TextColorHighlight)
+    end
+    
+    function DropdownItemMixin:OnLeave()
+        self.Highlight:Hide()
+        SetTextColor(self.Text, { 0.922, 0.871, 0.761 })
+    end
+    
+    function DropdownItemMixin:OnClick()
+        if self.onClickFunc then
+            self.onClickFunc()
+        end
+        ADTDropdownMenu:Hide()
+    end
+    
+    function DropdownItemMixin:SetSelected(selected)
+        self.selected = selected
+        if selected then
+            SetTexCoord(self.Radio, 737, 783, 17, 63)  -- 勾选状态
+        else
+            SetTexCoord(self.Radio, 689, 735, 17, 63)  -- 未勾选状态
+        end
+    end
+    
+    function DropdownItemMixin:SetText(text)
+        self.Text:SetText(text)
+    end
+    
+    -- 创建单个菜单项
+    local function CreateDropdownItem(parent)
+        local f = CreateFrame("Button", nil, parent)
+        Mixin(f, DropdownItemMixin)
+        f:SetSize(MENU_WIDTH - 2 * PADDING, ITEM_HEIGHT)
+        
+        -- 高亮背景
+        f.Highlight = f:CreateTexture(nil, "BACKGROUND")
+        f.Highlight:SetAllPoints(true)
+        f.Highlight:SetColorTexture(1, 0.82, 0, 0.15)
+        f.Highlight:Hide()
+        
+        -- 单选按钮图标
+        f.Radio = f:CreateTexture(nil, "ARTWORK")
+        f.Radio:SetSize(16, 16)
+        f.Radio:SetPoint("LEFT", f, "LEFT", 4, 0)
+        f.Radio:SetTexture(Def.TextureFile)
+        DisableSharpening(f.Radio)
+        
+        -- 文本
+        f.Text = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        f.Text:SetPoint("LEFT", f.Radio, "RIGHT", 4, 0)
+        f.Text:SetPoint("RIGHT", f, "RIGHT", -4, 0)
+        f.Text:SetJustifyH("LEFT")
+        SetTextColor(f.Text, { 0.922, 0.871, 0.761 })
+        
+        f:SetScript("OnEnter", f.OnEnter)
+        f:SetScript("OnLeave", f.OnLeave)
+        f:SetScript("OnClick", f.OnClick)
+        
+        return f
+    end
+    
+    -- 创建下拉菜单主框架
+    ADTDropdownMenu = CreateFrame("Frame", "ADTDropdownMenuFrame", UIParent)
+    -- 重要：在编辑器模式下，SettingsPanel 会提升到 "TOOLTIP" 层级。
+    -- 若下拉菜单仅为 FULLSCREEN_DIALOG，则会被面板遮挡，导致“看似没弹出”。
+    -- 因此统一使用最高层级 TOOLTIP，确保始终在面板之上。
+    ADTDropdownMenu:SetFrameStrata("TOOLTIP")
+    ADTDropdownMenu:SetFrameLevel(100)
+    ADTDropdownMenu:Hide()
+    ADTDropdownMenu:EnableMouse(true)
+    ADTDropdownMenu:SetClampedToScreen(true)
+    
+    -- 使用九宫格背景（SettingsPanel.png 左上角区域）
+    -- 根据图片素材坐标设置九宫格背景
+    local bg = ADTDropdownMenu:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetTexture(Def.TextureFile)
+    -- 使用 SettingsPanel.png 的左上角深色背景区域
+    bg:SetTexCoord(0/1024, 256/1024, 0/512, 256/512)
+    bg:SetVertexColor(0.15, 0.13, 0.11)
+    ADTDropdownMenu.Background = bg
+    
+    -- 金色边框（使用九宫格）
+    local borderSize = 3
+    local borders = {}
+    for i = 1, 4 do
+        borders[i] = ADTDropdownMenu:CreateTexture(nil, "BORDER")
+        borders[i]:SetColorTexture(0.6, 0.5, 0.3)
+    end
+    -- 上边框
+    borders[1]:SetPoint("TOPLEFT", ADTDropdownMenu, "TOPLEFT", 0, 0)
+    borders[1]:SetPoint("TOPRIGHT", ADTDropdownMenu, "TOPRIGHT", 0, 0)
+    borders[1]:SetHeight(borderSize)
+    -- 下边框
+    borders[2]:SetPoint("BOTTOMLEFT", ADTDropdownMenu, "BOTTOMLEFT", 0, 0)
+    borders[2]:SetPoint("BOTTOMRIGHT", ADTDropdownMenu, "BOTTOMRIGHT", 0, 0)
+    borders[2]:SetHeight(borderSize)
+    -- 左边框
+    borders[3]:SetPoint("TOPLEFT", ADTDropdownMenu, "TOPLEFT", 0, 0)
+    borders[3]:SetPoint("BOTTOMLEFT", ADTDropdownMenu, "BOTTOMLEFT", 0, 0)
+    borders[3]:SetWidth(borderSize)
+    -- 右边框
+    borders[4]:SetPoint("TOPRIGHT", ADTDropdownMenu, "TOPRIGHT", 0, 0)
+    borders[4]:SetPoint("BOTTOMRIGHT", ADTDropdownMenu, "BOTTOMRIGHT", 0, 0)
+    borders[4]:SetWidth(borderSize)
+    ADTDropdownMenu.Borders = borders
+    
+    ADTDropdownMenu.items = {}
+    ADTDropdownMenu.itemPool = {}
+    
+    function ADTDropdownMenu:AcquireItem()
+        local item = table.remove(self.itemPool)
+        if not item then
+            item = CreateDropdownItem(self)
+        end
+        item:Show()
+        return item
+    end
+    
+    function ADTDropdownMenu:ReleaseAllItems()
+        for _, item in ipairs(self.items) do
+            item:Hide()
+            table.insert(self.itemPool, item)
+        end
+        wipe(self.items)
+    end
+    
+    function ADTDropdownMenu:ShowMenu(owner, options, dbKey, toggleFunc)
+        ADT.DebugPrint("[Dropdown] ShowMenu called, dbKey=" .. tostring(dbKey) .. ", options count=" .. tostring(#options))
+        self:ReleaseAllItems()
+        
+        local numOptions = #options
+        local menuHeight = numOptions * ITEM_HEIGHT + 2 * PADDING
+        
+        ADT.DebugPrint("[Dropdown] Setting size: " .. MENU_WIDTH .. "x" .. menuHeight)
+        self:SetSize(MENU_WIDTH, menuHeight)
+        
+        -- 记录归属者，便于“点外面关闭”时排除自身与触发按钮
+        self.owner = owner
+
+        -- 定位到按钮下方
+        self:ClearAllPoints()
+        self:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -4)
+        
+        -- 创建菜单项
+        local currentValue = ADT.GetDBValue(dbKey)
+        ADT.DebugPrint("[Dropdown] Current value: " .. tostring(currentValue))
+        for i, opt in ipairs(options) do
+            local item = self:AcquireItem()
+            item:SetText(opt.text)
+            item:SetSelected(currentValue == opt.value)
+            item:SetPoint("TOPLEFT", self, "TOPLEFT", PADDING, -PADDING - (i - 1) * ITEM_HEIGHT)
+            
+            item.onClickFunc = function()
+                ADT.SetDBValue(dbKey, opt.value, true)
+                if toggleFunc then
+                    toggleFunc(opt.value)
+                end
+                if owner.UpdateDropdownLabel then
+                    owner:UpdateDropdownLabel()
+                end
+                if MainFrame.UpdateSettingsEntries then
+                    MainFrame:UpdateSettingsEntries()
+                end
+            end
+            
+            table.insert(self.items, item)
+        end
+        
+        -- 再次确保层级足够高（在某些 UI 改动后防御性设置）
+        self:SetFrameStrata("TOOLTIP")
+        self:SetFrameLevel( max( (owner and owner:GetFrameLevel() or 0) + 10, 100) )
+
+        ADT.DebugPrint("[Dropdown] Showing menu frame")
+        self:Show()
+        ADT.DebugPrint("[Dropdown] Menu frame IsShown: " .. tostring(self:IsShown()))
+
+        -- 由于点击按钮时鼠标仍处于按下状态，会导致“立即关闭”。
+        -- 这里等待一次鼠标松开，再开始侦测点击外部以关闭。
+        self.waitRelease = true
+        self:SetScript("OnUpdate", function()
+            -- 首先等待一次任意键松开，避免首帧被立刻关闭
+            if self.waitRelease then
+                if not IsMouseButtonDown("LeftButton") and not IsMouseButtonDown("RightButton") then
+                    self.waitRelease = false
+                end
+                return
+            end
+
+            -- 鼠标按下，且既不在菜单上也不在触发按钮上，则关闭
+            if (IsMouseButtonDown("LeftButton") or IsMouseButtonDown("RightButton"))
+                and not self:IsMouseOver()
+                and not (self.owner and self.owner:IsMouseOver()) then
+                self:Hide()
+            end
+        end)
+    end
+    
+    ADTDropdownMenu:SetScript("OnHide", function(self)
+        self:ReleaseAllItems()
+        self:SetScript("OnUpdate", nil)
+        self.owner = nil
+        self.waitRelease = nil
+    end)
+
+    -- 允许按 ESC 关闭下拉菜单（与 Settings 面板行为一致）
+    if ADTDropdownMenu.GetName then
+        local name = ADTDropdownMenu:GetName()
+        if name and UISpecialFrames then
+            -- 避免重复插入
+            local found
+            for i, v in ipairs(UISpecialFrames) do if v == name then found = true break end end
+            if not found then table.insert(UISpecialFrames, name) end
+        end
+    end
+end
+
+
 local CreateSearchBox
 do
     local SearchBoxMixin = {}
@@ -532,6 +765,12 @@ do
         self.NewTag:SetShown((not self.isChangelogButton) and moduleData.isNewFeature)
         self.OptionToggle:SetOnClickFunc(moduleData.optionToggleFunc, self.data and self.data.hasMovableWidget)
         self.hasOptions = moduleData.optionToggleFunc ~= nil
+        
+        -- 下拉菜单类型：更新标签显示当前选中值
+        if moduleData.type == 'dropdown' then
+            self:UpdateDropdownLabel()
+        end
+        
         self:UpdateState()
         self:UpdateVisual()
     end
@@ -558,18 +797,60 @@ do
     end
 
     function EntryButtonMixin:OnClick()
-        if self.dbKey and self.data and self.data.toggleFunc then
-            local newState = not GetDBBool(self.dbKey)
-            ADT.SetDBValue(self.dbKey, newState, true)
-            self.data.toggleFunc(newState)
-            if newState then
-                ADT.LandingPageUtil.PlayUISound("CheckboxOn")
-            else
-                ADT.LandingPageUtil.PlayUISound("CheckboxOff")
+        ADT.DebugPrint("[SettingsPanel] OnClick triggered, dbKey=" .. tostring(self.dbKey))
+        if self.dbKey and self.data then
+            ADT.DebugPrint("[SettingsPanel] data.type=" .. tostring(self.data.type))
+            -- 下拉菜单类型：使用暴雪 12.0+ Menu API（最佳实践）
+            if self.data.type == 'dropdown' and self.data.options then
+                ADT.DebugPrint("[SettingsPanel] Using MenuUtil.CreateContextMenu")
+                MenuUtil.CreateContextMenu(self, function(owner, root)
+                    local function IsSelected(value)
+                        return ADT.GetDBValue(self.dbKey) == value
+                    end
+                    local function SetSelected(value)
+                        ADT.SetDBValue(self.dbKey, value, true)
+                        if self.data.toggleFunc then
+                            self.data.toggleFunc(value)
+                        end
+                        self:UpdateDropdownLabel()
+                        if MainFrame.UpdateSettingsEntries then
+                            MainFrame:UpdateSettingsEntries()
+                        end
+                        return MenuResponse.Close
+                    end
+                    for _, opt in ipairs(self.data.options) do
+                        root:CreateRadio(opt.text, IsSelected, SetSelected, opt.value)
+                    end
+                end)
+                return  -- 不需要执行后续的 UpdateSettingsEntries
+            -- 普通复选框类型
+            elseif self.data.toggleFunc then
+                local newState = not GetDBBool(self.dbKey)
+                ADT.SetDBValue(self.dbKey, newState, true)
+                self.data.toggleFunc(newState)
+                if newState then
+                    ADT.LandingPageUtil.PlayUISound("CheckboxOn")
+                else
+                    ADT.LandingPageUtil.PlayUISound("CheckboxOff")
+                end
             end
         end
 
         MainFrame:UpdateSettingsEntries()
+    end
+    
+    -- 更新下拉菜单的显示标签
+    function EntryButtonMixin:UpdateDropdownLabel()
+        if not self.data or self.data.type ~= 'dropdown' or not self.data.options then return end
+        local currentValue = ADT.GetDBValue(self.dbKey)
+        local displayText = self.data.name
+        for _, opt in ipairs(self.data.options) do
+            if opt.value == currentValue then
+                displayText = self.data.name .. "：" .. opt.text
+                break
+            end
+        end
+        self.Label:SetText(displayText)
     end
 
     function EntryButtonMixin:UpdateState()
@@ -578,6 +859,22 @@ do
             self.OptionToggle:SetShown(self.hasOptions)
             SetTexCoord(self.Box, 737, 783, 65, 111)  -- +1px inset 去除边缘伪影
             return
+        end
+        
+        -- 下拉菜单类型：显示下拉箭头，使用柔和金色文字
+        if self.data and self.data.type == 'dropdown' then
+            self.Box:Show()
+            -- 使用 OptionToggle 的箭头样式区域（可根据实际素材调整）
+            -- SettingsPanel.png 中 904-944, 40-80 是 OptionToggle 图标，这里用来做下拉按钮图标
+            SetTexCoord(self.Box, 904, 944, 40, 80)
+            self.OptionToggle:Hide()
+            self:Enable()
+            -- 设置柔和金色文字（参考 Plumber: 0.922, 0.871, 0.761）
+            SetTextColor(self.Label, { 0.922, 0.871, 0.761 })
+            self:UpdateDropdownLabel()
+            return
+        else
+            self.Box:Show()  -- 确保复选框显示
         end
 
         local disabled
@@ -614,7 +911,12 @@ do
                 SetTextColor(self.Label, Def.TextColorHighlight)
                 SetTexCoord(self.OptionToggle.Texture, 904, 944, 40, 80)
             else
-                SetTextColor(self.Label, Def.TextColorNormal)
+                -- 下拉菜单使用柔和金色，普通条目使用默认颜色
+                if self.data and self.data.type == 'dropdown' then
+                    SetTextColor(self.Label, { 0.922, 0.871, 0.761 })
+                else
+                    SetTextColor(self.Label, Def.TextColorNormal)
+                end
                 SetTexCoord(self.OptionToggle.Texture, 864, 904, 40, 80)
             end
         else
@@ -633,7 +935,10 @@ do
         f:SetScript("OnClick", f.OnClick)
         SetTextColor(f.Label, Def.TextColorNormal)
 
-        f.Box.useTrilinearFilter = true
+        -- 复选框属于“小尺寸图元”，若使用三线性过滤(TRILINEAR)，在缩放/生成mipmap时会从图集相邻切片取样，
+        -- 即便我们做了 +1px inset，仍可能出现“橙色勾边缘发灰/发白”的串色伪影。
+        -- 因此这里明确关闭三线性过滤，退回 LINEAR，以保证像素仅在当前切片内采样。
+        f.Box.useTrilinearFilter = false
         SkinObjects(f, Def.TextureFile)
 
         f.NewTag = CreateNewFeatureMark(f)
@@ -686,7 +991,7 @@ do
         local entryInfo = C_HousingCatalog and C_HousingCatalog.GetCatalogEntryInfoByRecordID 
             and C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, item.decorID, true)
         local available = 0
-        local displayName = item.name or ("装饰 #" .. tostring(item.decorID))
+        local displayName = item.name or (string.format((ADT.L and ADT.L['Decor #%d']) or '装饰 #%d', tonumber(item.decorID) or 0))
         
         if entryInfo then
             available = (entryInfo.quantity or 0) + (entryInfo.remainingRedeemable or 0)
@@ -733,14 +1038,14 @@ do
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(self.Name:GetText() or "", 1, 1, 1)
         if self.available > 0 then
-            GameTooltip:AddLine("库存：" .. self.available, 0, 1, 0)
+            GameTooltip:AddLine(string.format((ADT.L and ADT.L['Stock: %d']) or '库存：%d', self.available), 0, 1, 0)
         else
-            GameTooltip:AddLine("库存：0（不可放置）", 1, 0.2, 0.2)
+            GameTooltip:AddLine((ADT.L and ADT.L['Stock: 0 (Unavailable)']) or '库存：0（不可放置）', 1, 0.2, 0.2)
         end
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("左键：开始放置", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine((ADT.L and ADT.L['Left Click: Place']) or '左键：开始放置', 0.8, 0.8, 0.8)
         if self.categoryInfo and self.categoryInfo.key == 'Clipboard' then
-            GameTooltip:AddLine("右键：从临时板移除", 1, 0.4, 0.4)
+            GameTooltip:AddLine((ADT.L and ADT.L['Right Click: Remove from Clipboard']) or '右键：从临时板移除', 1, 0.4, 0.4)
         end
         GameTooltip:Show()
     end
@@ -880,16 +1185,16 @@ do  -- Right Section (已移除，保留函数但添加空检查)
         self.FeaturePreview:SetTexture(icon)
         
         -- 构建描述文本
-        local name = itemData.name or (entryInfo and entryInfo.name) or ("装饰 #" .. tostring(itemData.decorID))
+        local name = itemData.name or (entryInfo and entryInfo.name) or (string.format((ADT.L and ADT.L['Decor #%d']) or '装饰 #%d', tonumber(itemData.decorID) or 0))
         local desc = name .. "\n\n"
         if available and available > 0 then
-            desc = desc .. "|cff00ff00库存：" .. available .. "|r\n\n"
+            desc = desc .. string.format("|cff00ff00%s|r\n\n", string.format((ADT.L and ADT.L['Stock: %d']) or '库存：%d', available))
         else
-            desc = desc .. "|cffff3333库存：0（不可放置）|r\n\n"
+            desc = desc .. string.format("|cffff3333%s|r\n\n", (ADT.L and ADT.L['Stock: 0 (Unavailable)']) or '库存：0（不可放置）')
         end
-        desc = desc .. "|cffaaaaaa左键：开始放置|r"
+        desc = desc .. string.format("|cffaaaaaa%s|r", (ADT.L and ADT.L['Left Click: Place']) or '左键：开始放置')
         if self.currentDecorCategory == 'Clipboard' then
-            desc = desc .. "\n|cffff6666右键：从临时板移除|r"
+            desc = desc .. string.format("\n|cffff6666%s|r", (ADT.L and ADT.L['Right Click: Remove from Clipboard']) or '右键：从临时板移除')
         end
         self.FeatureDescription:SetText(desc)
     end
@@ -1107,7 +1412,7 @@ do  -- Central
                 templateKey = "Header",
                 setupFunc = function(obj)
                     -- 注意：emptyText 可能包含换行符，这里只取第一行
-                    local text = cat.emptyText or "列表为空"
+                    local text = cat.emptyText or (ADT.L and ADT.L['List Is Empty']) or "列表为空"
                     local firstLine = text:match("^([^\n]*)")
                     obj:SetText(firstLine or text)
                     SetTextColor(obj.Label, Def.TextColorDisabled)
@@ -1186,7 +1491,7 @@ do  -- Central
         else
             -- 空列表时显示提示
             self.FeaturePreview:SetTexture(134400) -- 问号图标
-            self.FeatureDescription:SetText(cat.emptyText or "列表为空")
+            self.FeatureDescription:SetText(cat.emptyText or (ADT.L and ADT.L['List Is Empty']) or "列表为空")
         end
     end
 

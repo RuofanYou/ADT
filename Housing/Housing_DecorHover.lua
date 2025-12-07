@@ -164,7 +164,7 @@ local function Blizzard_HouseEditor_OnLoaded()
         SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or "CTRL+D")
         if SubFrame.LockStatusText then SubFrame.LockStatusText:Hide() end
 
-        -- 追加：显示其它热键提示（Ctrl+X / C / V / S / R）
+        -- 追加：显示其它热键提示（Ctrl+X / C / V / S / R / 批量放置）
         DisplayFrame.HintFrames = {}
         local CTRL = CTRL_KEY_TEXT or "CTRL"
         local function addHint(prev, label, key)
@@ -184,6 +184,8 @@ local function Blizzard_HouseEditor_OnLoaded()
         prev = addHint(prev, L["Hotkey Paste"] or "Paste", CTRL.."+V")
         prev = addHint(prev, L["Hotkey Store"] or "Store", CTRL.."+S")
         prev = addHint(prev, L["Hotkey Recall"] or "Recall", CTRL.."+R")
+        -- 批量放置：按住 CTRL 连续放置
+        prev = addHint(prev, L["Hotkey BatchPlace"] or "Batch Place", CTRL)
 
         -- 将所有“键帽”统一宽度，避免左侧文字参差不齐
         function DisplayFrame:NormalizeKeycapWidth()
@@ -229,6 +231,7 @@ do
     function EL:SetEnabled(state)
         if state and not self.enabled then
             self.enabled = true
+            if ADT and ADT.DebugPrint then ADT.DebugPrint("[Housing] Enabled") end
             for _, e in ipairs(self.dynamicEvents) do self:RegisterEvent(e) end
             self:SetScript("OnEvent", self.OnEvent)
             local blizzardAddOnName = "Blizzard_HouseEditor"
@@ -241,6 +244,7 @@ do
             self:LoadSettings()
         elseif (not state) and self.enabled then
             self.enabled = nil
+            if ADT and ADT.DebugPrint then ADT.DebugPrint("[Housing] Disabled") end
             for _, e in ipairs(self.dynamicEvents) do self:UnregisterEvent(e) end
             self:UnregisterEvent("MODIFIER_STATE_CHANGED")
             self:SetScript("OnUpdate", nil)
@@ -251,6 +255,9 @@ do
     end
 
     function EL:OnEvent(event, ...)
+        if ADT and ADT.DebugPrint and event ~= "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" then
+            ADT.DebugPrint("[Housing] OnEvent: "..tostring(event))
+        end
         if event == "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" then
             self:OnHoveredTargetChanged(...)
         elseif event == "HOUSE_EDITOR_MODE_CHANGED" then
@@ -386,6 +393,7 @@ do
     }
 
     function EL:LoadSettings()
+        if ADT and ADT.DebugPrint then ADT.DebugPrint("[Housing] LoadSettings") end
         local dupeEnabled = ADT.GetDBBool("EnableDupe")
         local dupeKeyIndex = ADT.GetDBValue("DuplicateKey") or 3
         self.dupeEnabled = dupeEnabled
@@ -420,6 +428,10 @@ do
     -- 根据设置更新各提示行的显隐（并自动重新排列位置，避免空隙）
     function EL:UpdateHintVisibility()
         if not DisplayFrame then return end
+        if ADT and ADT.DebugPrint then
+            ADT.DebugPrint(string.format("[Housing] UpdateHintVisibility: Dupe=%s, Cut=%s, Copy=%s, Paste=%s, Batch=%s",
+                tostring(ADT.GetDBValue("EnableDupe")), tostring(ADT.GetDBValue("EnableCut")), tostring(ADT.GetDBValue("EnableCopy")), tostring(ADT.GetDBValue("EnablePaste")), tostring(ADT.GetDBValue("EnableBatchPlace"))))
+        end
         
         -- 收集所有需要根据设置显隐的帧（按顺序）
         -- SubFrame = Duplicate (CTRL+D)
@@ -428,6 +440,7 @@ do
         -- HintFrames[3] = Paste (CTRL+V)
         -- HintFrames[4] = Store (CTRL+S) - 始终显示
         -- HintFrames[5] = Recall (CTRL+R) - 始终显示
+        -- HintFrames[6] = BatchPlace (CTRL) - 由 EnableBatchPlace 控制
         
         local allFrames = {}
         local visibilityConfig = {}
@@ -448,6 +461,7 @@ do
                 [3] = { dbKey = "EnablePaste", default = true }, -- Paste (CTRL+V)
                 [4] = nil,  -- Store (CTRL+S) - 始终显示
                 [5] = nil,  -- Recall (CTRL+R) - 始终显示
+                [6] = { dbKey = "EnableBatchPlace", default = false }, -- Batch Place (CTRL)
             }
             for i, frame in ipairs(DisplayFrame.HintFrames) do
                 table.insert(allFrames, frame)

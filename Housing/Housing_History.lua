@@ -34,7 +34,7 @@ function History:Add(decorID, name, icon)
     -- 插入到头部
     table.insert(list, 1, {
         decorID = decorID,
-        name = name or "未知装饰",
+        name = name or ((ADT.L and ADT.L['Unknown Decor']) or '未知装饰'),
         icon = icon or 134400, -- 默认问号图标
     })
     
@@ -64,7 +64,7 @@ function History:StartPlacing(decorID)
     if not decorID then return false end
     local entryInfo = C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, decorID, true)
     if not entryInfo or not entryInfo.entryID then
-        if ADT and ADT.Notify then ADT.Notify("无法放置该装饰（可能已用完或未拥有）", 'error') end
+        if ADT and ADT.Notify then ADT.Notify((ADT.L and ADT.L['Cannot Place Decor']) or '无法放置该装饰（可能已用完或未拥有）', 'error') end
         return false
     end
     -- 关键点：延后一小段时间再开始放置，避免与点击列表同一鼠标事件重叠，
@@ -84,7 +84,7 @@ function History:QuickPlaceAtCursor(decorID)
     if not decorID then return false end
     local entryInfo = C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, decorID, true)
     if not entryInfo or not entryInfo.entryID then
-        if ADT and ADT.Notify then ADT.Notify("无法放置该装饰（可能已用完或未拥有）", 'error') end
+        if ADT and ADT.Notify then ADT.Notify((ADT.L and ADT.L['Cannot Place Decor']) or '无法放置该装饰（可能已用完或未拥有）', 'error') end
         return false
     end
     -- 进入放置后，下一帧尝试直接确认（如果客户端支持）。
@@ -112,7 +112,7 @@ local function SafeRecordPlacement(entryID)
         local iconPath = info.iconTexture or info.iconAtlas or 134400
         History:Add(recordID, info.name, iconPath)
     else
-        History:Add(recordID, "装饰 #" .. recordID, 134400)
+        History:Add(recordID, (string.format((ADT.L and ADT.L['Decor #%d']) or '装饰 #%d', recordID)), 134400)
     end
 end
 

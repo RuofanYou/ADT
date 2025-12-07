@@ -25,6 +25,8 @@ local DEFAULTS = {
     SettingsPanelPos = nil,
     -- UI 尺寸持久化：控制中心主面板（w/h）
     SettingsPanelSize = nil,
+    -- 语言选择（nil=跟随客户端）
+    SelectedLanguage = nil,
 }
 
 local function CopyDefaults(dst, src)
@@ -243,9 +245,23 @@ f:RegisterEvent("ADDON_LOADED")
 f:SetScript("OnEvent", function(self, event, addonName)
     if addonName == ADDON_NAME then
         GetDB() -- 初始化 SavedVariables
+        -- 在 SavedVariables 就位后，依据用户设置重新应用语言（确保持久化生效）
+        if ADT.ApplyLocale and ADT.GetActiveLocale then
+            ADT.ApplyLocale(ADT.GetActiveLocale())
+        end
         RegisterSettingsCategory()
         if ADT.Housing and ADT.Housing.LoadSettings then
             ADT.Housing:LoadSettings()
+        end
+        -- 若控制中心已构建，刷新一次分类与条目（避免语言切换后残留旧文案）
+        if ADT.ControlCenter and ADT.ControlCenter.SettingsPanel then
+            local Main = ADT.ControlCenter.SettingsPanel
+            -- 仅当 UI 已构建完毕（存在对象池与滚动容器）时刷新；否则等待真正打开面板时再刷新。
+            local canRefresh = Main.ModuleTab and Main.ModuleTab.ScrollView
+            if canRefresh then
+                if Main.RefreshCategoryList then Main:RefreshCategoryList() end
+                if Main.RefreshFeatureList then Main:RefreshFeatureList() end
+            end
         end
         self:UnregisterEvent("ADDON_LOADED")
     end
