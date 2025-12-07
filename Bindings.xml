@@ -4,14 +4,12 @@
     <Binding name="ADT_TOGGLE_HISTORY" header="ADT">
         ADT_ToggleHistory();
     </Binding>
-    <Binding name="ADT_COPY_DECOR">
-        ADT_CopyDecor();
+    <!-- 临时板：仅保留两项快捷键 -->
+    <Binding name="ADT_TEMP_STORE">
+        ADT_Temp_StoreSelected();
     </Binding>
-    <Binding name="ADT_PASTE_DECOR">
-        ADT_PasteDecor();
-    </Binding>
-    <Binding name="ADT_CUT_DECOR">
-        ADT_CutDecor();
+    <Binding name="ADT_TEMP_RECALL">
+        ADT_Temp_RecallTop();
     </Binding>
     
     <!-- 高级编辑：虚拟多选 -->
@@ -30,4 +28,6 @@
     <Binding name="ADT_ADV_ANCHOR_SELECTED">
         ADT_Adv_SetAnchor_Selected();
     </Binding>
+
+    <!-- 临时板以外的旧剪切板快捷键全部移除 -->
 </Bindings>

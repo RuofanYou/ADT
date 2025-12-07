@@ -23,7 +23,7 @@ local EL = CreateFrame("Frame")
 ADT.Housing = EL
 
 -- 顶层：按 recordID 进入放置（供多处复用；单一权威）
-local function StartPlacingByRecordID(recordID)
+function EL:StartPlacingByRecordID(recordID)
     if not recordID then return false end
     local entryInfo = GetCatalogDecorInfo(recordID)
     if not entryInfo or not entryInfo.entryID then return false end
@@ -390,14 +390,14 @@ function EL:Binding_Paste()
         if ADT and ADT.Notify then ADT.Notify("剪切板为空，无法粘贴", 'error') end
         return
     end
-    local ok = StartPlacingByRecordID(clip.decorID)
+    local ok = self:StartPlacingByRecordID(clip.decorID)
     if not ok then
         if ADT and ADT.Notify then ADT.Notify("无法进入放置（可能库存为 0 或已达上限）", 'error') end
     end
 end
 
-local function TryRemoveSelected()
-    -- 以最兼容的方式调用移除：不同模式下提供了不同入口
+function EL:RemoveSelectedDecor()
+    -- 以最兼容的方式调用移除：不同模式下提供了不同入口（单一权威）
     local removed
     if C_HousingCleanupMode and C_HousingCleanupMode.RemoveSelectedDecor then
         removed = select(2, pcall(C_HousingCleanupMode.RemoveSelectedDecor)) ~= nil or removed
@@ -434,7 +434,7 @@ function EL:Binding_Cut()
         return
     end
     self:SetClipboard(rid, name, icon)
-    local ok = TryRemoveSelected()
+    local ok = self:RemoveSelectedDecor()
     if ok then
         local tip = name and (((L["ADT: Decor %s"] or "装饰 %s"):format(name)) .. " 已移除，已加入剪切板") or "已移除并加入剪切板"
         if ADT and ADT.Notify then ADT.Notify(tip, 'success') end
@@ -460,17 +460,17 @@ end)
 -- 仅在房屋编辑器激活时生效，离开时清理，避免污染全局键位。
 do
     local owner
-    local btnCopy, btnPaste, btnCut
+    local btnTempStore, btnTempRecall
     -- 高级编辑：虚拟多选 按键按钮
     local btnAdvToggle, btnAdvToggleHovered, btnAdvClear, btnAdvAnchorHover, btnAdvAnchorSelected
+    -- 额外剪切板：已废弃
 
     local function EnsureOwner()
         if owner then return end
         owner = CreateFrame("Frame", "ADT_HousingOverrideOwner", UIParent)
-        -- 创建三个点击代理按钮
-        btnCopy = CreateFrame("Button", "ADT_HousingOverride_CopyButton", owner, "SecureActionButtonTemplate")
-        btnPaste = CreateFrame("Button", "ADT_HousingOverride_PasteButton", owner, "SecureActionButtonTemplate")
-        btnCut = CreateFrame("Button", "ADT_HousingOverride_CutButton", owner, "SecureActionButtonTemplate")
+        -- 创建“临时板”点击代理按钮（仅两项）
+        btnTempStore = CreateFrame("Button", "ADT_HousingOverride_TempStore", owner, "SecureActionButtonTemplate")
+        btnTempRecall = CreateFrame("Button", "ADT_HousingOverride_TempRecall", owner, "SecureActionButtonTemplate")
 
         -- 高级编辑按钮（调用 Bindings.lua 中的全局函数）
         btnAdvToggle = CreateFrame("Button", "ADT_HousingOverride_AdvToggle", owner, "SecureActionButtonTemplate")
@@ -479,9 +479,9 @@ do
         btnAdvAnchorHover = CreateFrame("Button", "ADT_HousingOverride_AdvAnchorHover", owner, "SecureActionButtonTemplate")
         btnAdvAnchorSelected = CreateFrame("Button", "ADT_HousingOverride_AdvAnchorSelected", owner, "SecureActionButtonTemplate")
 
-        btnCopy:SetScript("OnClick", function() if ADT and ADT.Housing then ADT.Housing:Binding_Copy() end end)
-        btnPaste:SetScript("OnClick", function() if ADT and ADT.Housing then ADT.Housing:Binding_Paste() end end)
-        btnCut:SetScript("OnClick", function() if ADT and ADT.Housing then ADT.Housing:Binding_Cut() end end)
+        -- 临时板调用
+        btnTempStore:SetScript("OnClick", function() if _G.ADT_Temp_StoreSelected then ADT_Temp_StoreSelected() end end)
+        btnTempRecall:SetScript("OnClick", function() if _G.ADT_Temp_RecallTop then ADT_Temp_RecallTop() end end)
 
         -- 绑定高级编辑调用
         btnAdvToggle:SetScript("OnClick", function() if _G.ADT_Adv_Toggle then ADT_Adv_Toggle() end end)
@@ -489,13 +489,14 @@ do
         btnAdvClear:SetScript("OnClick", function() if _G.ADT_Adv_ClearSelection then ADT_Adv_ClearSelection() end end)
         btnAdvAnchorHover:SetScript("OnClick", function() if _G.ADT_Adv_SetAnchor_Hovered then ADT_Adv_SetAnchor_Hovered() end end)
         btnAdvAnchorSelected:SetScript("OnClick", function() if _G.ADT_Adv_SetAnchor_Selected then ADT_Adv_SetAnchor_Selected() end end)
+
+        -- 移除旧剪切板调用（不再设置）
     end
 
     local OVERRIDE_KEYS = {
-        -- 复制/粘贴/剪切
-        { key = "CTRL-C", button = function() return btnCopy end },
-        { key = "CTRL-V", button = function() return btnPaste end },
-        { key = "CTRL-X", button = function() return btnCut end },
+        -- 临时板：存入/取出
+        { key = "CTRL-S", button = function() return btnTempStore end },
+        { key = "CTRL-R", button = function() return btnTempRecall end },
         -- 高级编辑（硬编码测试键位）
         -- 开关：Ctrl+G
         { key = "CTRL-G", button = function() return btnAdvToggle end },
@@ -507,6 +508,7 @@ do
         { key = "CTRL-SHIFT-A", button = function() return btnAdvAnchorHover end },
         -- 设锚点=当前已选中：Ctrl+Shift+S
         { key = "CTRL-SHIFT-S", button = function() return btnAdvAnchorSelected end },
+        -- 旧剪切板的覆盖键位已全部移除
     }
 
     function EL:ClearOverrides()
