@@ -7,8 +7,10 @@ ADT.L = ADT.L or {}
 -- 默认配置（单一权威）
 local DEFAULTS = {
     EnableDupe = true,
-    -- 1: Ctrl, 2: Alt
-    DuplicateKey = 2,
+    -- 1: Ctrl, 2: Alt, 3: Ctrl+D（默认，释放 Alt）
+    DuplicateKey = 3,
+    -- 记住控制中心上次选中的分类（'Housing'/'Clipboard'/'History'/...）
+    LastCategoryKey = nil,
     -- 悬停高亮（3D场景中高亮当前悬停的装饰物）
     EnableHoverHighlight = true,
     -- 放置历史记录
@@ -19,6 +21,8 @@ local DEFAULTS = {
     DebugEnabled = false,
     -- UI 位置持久化：历史弹窗
     HistoryPopupPos = nil,
+    -- UI 位置持久化：控制中心主面板
+    SettingsPanelPos = nil,
 }
 
 local function CopyDefaults(dst, src)
@@ -35,6 +39,10 @@ end
 
 local function GetDB()
     _G.ADT_DB = CopyDefaults(_G.ADT_DB, DEFAULTS)
+    -- 一次性迁移：旧版本默认是 Alt（2），改为 Ctrl+D（3）
+    if _G.ADT_DB and _G.ADT_DB.DuplicateKey == 2 then
+        _G.ADT_DB.DuplicateKey = 3
+    end
     return _G.ADT_DB
 end
 
@@ -171,8 +179,11 @@ end
 
 -- 获取当前重复热键名
 function ADT.GetDuplicateKeyName()
-    local index = ADT.GetDBValue("DuplicateKey") or 2
-    if index == 1 then
+    -- 为兼容旧字段名，仍保留此函数，但返回用于 UI 显示的“按键文本”。
+    local index = ADT.GetDBValue("DuplicateKey") or 3
+    if index == 3 then
+        return (CTRL_KEY_TEXT and (CTRL_KEY_TEXT.."+D")) or "CTRL+D"
+    elseif index == 1 then
         return CTRL_KEY_TEXT or "CTRL"
     else
         return ALT_KEY_TEXT or "ALT"

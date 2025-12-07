@@ -255,15 +255,14 @@ if ADT and ADT.Clipboard then
     end
 end
 
--- 进入编辑模式时默认打开，与历史面板行为一致
+-- 弹窗已整合到 GUI，不再自动打开独立弹窗
+-- 进入编辑模式时由 SettingsPanelNew 负责显示 GUI
 local EditWatcher = CreateFrame("Frame")
 local wasActive = false
 local function UpdateOpenState()
     local isActive = C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive()
     if isActive then
-        if not wasActive then
-            ClipboardPopup:Show()
-        end
+        -- 不再自动打开独立弹窗
         if MainFrame and HouseEditorFrame then
             MainFrame:SetParent(HouseEditorFrame)
             MainFrame:SetFrameStrata("TOOLTIP")

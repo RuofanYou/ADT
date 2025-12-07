@@ -134,7 +134,15 @@ do
         end
         self.ItemCountText:SetText(stored)
         self.ItemCountText:SetShown(stored > 0)
-        self.SubFrame:SetShown(EL.dupeEnabled and stored > 0)
+        if self.SubFrame then
+            self.SubFrame:SetShown(EL.dupeEnabled and stored > 0)
+        end
+        -- 其它提示行总是显示（用户教育用途）
+        if self.HintFrames then
+            for _, line in ipairs(self.HintFrames) do
+                if not line.isDuplicate then line:Show() end
+            end
+        end
     end
 end
 
@@ -157,8 +165,54 @@ local function Blizzard_HouseEditor_OnLoaded()
         SubFrame:SetPoint("TOPRIGHT", DisplayFrame, "BOTTOMRIGHT", 0, 0)
         SubFrame:SetWidth(420)
         Mixin(SubFrame, DisplayFrameMixin)
-        SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or "ALT")
+        -- 默认显示 CTRL+D，兼容旧版通过 ADT.GetDuplicateKeyName() 返回文本
+        SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or "CTRL+D")
         if SubFrame.LockStatusText then SubFrame.LockStatusText:Hide() end
+
+        -- 追加：显示其它热键提示（Ctrl+X / C / V / S / R）
+        DisplayFrame.HintFrames = {}
+        local CTRL = CTRL_KEY_TEXT or "CTRL"
+        local function addHint(prev, label, key)
+            local line = CreateFrame("Frame", nil, DisplayFrame, "ADT_HouseEditorInstructionTemplate")
+            line:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", 0, 0)
+            line:SetWidth(420)
+            Mixin(line, DisplayFrameMixin)
+            line:SetHotkey(label, key)
+            if line.LockStatusText then line.LockStatusText:Hide() end
+            table.insert(DisplayFrame.HintFrames, line)
+            return line
+        end
+        SubFrame.isDuplicate = true
+        local prev = SubFrame
+        prev = addHint(prev, L["Hotkey Cut"] or "Cut", CTRL.."+X")
+        prev = addHint(prev, L["Hotkey Copy"] or "Copy", CTRL.."+C")
+        prev = addHint(prev, L["Hotkey Paste"] or "Paste", CTRL.."+V")
+        prev = addHint(prev, L["Hotkey Store"] or "Store", CTRL.."+S")
+        prev = addHint(prev, L["Hotkey Recall"] or "Recall", CTRL.."+R")
+
+        -- 将所有“键帽”统一宽度，避免左侧文字参差不齐
+        function DisplayFrame:NormalizeKeycapWidth()
+            local frames = { self.SubFrame }
+            for _, f in ipairs(self.HintFrames or {}) do table.insert(frames, f) end
+            local maxTextWidth = 0
+            for _, f in ipairs(frames) do
+                if f and f.Control and f.Control.Text then
+                    local w = (f.Control.Text:GetWrappedWidth() or 0)
+                    if w > maxTextWidth then maxTextWidth = w end
+                end
+            end
+            local keycapWidth = maxTextWidth + 20
+            for _, f in ipairs(frames) do
+                if f and f.Control and f.Control.Background and f.InstructionText then
+                    f.Control.Background:SetWidth(keycapWidth)
+                    f.Control:SetWidth(keycapWidth)
+                    f.InstructionText:ClearAllPoints()
+                    f.InstructionText:SetPoint("RIGHT", f, "RIGHT", -keycapWidth - 5, 0)
+                end
+            end
+        end
+
+        DisplayFrame:NormalizeKeycapWidth()
     end
 
     container.UnselectedInstructions = { DisplayFrame }
@@ -247,7 +301,8 @@ do
         if IsHoveringDecor() then
             local info = GetHoveredDecorInfo()
             if info then
-                if self.dupeEnabled then
+                -- 仅在使用“修饰键触发”模式时监听（Ctrl/Alt 直接松开触发）。
+                if self.dupeEnabled and self.dupeKey then
                     self:RegisterEvent("MODIFIER_STATE_CHANGED")
                 end
                 self.decorInstanceInfo = info
@@ -331,11 +386,13 @@ do
     EL.DuplicateKeyOptions = {
         { name = CTRL_KEY_TEXT, key = "LCTRL" },
         { name = ALT_KEY_TEXT,  key = "LALT"  },
+        -- 3: Ctrl+D（通过覆盖绑定触发，不走 MODIFIER_STATE_CHANGED）
+        { name = (CTRL_KEY_TEXT and (CTRL_KEY_TEXT.."+D")) or "CTRL+D", key = nil },
     }
 
     function EL:LoadSettings()
         local dupeEnabled = ADT.GetDBBool("EnableDupe")
-        local dupeKeyIndex = ADT.GetDBValue("DuplicateKey") or 2
+        local dupeKeyIndex = ADT.GetDBValue("DuplicateKey") or 3
         self.dupeEnabled = dupeEnabled
 
         -- 悬停高亮开关（默认开启）
@@ -346,14 +403,16 @@ do
         self.highlightEnabled = highlightEnabled
 
         if type(dupeKeyIndex) ~= "number" or not self.DuplicateKeyOptions[dupeKeyIndex] then
-            dupeKeyIndex = 2
+            dupeKeyIndex = 3
         end
 
         self.currentDupeKeyName = self.DuplicateKeyOptions[dupeKeyIndex].name
+        -- 仅当选择 Ctrl/Alt 时设置 dupeKey；选择 Ctrl+D 时为 nil（不监听修饰键变化）。
         self.dupeKey = self.DuplicateKeyOptions[dupeKeyIndex].key
 
         if DisplayFrame and DisplayFrame.SubFrame then
             DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", ADT.GetDuplicateKeyName())
+            if DisplayFrame.NormalizeKeycapWidth then DisplayFrame:NormalizeKeycapWidth() end
             if not dupeEnabled then
                 DisplayFrame.SubFrame:Hide()
             end
@@ -427,9 +486,9 @@ function EL:Binding_Cut()
         local hrid, hname, hicon = self:GetHoveredDecorRecordIDAndName()
         if hrid then
             self:SetClipboard(hrid, hname, hicon)
-            if ADT and ADT.Notify then ADT.Notify("已记录剪切板；请先选中该装饰后再按 Ctrl+X 完成移除", 'info') end
+            if ADT and ADT.Notify then ADT.Notify("已记录剪切板；请先点击选中该装饰后再按 Ctrl+X 完成移除", 'info') end
         else
-            if ADT and ADT.Notify then ADT.Notify("请先选中要移除的装饰，再按 Ctrl+X", 'info') end
+            if ADT and ADT.Notify then ADT.Notify("请先点击选中要移除的装饰，再按 Ctrl+X", 'info') end
         end
         return
     end
@@ -461,6 +520,8 @@ end)
 do
     local owner
     local btnTempStore, btnTempRecall
+    local btnToggleUI
+    local btnDuplicate
     -- 住宅剪切板：复制/粘贴/剪切（强制覆盖）
     local btnCopy, btnPaste, btnCut
     -- 高级编辑：虚拟多选 按键按钮（不做强制覆盖，仅提供绑定接口）
@@ -477,6 +538,11 @@ do
         btnCopy  = CreateFrame("Button", "ADT_HousingOverride_Copy", owner, "SecureActionButtonTemplate")
         btnPaste = CreateFrame("Button", "ADT_HousingOverride_Paste", owner, "SecureActionButtonTemplate")
         btnCut   = CreateFrame("Button", "ADT_HousingOverride_Cut", owner, "SecureActionButtonTemplate")
+        -- 创建“复制同款（Duplicate）”点击代理按钮（CTRL-D）
+        btnDuplicate = CreateFrame("Button", "ADT_HousingOverride_Duplicate", owner, "SecureActionButtonTemplate")
+
+        -- 设置面板切换（/adt 同效）
+        btnToggleUI = CreateFrame("Button", "ADT_HousingOverride_ToggleUI", owner, "SecureActionButtonTemplate")
 
         -- 高级编辑按钮（调用 Bindings.lua 中的全局函数）
         btnAdvToggle = CreateFrame("Button", "ADT_HousingOverride_AdvToggle", owner, "SecureActionButtonTemplate")
@@ -489,6 +555,11 @@ do
         btnTempStore:SetScript("OnClick", function() if _G.ADT_Temp_StoreSelected then ADT_Temp_StoreSelected() end end)
         btnTempRecall:SetScript("OnClick", function() if _G.ADT_Temp_RecallTop then ADT_Temp_RecallTop() end end)
 
+        -- 设置面板切换（调用 UI.lua 中的集中逻辑）
+        btnToggleUI:SetScript("OnClick", function()
+            if ADT and ADT.ToggleMainUI then ADT.ToggleMainUI() end
+        end)
+
         -- 复制/粘贴/剪切 调用（调用当前文件中的实现）
         btnCopy:SetScript("OnClick", function()
             if ADT and ADT.Housing and ADT.Housing.Binding_Copy then ADT.Housing:Binding_Copy() end
@@ -498,6 +569,10 @@ do
         end)
         btnCut:SetScript("OnClick", function()
             if ADT and ADT.Housing and ADT.Housing.Binding_Cut then ADT.Housing:Binding_Cut() end
+        end)
+        -- Duplicate（同款复制并开始放置）
+        btnDuplicate:SetScript("OnClick", function()
+            if ADT and ADT.Housing and ADT.Housing.TryDuplicateItem then ADT.Housing:TryDuplicateItem() end
         end)
 
         -- 绑定高级编辑调用
@@ -511,7 +586,7 @@ do
     end
 
     local OVERRIDE_KEYS = {
-        -- 仅强制覆盖这五个：S/R/X/C/V
+        -- 仅强制覆盖这六大类：S/R/X/C/V/D + Q
         -- 临时板：存入/取出
         { key = "CTRL-S", button = function() return btnTempStore end },
         { key = "CTRL-R", button = function() return btnTempRecall end },
@@ -519,6 +594,10 @@ do
         { key = "CTRL-C", button = function() return btnCopy end },
         { key = "CTRL-V", button = function() return btnPaste end },
         { key = "CTRL-X", button = function() return btnCut end },
+        -- 住宅：悬停复制同款（新的默认：CTRL-D）
+        { key = "CTRL-D", button = function() return btnDuplicate end },
+        -- 设置面板：开关（等价 /adt）
+        { key = "CTRL-Q", button = function() return btnToggleUI end },
     }
 
     function EL:ClearOverrides()

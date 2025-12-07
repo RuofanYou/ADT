@@ -350,7 +350,7 @@ local function buildModules()
     
     -- 住宅设置模块（原有）
     local data = {
-        name = L["ModuleName Housing_DecorHover"] or "住宅：名称与复制",
+        name = L["ModuleName Housing_DecorHover"] or "装饰物：按下以重复",
         dbKey = 'EnableDupe',
         description = L["ModuleDescription Housing_DecorHover"],
         toggleFunc = function(state)
@@ -363,7 +363,7 @@ local function buildModules()
 
     modules[1] = {
         key = 'Housing',
-        categoryName = (L and L['SC Housing']) or '住宅',
+        categoryName = (L and L['SC Housing']) or '通用',
         categoryType = 'settings', -- 设置类分类
         modules = { data },
         numModules = 1,
@@ -372,7 +372,7 @@ local function buildModules()
     -- 临时板分类（装饰列表类）
     modules[2] = {
         key = 'Clipboard',
-        categoryName = (L and L['SC Clipboard']) or '📋 临时板',
+        categoryName = (L and L['SC Clipboard']) or '临时板',
         categoryType = 'decorList', -- 装饰列表类分类
         modules = {},
         numModules = 0,
@@ -410,7 +410,7 @@ local function buildModules()
     -- 最近放置分类（装饰列表类）
     modules[3] = {
         key = 'History',
-        categoryName = (L and L['SC History']) or '📜 最近放置',
+        categoryName = (L and L['SC History']) or '最近放置',
         categoryType = 'decorList', -- 装饰列表类分类
         modules = {},
         numModules = 0,
@@ -437,6 +437,32 @@ local function buildModules()
         emptyText = "暂无放置记录\n放置装饰后会自动记录",
     }
 
+    -- 信息分类（关于插件的信息）
+    modules[4] = {
+        key = 'About',
+        categoryName = (L and L['SC About']) or '信息',
+        categoryType = 'about', -- 关于信息类分类
+        modules = {},
+        numModules = 0,
+        -- 获取插件信息
+        getInfoText = function()
+            local ver = "未知"
+            if C_AddOns and C_AddOns.GetAddOnMetadata then
+                ver = C_AddOns.GetAddOnMetadata("AdvancedDecorationTools", "Version") or ver
+            elseif GetAddOnMetadata then
+                ver = GetAddOnMetadata("AdvancedDecorationTools", "Version") or ver
+            end
+            -- 不使用空行，避免产生多余分隔符
+            return string.format(
+                "|cffffcc00高级装修工具|r\n" ..
+                "|cffaaaaaa版本：%s|r\n" ..
+                "|cffcccccc制作信息|r\n" ..
+                "|cff00aaffbilibili:|r 瑟小瑟",
+                ver
+            )
+        end,
+    }
+
     -- 初始化映射
     ControlCenter._dbKeyMap = { [data.dbKey] = data }
     return modules
@@ -454,11 +480,13 @@ end
 
 local function getCategoryDisplayName(key)
     if key == 'Housing' then
-        return (L and L['SC Housing']) or '住宅'
+        return (L and L['SC Housing']) or '通用'
     elseif key == 'Clipboard' then
-        return (L and L['SC Clipboard']) or '📋 临时板'
+        return (L and L['SC Clipboard']) or '临时板'
     elseif key == 'History' then
-        return (L and L['SC History']) or '📜 最近放置'
+        return (L and L['SC History']) or '最近放置'
+    elseif key == 'About' then
+        return (L and L['SC About']) or '信息'
     end
     return tostring(key)
 end

@@ -79,7 +79,7 @@ function Clipboard:StoreSelectedAndRemove()
     if not ADT.Housing or not ADT.Housing.GetSelectedDecorRecordIDAndName then return end
     local id, name, icon = ADT.Housing:GetSelectedDecorRecordIDAndName()
     if not id then
-        if ADT.Notify then ADT.Notify("请先选中要存入的装饰", 'info') end
+        if ADT.Notify then ADT.Notify("请先点击选中要存入的装饰", 'info') end
         return
     end
     -- 尝试移除当前选中（由 Housing 模块提供单一权威的移除实现）

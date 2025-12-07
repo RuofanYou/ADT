@@ -278,7 +278,7 @@ local function OnKeyDown(self, key)
     end
 end
 
--- 仅在编辑模式下启用快捷键，并在进入时自动打开弹窗
+-- 仅在编辑模式下启用快捷键（弹窗已整合到 GUI，不再自动打开）
 local wasEditorActive = false
 
 local function UpdateKeyBinding()
@@ -287,10 +287,8 @@ local function UpdateKeyBinding()
     if isActive then
         KeyFrame:SetScript("OnKeyDown", OnKeyDown)
         KeyFrame:EnableKeyboard(true)
-        -- 只在从"非编辑"进入"编辑"时自动打开弹窗
-        if not wasEditorActive then
-            HistoryPopup:Show()
-        end
+        -- 弹窗已整合到 GUI，不再自动打开独立弹窗
+        -- 编辑模式下由 SettingsPanelNew 负责显示 GUI
         if MainFrame and HouseEditorFrame then
             MainFrame:SetParent(HouseEditorFrame)
             MainFrame:SetFrameStrata("TOOLTIP")

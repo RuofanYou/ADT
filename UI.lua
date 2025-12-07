@@ -3,16 +3,9 @@ ADT = ADT or {}
 
 -- Slash：/adt 打开设置面板（自定义 ControlCenter 样式）
 SLASH_ADT1 = "/adt"
-SlashCmdList["ADT"] = function(msg)
-    msg = (msg or ""):lower():match("^%s*(.-)%s*$")
-    if msg == "debug" or msg == "dbg" then
-        if ADT and ADT.FlipDBBool and ADT.IsDebugEnabled and ADT.Notify then
-            ADT.FlipDBBool("DebugEnabled")
-            local state = ADT.IsDebugEnabled() and "开启" or "关闭"
-            ADT.Notify("ADT 调试已"..state, ADT.IsDebugEnabled() and 'success' or 'info')
-        end
-        return
-    end
+
+-- 单一权威：切换主面板的逻辑集中在此处，供斜杠命令与快捷键复用
+function ADT.ToggleMainUI()
     local Main = ADT and ADT.ControlCenter and ADT.ControlCenter.SettingsPanel
     if not Main then return end
     if Settings and ADT.SettingsCategory and SettingsPanel and SettingsPanel:IsShown() then
@@ -35,6 +28,19 @@ SlashCmdList["ADT"] = function(msg)
         Main:SetPoint("CENTER")
         Main:ShowUI("standalone")
     end
+end
+
+SlashCmdList["ADT"] = function(msg)
+    msg = (msg or ""):lower():match("^%s*(.-)%s*$")
+    if msg == "debug" or msg == "dbg" then
+        if ADT and ADT.FlipDBBool and ADT.IsDebugEnabled and ADT.Notify then
+            ADT.FlipDBBool("DebugEnabled")
+            local state = ADT.IsDebugEnabled() and "开启" or "关闭"
+            ADT.Notify("ADT 调试已"..state, ADT.IsDebugEnabled() and 'success' or 'info')
+        end
+        return
+    end
+    ADT.ToggleMainUI()
 end
 
 -- 当编辑模式开关时，自动把设置面板重挂到合适的父级，避免被编辑器遮挡

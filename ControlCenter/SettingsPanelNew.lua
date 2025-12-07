@@ -19,8 +19,8 @@ local Def = {
     TextureFile = "Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/SettingsPanel.png",
     ButtonSize = 28,
     WidgetGap = 14,
-    PageHeight = 576,
-    CategoryGap = 40,
+    PageHeight = 380,  -- 缩小高度：约10行文本+标题+边距
+    CategoryGap = 20,  -- 缩小分类间距
     TabButtonHeight = 40,
 
     TextColorNormal = {215/255, 192/255, 163/255},
@@ -382,11 +382,26 @@ do
             -- 装饰列表分类：切换到装饰列表视图
             MainFrame:ShowDecorListCategory(self.categoryKey)
             ADT.LandingPageUtil.PlayUISound("ScrollBarStep")
-        elseif ActiveCategoryInfo[self.categoryKey] then
-            -- 设置类分类：滚动到对应位置
-            MainFrame.ModuleTab.ScrollView:ScrollTo(ActiveCategoryInfo[self.categoryKey].scrollOffset)
+        elseif cat and cat.categoryType == 'about' then
+            -- 信息分类：显示关于信息
+            MainFrame:ShowAboutCategory(self.categoryKey)
+            ADT.LandingPageUtil.PlayUISound("ScrollBarStep")
+        else
+            -- 设置类分类：先恢复设置视图，再滚动到对应位置
+            -- 如果当前在装饰列表视图，先切换回设置视图
+            if MainFrame.currentDecorCategory or MainFrame.currentAboutCategory then
+                MainFrame:ShowSettingsView()
+            end
+            -- 延迟一帧确保 ActiveCategoryInfo 已更新
+            C_Timer.After(0.01, function()
+                if ActiveCategoryInfo[self.categoryKey] then
+                    MainFrame.ModuleTab.ScrollView:ScrollTo(ActiveCategoryInfo[self.categoryKey].scrollOffset)
+                end
+            end)
             ADT.LandingPageUtil.PlayUISound("ScrollBarStep")
         end
+        if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', self.categoryKey) end
+        MainFrame:HighlightButton(self)
     end
 
     function CategoryButtonMixin:OnMouseDown()
@@ -800,8 +815,10 @@ do  -- Left Section
 end
 
 
-do  -- Right Section
+do  -- Right Section (已移除，保留函数但添加空检查)
     function MainFrame:ShowFeaturePreview(moduleData, parentDBKey)
+        -- 右侧预览区已移除，函数保留但不执行任何操作
+        if not self.FeatureDescription or not self.FeaturePreview then return end
         if not moduleData then return end
         local desc = moduleData.description
         local additonalDesc = moduleData.descriptionFunc and moduleData.descriptionFunc() or nil
@@ -816,8 +833,10 @@ do  -- Right Section
         self.FeaturePreview:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/Preview_"..(parentDBKey or moduleData.dbKey))
     end
 
-    -- 显示装饰项预览（用于装饰列表分类）
+    -- 显示装饰项预览（右侧预览区已移除，函数保留但不执行任何操作）
     function MainFrame:ShowDecorPreview(itemData, available)
+        -- 右侧预览区已移除，不执行任何操作
+        if not self.FeatureDescription or not self.FeaturePreview then return end
         if not itemData then return end
         -- 设置预览图标
         local icon = itemData.icon or 134400
@@ -897,30 +916,42 @@ do  -- Central
         local sortedModule = self.listGetter and self.listGetter() or ControlCenter:GetSortedModules()
 
         for index, categoryInfo in ipairs(sortedModule) do
-            n = n + 1
-            top = offsetY
-            bottom = offsetY + buttonHeight + buttonGap
+            -- 跳过装饰列表分类和信息分类（它们有自己的渲染方式）
+            if categoryInfo.categoryType == 'decorList' or categoryInfo.categoryType == 'about' then
+                -- 不渲染这些分类的内容，仅在 ActiveCategoryInfo 中标记
+                ActiveCategoryInfo[categoryInfo.key] = {
+                    scrollOffset = 0,
+                    numModules = 0,
+                }
+            else
+                n = n + 1
+                top = offsetY
+                bottom = offsetY + buttonHeight + buttonGap
 
-            ActiveCategoryInfo[categoryInfo.key] = {
-                scrollOffset = top - fromOffsetY,
-                numModules = categoryInfo.numModules,
-            }
+                ActiveCategoryInfo[categoryInfo.key] = {
+                    scrollOffset = top - fromOffsetY,
+                    numModules = categoryInfo.numModules,
+                }
 
-            content[n] = {
-                dataIndex = n,
-                templateKey = "Header",
-                setupFunc = function(obj)
-                    obj:SetText(categoryInfo.categoryName)
-                end,
-                top = top,
-                bottom = bottom,
-                offsetX = offsetX,
-            }
-            offsetY = bottom
+                content[n] = {
+                    dataIndex = n,
+                    templateKey = "Header",
+                    setupFunc = function(obj)
+                        obj:SetText(categoryInfo.categoryName)
+                        -- 确保纹理可见（对象池复用时可能被隐藏）
+                        if obj.Left then obj.Left:Show() end
+                        if obj.Right then obj.Right:Show() end
+                        obj.Label:SetJustifyH("LEFT")
+                    end,
+                    top = top,
+                    bottom = bottom,
+                    offsetX = offsetX,
+                }
+                offsetY = bottom
 
-            if n == 1 then
-                self.firstModuleData = categoryInfo.modules[1]
-            end
+                if n == 1 then
+                    self.firstModuleData = categoryInfo.modules[1]
+                end
 
             for _, data in ipairs(categoryInfo.modules) do
                 n = n + 1
@@ -960,6 +991,7 @@ do  -- Central
                 end
             end
             offsetY = offsetY + categoryGap
+            end -- end of else (非装饰列表分类)
         end
 
         local retainPosition = true
@@ -995,6 +1027,7 @@ do  -- Central
         if not cat or cat.categoryType ~= 'decorList' then return end
         
         self.currentDecorCategory = categoryKey
+        if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', categoryKey) end
         
         local list = cat.getListData and cat.getListData() or {}
         local content = {}
@@ -1012,6 +1045,10 @@ do  -- Central
             templateKey = "Header",
             setupFunc = function(obj)
                 obj:SetText(cat.categoryName)
+                -- 确保纹理可见
+                if obj.Left then obj.Left:Show() end
+                if obj.Right then obj.Right:Show() end
+                obj.Label:SetJustifyH("LEFT")
             end,
             top = offsetY,
             bottom = offsetY + Def.ButtonSize,
@@ -1021,19 +1058,51 @@ do  -- Central
         
         -- 添加装饰项或空列表提示
         if #list == 0 then
-            -- 空列表：显示提示文本
+            -- 空列表：用普通 Header 显示一行提示
             n = n + 1
+            local emptyTop = offsetY
+            local emptyBottom = offsetY + Def.ButtonSize
             content[n] = {
                 dataIndex = n,
                 templateKey = "Header",
                 setupFunc = function(obj)
-                    obj:SetText(cat.emptyText or "列表为空")
+                    -- 注意：emptyText 可能包含换行符，这里只取第一行
+                    local text = cat.emptyText or "列表为空"
+                    local firstLine = text:match("^([^\n]*)")
+                    obj:SetText(firstLine or text)
                     SetTextColor(obj.Label, Def.TextColorDisabled)
+                    -- 确保纹理可见
+                    if obj.Left then obj.Left:Show() end
+                    if obj.Right then obj.Right:Show() end
+                    obj.Label:SetJustifyH("LEFT")
                 end,
-                top = offsetY,
-                bottom = offsetY + Def.ButtonSize * 2,
+                top = emptyTop,
+                bottom = emptyBottom,
                 offsetX = offsetX,
             }
+            -- 如果有第二行提示，继续添加
+            if cat.emptyText and cat.emptyText:find("\n") then
+                local secondLine = cat.emptyText:match("\n(.*)$")
+                if secondLine and secondLine ~= "" then
+                    n = n + 1
+                    offsetY = emptyBottom
+                    content[n] = {
+                        dataIndex = n,
+                        templateKey = "Header",
+                        setupFunc = function(obj)
+                            obj:SetText(secondLine)
+                            SetTextColor(obj.Label, Def.TextColorDisabled)
+                            -- 确保纹理可见
+                            if obj.Left then obj.Left:Show() end
+                            if obj.Right then obj.Right:Show() end
+                            obj.Label:SetJustifyH("LEFT")
+                        end,
+                        top = offsetY,
+                        bottom = offsetY + Def.ButtonSize,
+                        offsetX = offsetX,
+                    }
+                end
+            end
         else
             -- 有装饰项：渲染列表
             for i, item in ipairs(list) do
@@ -1078,19 +1147,81 @@ do  -- Central
     -- 返回设置列表视图
     function MainFrame:ShowSettingsView()
         self.currentDecorCategory = nil
+        self.currentAboutCategory = nil
         self:RefreshFeatureList()
+    end
+
+    -- 显示信息分类（关于插件）
+    function MainFrame:ShowAboutCategory(categoryKey)
+        local cat = ControlCenter:GetCategoryByKey(categoryKey)
+        if not cat or cat.categoryType ~= 'about' then return end
+        
+        self.currentDecorCategory = nil
+        self.currentAboutCategory = categoryKey
+        if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', categoryKey) end
+        
+        local content = {}
+        local n = 0
+        local buttonHeight = Def.ButtonSize
+        local fromOffsetY = Def.ButtonSize
+        local offsetY = fromOffsetY
+        local offsetX = 0
+        
+        -- 添加标题（保留分隔线）
+        n = n + 1
+        content[n] = {
+            dataIndex = n,
+            templateKey = "Header",
+            setupFunc = function(obj)
+                obj:SetText(cat.categoryName)
+                -- 确保标题的分隔线可见
+                if obj.Left then obj.Left:Show() end
+                if obj.Right then obj.Right:Show() end
+                obj.Label:SetJustifyH("LEFT") -- 标题左对齐
+            end,
+            top = offsetY,
+            bottom = offsetY + Def.ButtonSize,
+            offsetX = offsetX,
+        }
+        offsetY = offsetY + Def.ButtonSize * 2
+        
+        -- 添加信息文本（隐藏分隔线，居中显示）
+        if cat.getInfoText then
+            local infoText = cat.getInfoText()
+            -- 按换行符拆分
+            for line in infoText:gmatch("[^\n]+") do
+                n = n + 1
+                content[n] = {
+                    dataIndex = n,
+                    templateKey = "Header",
+                    setupFunc = function(obj)
+                        obj:SetText(line)
+                        obj.Label:SetJustifyH("CENTER") -- 内容居中
+                        -- 隐藏分隔线纹理
+                        if obj.Left then obj.Left:Hide() end
+                        if obj.Right then obj.Right:Hide() end
+                    end,
+                    top = offsetY,
+                    bottom = offsetY + buttonHeight,
+                    offsetX = offsetX,
+                }
+                offsetY = offsetY + buttonHeight
+            end
+        end
+        
+        self.ModuleTab.ScrollView:SetContent(content, false)
     end
 end
 
 
 local function CreateUI()
     local pageHeight = Def.PageHeight
-
-    local scalerWidth = 1 / 0.85
-    local ratio_Center = 0.618
-    local sideSectionWidth = API.Round((pageHeight * scalerWidth) * (1 - ratio_Center))
-    local centralSectionWidth = API.Round((pageHeight * scalerWidth) * ratio_Center)
-    MainFrame:SetSize(2 * sideSectionWidth + centralSectionWidth, Def.PageHeight)
+    
+    -- 紧凑布局：左侧固定宽度，中间动态宽度
+    local sideSectionWidth = 130  -- 左侧：5个汉字(约75px) + 边距 + 数量角标
+    local centralSectionWidth = 340  -- 中间：图标 + 长装饰名称(如"小型锯齿奥格瑞玛栅栏") + 数量
+    
+    MainFrame:SetSize(sideSectionWidth + centralSectionWidth, pageHeight)
     MainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     MainFrame:SetToplevel(true)
     
@@ -1103,6 +1234,9 @@ local function CreateUI()
     end)
     MainFrame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
+        if ADT and ADT.SaveFramePosition then
+            ADT.SaveFramePosition("SettingsPanelPos", self)
+        end
     end)
     MainFrame:SetClampedToScreen(true)
     
@@ -1120,23 +1254,39 @@ local function CreateUI()
     local Tab1 = MainFrame.ModuleTab
 
     LeftSection:SetWidth(sideSectionWidth)
-    RightSection:SetWidth(sideSectionWidth)
+    
+    -- 修复：不隐藏 RightSection，而是将 CentralSection 的右边直接锚定到 MainFrame
+    -- 这样可以避免 XML 中定义的锚点导致的布局问题
+    RightSection:SetWidth(0)
+    RightSection:ClearAllPoints()
+    RightSection:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
+    RightSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
+    
+    -- 重设 CentralSection 的右边锚点
+    CentralSection:ClearAllPoints()
+    CentralSection:SetPoint("TOPLEFT", LeftSection, "TOPRIGHT", 0, 0)
+    CentralSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
 
 
     -- LeftSection
     do
+        -- 暂时隐藏搜索功能，保留代码方便以后恢复
+        --[[
         SearchBox = CreateSearchBox(Tab1)
         SearchBox:SetPoint("TOPLEFT", LeftSection, "TOPLEFT", Def.WidgetGap, -Def.WidgetGap)
         SearchBox:SetWidth(sideSectionWidth - 2 * Def.WidgetGap)
+        --]]
 
 
-        local leftListFromY = 2*Def.WidgetGap + Def.ButtonSize
+        -- 隐藏搜索框后，分类列表从顶部开始
+        local leftListFromY = Def.WidgetGap
 
+        -- 隐藏搜索框后不需要分隔线
+        --[[
         local DivH = CreateDivider(Tab1, sideSectionWidth - 0.5*Def.WidgetGap)
         DivH:SetPoint("CENTER", LeftSection, "TOP", 0, -leftListFromY)
-
-
         leftListFromY = leftListFromY + Def.WidgetGap
+        --]]
         local categoryButtonWidth = sideSectionWidth - 2*Def.WidgetGap
 
         local function Category_Create()
@@ -1222,7 +1372,8 @@ local function CreateUI()
         local Background = CentralSection:CreateTexture(nil, "BACKGROUND")
         Background:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/SettingsPanelBackground")
         Background:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", -8, 0)
-        Background:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
+        -- 修复：背景只覆盖 CentralSection，不延伸到被隐藏的右侧区域
+        Background:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", 0, 0)
 
 
         local ScrollBar = ControlCenter.CreateScrollBarWithDynamicSize(Tab1)
@@ -1290,9 +1441,67 @@ local function CreateUI()
     NineSlice:SetCloseButtonOwner(MainFrame)
 
 
+    -- 打开时恢复到上次选中的分类/视图
+    function MainFrame:HighlightCategoryByKey(key)
+        if not key or not self.primaryCategoryPool then return end
+        for _, button in self.primaryCategoryPool:EnumerateActive() do
+            if button and button.categoryKey == key then
+                self:HighlightButton(button)
+                break
+            end
+        end
+    end
+
     Tab1:SetScript("OnShow", function()
-        MainFrame:RefreshFeatureList()
+        local key = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or MainFrame.currentDecorCategory or MainFrame.currentAboutCategory
+        local cat = key and ControlCenter:GetCategoryByKey(key) or nil
+        if cat and cat.categoryType == 'decorList' then
+            MainFrame:ShowDecorListCategory(key)
+            MainFrame:HighlightCategoryByKey(key)
+        elseif cat and cat.categoryType == 'about' then
+            MainFrame:ShowAboutCategory(key)
+            MainFrame:HighlightCategoryByKey(key)
+        else
+            MainFrame:RefreshFeatureList()
+            if key then
+                C_Timer.After(0.01, function()
+                    if ActiveCategoryInfo[key] then
+                        MainFrame.ModuleTab.ScrollView:ScrollTo(ActiveCategoryInfo[key].scrollOffset)
+                    end
+                    MainFrame:HighlightCategoryByKey(key)
+                end)
+            end
+        end
     end)
+
+    -- 注册数据变化回调，实时刷新 GUI
+    -- Clipboard 数据变化时刷新
+    if ADT.Clipboard then
+        local origOnChanged = ADT.Clipboard.OnChanged
+        ADT.Clipboard.OnChanged = function(self)
+            if origOnChanged then origOnChanged(self) end
+            -- 如果当前显示的是临时板分类，则刷新列表
+            if MainFrame:IsShown() and MainFrame.currentDecorCategory == 'Clipboard' then
+                MainFrame:ShowDecorListCategory('Clipboard')
+            end
+            -- 刷新分类列表的数量角标
+            MainFrame:RefreshCategoryList()
+        end
+    end
+
+    -- History 数据变化时刷新
+    if ADT.History then
+        local origOnHistoryChanged = ADT.History.OnHistoryChanged
+        ADT.History.OnHistoryChanged = function(self)
+            if origOnHistoryChanged then origOnHistoryChanged(self) end
+            -- 如果当前显示的是最近放置分类，则刷新列表
+            if MainFrame:IsShown() and MainFrame.currentDecorCategory == 'History' then
+                MainFrame:ShowDecorListCategory('History')
+            end
+            -- 刷新分类列表的数量角标
+            MainFrame:RefreshCategoryList()
+        end
+    end
 end
 
 function MainFrame:UpdateLayout()
@@ -1322,6 +1531,9 @@ function MainFrame:ShowUI(mode)
     self.mode = mode
     self.NineSlice:ShowCloseButton(mode ~= "blizzard")
     self:UpdateLayout()
+    if ADT and ADT.RestoreFramePosition then
+        ADT.RestoreFramePosition("SettingsPanelPos", self)
+    end
     self:Show()
 end
 
@@ -1353,3 +1565,45 @@ do
     end)
 end
 
+-- 编辑模式自动打开 GUI（替代独立弹窗）
+do
+    local EditorWatcher = CreateFrame("Frame")
+    local wasEditorActive = false
+    
+    local function UpdateEditorState()
+        local isActive = C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive()
+        
+        if isActive then
+            if not wasEditorActive then
+                -- 进入编辑模式：自动打开 GUI
+                MainFrame:ShowUI("editor")
+                -- 若没有历史分类记录，首次进入仍默认到“临时板”；
+                -- 若已有 LastCategoryKey，则交由 Tab1:OnShow 的恢复逻辑处理（避免覆盖）。
+                C_Timer.After(0.1, function()
+                    local key = ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')
+                    if not key then
+                        MainFrame:ShowDecorListCategory('Clipboard')
+                    end
+                end)
+            end
+            -- 调整层级确保在编辑器之上
+            if HouseEditorFrame then
+                MainFrame:SetParent(HouseEditorFrame)
+                MainFrame:SetFrameStrata("TOOLTIP")
+            end
+        else
+            -- 退出编辑模式：隐藏 GUI
+            MainFrame:SetParent(UIParent)
+            MainFrame:SetFrameStrata("FULLSCREEN_DIALOG")
+            MainFrame:Hide()
+        end
+        
+        wasEditorActive = isActive
+    end
+    
+    EditorWatcher:RegisterEvent("HOUSE_EDITOR_MODE_CHANGED")
+    EditorWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+    EditorWatcher:SetScript("OnEvent", function()
+        C_Timer.After(0.15, UpdateEditorState)
+    end)
+end
