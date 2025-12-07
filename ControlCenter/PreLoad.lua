@@ -451,6 +451,21 @@ local function buildModules()
         categoryKeys = { 'Housing' },
         uiOrder = 7,
     }
+
+    -- 启用 L 锁定/解锁
+    local moduleLock = {
+        name = (L and L["Enable L Lock"]) or "启用 L 以锁定装饰",
+        dbKey = 'EnableLock',
+        description = (L and L["Enable L Lock tooltip"]) or "按 L 锁定/解锁当前悬停的装饰；关闭后隐藏提示并禁用该热键。",
+        toggleFunc = function(state)
+            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableLock', state) end
+            dbgToggle('EnableLock', state)
+            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
+            if ADT and ADT.Housing and ADT.Housing.RefreshOverrides then ADT.Housing:RefreshOverrides() end
+        end,
+        categoryKeys = { 'Housing' },
+        uiOrder = 8,
+    }
     
     -- 语言选择下拉菜单模块
     local moduleLanguage = {
@@ -496,8 +511,8 @@ local function buildModules()
         key = 'Housing',
         categoryName = (L and L['SC Housing']) or '通用',
         categoryType = 'settings', -- 设置类分类
-        modules = { moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace, moduleResetT, moduleResetAll, moduleLanguage },
-        numModules = 8,
+        modules = { moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace, moduleResetT, moduleResetAll, moduleLock, moduleLanguage },
+        numModules = 9,
     }
 
     -- 临时板分类（装饰列表类）

@@ -14,6 +14,10 @@ local function CreateScrollView(parent, externalScrollBar)
     local f = CreateFrame('Frame', nil, parent)
     API.Mixin(f, ScrollViewMixin)
     f:SetClipsChildren(true)
+    -- 明确开启鼠标滚轮支持：在“通用”分类条目较多且窗口高度较小时，
+    -- 允许用户直接使用滚轮滚动列表（与“最近放置/临时板”弹窗体验一致）。
+    -- 注意：Plumber 原版在某些版本由父级接收滚轮，此处显式启用以避免拦截导致的失效。
+    if f.EnableMouseWheel then f:EnableMouseWheel(true) end
 
     f.ScrollRef = CreateFrame('Frame', nil, f)
     f.ScrollRef:SetSize(4, 4)
@@ -140,6 +144,14 @@ function ScrollViewMixin:SetContent(content, retainPosition)
         self.scrollTarget = 0
     end
     self:SnapToScrollTarget()
+    -- 内容更新后，强制刷新滚动条的可见比例与位置，
+    -- 避免在窗口缩放/条目增删后出现“滚动条不显示或尺寸不对”的情况。
+    if self.ScrollBar and self.ScrollBar.UpdateVisibleExtentPercentage then
+        self.ScrollBar:UpdateVisibleExtentPercentage()
+        if self.alwaysShowScrollBar and self.ScrollBar.SetShown then
+            self.ScrollBar:SetShown(true)
+        end
+    end
 end
 
 function ScrollViewMixin:AddTemplate(key, create, remove, onAcquire)

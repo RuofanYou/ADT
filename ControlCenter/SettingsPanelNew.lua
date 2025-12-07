@@ -1889,7 +1889,15 @@ local function CreateUI()
         local ScrollBar = ControlCenter.CreateScrollBarWithDynamicSize(Tab1)
         ScrollBar:SetPoint("TOP", CentralSection, "TOPRIGHT", -12, -0.5*Def.WidgetGap) -- -12 避免与边框重叠
         ScrollBar:SetPoint("BOTTOM", CentralSection, "BOTTOMRIGHT", -12, 0.5*Def.WidgetGap)
-        ScrollBar:SetFrameLevel(120) -- 高于 BorderFrame (+100) 确保可见
+        -- 提升层级：在自定义边框之上，避免在某些界面比例下被遮挡
+        if MainFrame and MainFrame.GetFrameStrata then
+            -- 与主面板同层级即可；若主面板位于 TOOLTIP，本条保证与其一致
+            ScrollBar:SetFrameStrata(MainFrame:GetFrameStrata() or "FULLSCREEN_DIALOG")
+        else
+            ScrollBar:SetFrameStrata("FULLSCREEN_DIALOG")
+        end
+        ScrollBar:SetFrameLevel((MainFrame:GetFrameLevel() or 0) + 200)
+        ScrollBar:SetAlpha(1)
         MainFrame.ModuleTab.ScrollBar = ScrollBar
         ScrollBar:UpdateThumbRange()
 
@@ -1903,7 +1911,7 @@ local function CreateUI()
         ScrollView:OnSizeChanged()
         ScrollView:EnableMouseBlocker(true)
         ScrollView:SetBottomOvershoot(Def.CategoryGap)
-        ScrollView:SetAlwaysShowScrollBar(true)
+        ScrollView:SetAlwaysShowScrollBar(true) -- 总显示滚动条，缩小时仍可见
         ScrollView:SetShowNoContentAlert(true)
         ScrollView:SetNoContentAlertText(CATALOG_SHOP_NO_SEARCH_RESULTS or "")
 

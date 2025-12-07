@@ -11,6 +11,8 @@ local DEFAULTS = {
     EnableResetT = true,
     -- 是否启用 Ctrl+T 全部重置
     EnableResetAll = true,
+    -- 是否启用 L 锁定/解锁 悬停装饰
+    EnableLock = true,
     -- 1: Ctrl, 2: Alt, 3: Ctrl+D（默认，释放 Alt）
     DuplicateKey = 3,
     -- 记住控制中心上次选中的分类（'Housing'/'Clipboard'/'History'/...）

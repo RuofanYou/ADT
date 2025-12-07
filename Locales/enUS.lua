@@ -33,6 +33,9 @@ ADT.Locales.enUS = {
     ["Enable T Reset tooltip"] = "In Expert Mode, pressing T resets the current transform submode. Turn off to keep only Ctrl+T (reset all).",
     ["Enable CTRL+T Reset All"] = "Enable CTRL+T Reset All",
     ["Enable CTRL+T Reset All tooltip"] = "In Expert Mode, pressing Ctrl+T resets all transforms. Turn off to disable the hotkey and hide the hint.",
+    ["Enable L Lock"] = "Enable L Lock/Unlock",
+    ["Enable L Lock tooltip"] = "Press L to lock/unlock the hovered decor. Turn off to hide the hint and disable the hotkey.",
+    ["Lock/Unlock"] = "Lock/Unlock",
     
     ["SC Housing"] = "General",
     ["SC Clipboard"] = "Clipboard",
@@ -144,6 +147,11 @@ ADT.Locales.zhCN = {
     ["Enable T Reset tooltip"] = "在专家模式下，按 T 重置当前子模式的变换；关闭后仅保留 Ctrl+T 的“全部重置”。",
     ["Enable CTRL+T Reset All"] = "启用 CTRL+T 全部重置",
     ["Enable CTRL+T Reset All tooltip"] = "在专家模式下，按 Ctrl+T 重置所有变换；关闭后禁用该热键并隐藏提示。",
+    ["Enable L Lock"] = "启用 L 以锁定装饰",
+    ["Enable L Lock tooltip"] = "按 L 锁定/解锁当前悬停的装饰；关闭后隐藏提示并禁用该热键。",
+
+    -- 右侧提示中的“锁定/解锁”标题
+    ["Lock/Unlock"] = "锁定",
     
     ["SC Housing"] = "通用",
     ["SC Clipboard"] = "临时板",

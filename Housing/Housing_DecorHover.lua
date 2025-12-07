@@ -125,6 +125,12 @@ end
 
 -- 切换悬停装饰的保护状态
 function EL:ToggleProtection()
+    -- 若未启用 L 锁定开关，则直接忽略
+    do
+        local enabled = ADT.GetDBValue("EnableLock")
+        if enabled == nil then enabled = true end
+        if not enabled then return end
+    end
     if ADT and ADT.DebugPrint then ADT.DebugPrint("[Housing] ToggleProtection called") end
     
     if not IsHouseEditorActive() then 
@@ -736,7 +742,7 @@ do
                 [6] = { dbKey = "EnableBatchPlace", default = false }, -- Batch Place (CTRL)
                 [7] = { dbKey = "EnableResetT", default = true },      -- Reset (T)
                 [8] = { dbKey = "EnableResetAll", default = true },    -- Reset All (CTRL+T)
-                [9] = nil,  -- Lock (L) - 始终显示
+                [9] = { dbKey = "EnableLock", default = true },        -- Lock (L)
             }
             for i, frame in ipairs(DisplayFrame.HintFrames) do
                 table.insert(allFrames, frame)
@@ -1117,6 +1123,10 @@ do
                 local en2 = ADT.GetDBValue("EnableResetAll")
                 if en2 == nil then en2 = true end
                 allowed = en2
+            elseif cfg.key == "L" then
+                local en3 = ADT.GetDBValue("EnableLock")
+                if en3 == nil then en3 = true end
+                allowed = en3
             end
             if btn and allowed then
                 SetOverrideBindingClick(owner, true, cfg.key, btn:GetName())
