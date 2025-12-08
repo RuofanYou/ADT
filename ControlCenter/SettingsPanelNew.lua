@@ -40,6 +40,13 @@ local Def = {
     HeaderLeftNudge = 8,
     -- About(信息) 面板的纯文本行相对容器的额外左内边距（不使用图标位）
     AboutTextExtraLeft = 0,
+    -- 高亮条边距与最小高度（配合 housing-basic-container）
+    -- 语义：
+    --   - HighlightTextPaddingLeft：高亮左边缘距离“文本起点”的预留像素，保证文本不贴框
+    --   - HighlightRightInset：高亮右边缘距按钮右边缘的收缩像素，尽可能把右侧计数也框入
+    HighlightTextPaddingLeft = 10,
+    HighlightRightInset = 2,
+    HighlightMinHeight = 22,
 }
 
 -- 单一权威：右侧内容起始的左内边距，强制与左侧 Category 的外边距一致
@@ -123,8 +130,8 @@ do
     CloseButton:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 2, 2)
     CloseButton:SetScript("OnClick", function()
         MainFrame:Hide()
-        if ADT.LandingPageUtil and ADT.LandingPageUtil.PlayUISound then
-            ADT.LandingPageUtil.PlayUISound("CheckboxOff")
+        if ADT.UI and ADT.UI.PlaySoundCue then
+            ADT.UI.PlaySoundCue('ui.checkbox.off')
         end
     end)
 end
@@ -508,7 +515,7 @@ do
                 local self2 = btn:GetParent()
                 self2:SetText("")
                 MainFrame:RunSearch("")
-                ADT.LandingPageUtil.PlayUISound("CheckboxOff")
+                if ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.checkbox.off') end
             end)
         end
         f:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
@@ -557,11 +564,11 @@ do
         if cat and cat.categoryType == 'decorList' then
             -- 装饰列表分类：切换到装饰列表视图
             MainFrame:ShowDecorListCategory(self.categoryKey)
-            ADT.LandingPageUtil.PlayUISound("ScrollBarStep")
+            if ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.scroll.step') end
         elseif cat and cat.categoryType == 'about' then
             -- 信息分类：显示关于信息
             MainFrame:ShowAboutCategory(self.categoryKey)
-            ADT.LandingPageUtil.PlayUISound("ScrollBarStep")
+            if ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.scroll.step') end
         else
             -- 设置类分类：先恢复设置视图，再滚动到对应位置
             -- 如果当前在装饰列表视图，先切换回设置视图
@@ -574,7 +581,7 @@ do
                     MainFrame.ModuleTab.ScrollView:ScrollTo(ActiveCategoryInfo[self.categoryKey].scrollOffset)
                 end
             end)
-            ADT.LandingPageUtil.PlayUISound("ScrollBarStep")
+            if ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.scroll.step') end
         end
         if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', self.categoryKey) end
         MainFrame:HighlightButton(self)
@@ -762,9 +769,9 @@ do
                 ADT.SetDBValue(self.dbKey, newState, true)
                 self.data.toggleFunc(newState)
                 if newState then
-                    ADT.LandingPageUtil.PlayUISound("CheckboxOn")
+                    if ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.checkbox.on') end
                 else
-                    ADT.LandingPageUtil.PlayUISound("CheckboxOff")
+                    if ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.checkbox.off') end
                 end
             end
         end
@@ -1080,14 +1087,21 @@ do
         local f = CreateFrame("Frame", nil, parent, "ADTSettingsAnimSelectionTemplate")
         Mixin(f, SelectionHighlightMixin)
 
-        -- 改为纯色高亮条，避免依赖自定义贴图切片
-        if f.Left then f.Left:SetColorTexture(1, 1, 1, 0.08) end
-        if f.Center then f.Center:SetColorTexture(1, 1, 1, 0.08) end
-        if f.Right then f.Right:SetColorTexture(1, 1, 1, 0.08) end
-        -- 提升到 ARTWORK 层，确保不被左侧背景覆盖
-        if f.Left and f.Left.SetDrawLayer then f.Left:SetDrawLayer("ARTWORK") end
-        if f.Center and f.Center.SetDrawLayer then f.Center:SetDrawLayer("ARTWORK") end
-        if f.Right and f.Right.SetDrawLayer then f.Right:SetDrawLayer("ARTWORK") end
+        -- 使用暴雪 Atlas：housing-basic-container（与截图一致）
+        -- 彻底摆脱 SettingsPanel.png 切片依赖
+        if f.Left then f.Left:Hide() end
+        if f.Center then f.Center:Hide() end
+        if f.Right then f.Right:Hide() end
+
+        local bg = f:CreateTexture(nil, "ARTWORK")
+        f.Background = bg
+        bg:SetAllPoints(true)
+        if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("housing-basic-container") then
+            bg:SetAtlas("housing-basic-container")
+        else
+            -- 兜底视觉：半透明金色条，防止在极端版本下出现空白
+            bg:SetColorTexture(1.0, 0.82, 0.0, 0.15)
+        end
 
         f.d = 0.6
         f:Hide()
@@ -1103,11 +1117,20 @@ do  -- Left Section
         CategoryHighlight:Hide()
         CategoryHighlight:ClearAllPoints()
         if button then
-            -- 窄化高亮条：左右各收缩 6px，降低整体高度
-            CategoryHighlight:SetPoint("LEFT", button, "LEFT", 6, 0)
-            CategoryHighlight:SetPoint("RIGHT", button, "RIGHT", -6, 0)
+            -- 使用 housing-basic-container：
+            -- 左边缘相对“文本起点”向左外扩，高亮应覆盖文本并留出可读留白
+            local labelOffset = tonumber(button.labelOffset) or 9
+            local textPad = tonumber(Def.HighlightTextPaddingLeft) or 10
+            local insetLeft = math.max(0, labelOffset - textPad)
+
+            -- 右边缘尽量贴近按钮右缘，把计数容器也包含在内
+            local insetRight = tonumber(Def.HighlightRightInset) or 2
+            CategoryHighlight:SetPoint("LEFT", button, "LEFT", insetLeft, 0)
+            CategoryHighlight:SetPoint("RIGHT", button, "RIGHT", -insetRight, 0)
             CategoryHighlight:SetParent(button)
-            local h = math.max(12, (Def.ButtonSize or 28) - 10)
+            -- 提高高度以匹配容器厚边框，同时保留上下留白
+            local minH = tonumber(Def.HighlightMinHeight) or 22
+            local h = math.max(minH, (Def.ButtonSize or 28) - 4)
             CategoryHighlight:SetHeight(h)
             CategoryHighlight:FadeIn()
         end
@@ -1777,7 +1800,7 @@ local function CreateUI()
             obj:ResetOffset()
         end
 
-        MainFrame.primaryCategoryPool = ADT.LandingPageUtil.CreateObjectPool(Category_Create, Category_Acquire)
+        MainFrame.primaryCategoryPool = API.CreateObjectPool(Category_Create, Category_Acquire, nil)
         MainFrame.primaryCategoryPool.leftListFromY = -leftListFromY
         MainFrame.primaryCategoryPool.offsetX = Def.WidgetGap
 
@@ -1788,7 +1811,7 @@ local function CreateUI()
         -- 左侧面板采用完整九宫格框体（The War Within 卡片风格）
         do
             local frame = Tab1:CreateTexture(nil, "BORDER")
-            MainFrame.LeftNineSlice = frame
+            MainFrame.LeftPanelBackground = frame
             frame:SetAtlas("ui-frame-thewarwithin-cardparchmentwider")
             -- 经验值：该卡片边框厚度约 28-32px，取 32 以确保角不被拉伸
             frame:SetTextureSliceMargins(32, 32, 32, 32)
@@ -1840,7 +1863,7 @@ local function CreateUI()
         -- 暂不显示自研滚动条，后续将切换为暴雪 ScrollBox 体系
         MainFrame.ModuleTab.ScrollBar = nil
 
-        local ScrollView = API.CreateScrollView(Tab1)
+        local ScrollView = API.CreateListView(Tab1)
         MainFrame.ModuleTab.ScrollView = ScrollView
         ScrollView:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", 0, -2)
         ScrollView:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", 0, 2)
@@ -1888,18 +1911,7 @@ local function CreateUI()
     end
 
 
-    -- NineSlice frame removed in favor of custom background
-    -- local NineSlice = ADT.LandingPageUtil.CreateExpansionThemeFrame(MainFrame.FrameContainer, 10)
-    -- MainFrame.NineSlice = NineSlice
-    -- NineSlice:CoverParent(-24)
-    -- NineSlice.Background:Hide() -- This was hiding the bg, but the border might still be there/conflict
-    -- NineSlice:SetUsingParentLevel(false)
-    -- NineSlice:SetFrameLevel(baseFrameLevel + 20)
-    -- NineSlice:ShowCloseButton(true)
-    -- NineSlice:SetCloseButtonOwner(MainFrame)
-    MainFrame.NineSlice = {
-        ShowCloseButton = function() end
-    }
+    -- 取消自定义边框相关占位与调用，改由顶部 UIPanelCloseButton 控制关闭
 
 
     -- 打开时恢复到上次选中的分类/视图
@@ -2009,7 +2021,7 @@ function MainFrame:ShowUI(mode)
 
     mode = mode or "standalone"
     self.mode = mode
-    self.NineSlice:ShowCloseButton(mode ~= "blizzard")
+    -- 关闭按钮由 UIPanelCloseButton 提供，无需额外控制
     self:UpdateLayout()
     if ADT and ADT.RestoreFramePosition then
         ADT.RestoreFramePosition("SettingsPanelPos", self)

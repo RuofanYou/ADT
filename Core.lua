@@ -33,6 +33,14 @@ local DEFAULTS = {
     SettingsPanelSize = nil,
     -- 语言选择（nil=跟随客户端）
     SelectedLanguage = nil,
+    -- 自动旋转（批量放置增强）默认配置
+    EnableAutoRotateOnCtrlPlace = true,
+    AutoRotateMode = "preset",         -- 可选："preset" | "learn" | "sequence"
+    AutoRotatePresetDegrees = 90,       -- 预设角度（度）
+    AutoRotateSequence = "0,90",       -- 序列（逗号分隔），仅在 mode=sequence 生效
+    AutoRotateApplyScope = "onlyPaint", -- 仅在按住 CTRL 连续放置时启用："onlyPaint"；或对所有抓取入口启用："all"
+    AutoRotateStepDegrees = 15,         -- 基本模式单次步进角度（估值，可在设置中调节）
+    AutoRotateStepByRID = {},           -- 按 decorRecordID 记忆专属步进角度（优先于全局）
 }
 
 local function CopyDefaults(dst, src)

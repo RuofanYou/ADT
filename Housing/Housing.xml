@@ -1,6 +1,7 @@
 <Ui xsi:schemaLocation="http://www.blizzard.com/wow/ui/..\FrameXML\UI.xsd">
     <Script file="Housing_DecorHover.lua"/>
     <Script file="Housing_PaintMode.lua"/>
+    <Script file="Housing_AutoRotate.lua"/>
     <Script file="Housing_History.lua"/>
     <Script file="Housing_HistoryPopup.lua"/>
     <Script file="Housing_DecorBrowser.lua"/>

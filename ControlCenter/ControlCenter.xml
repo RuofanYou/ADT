@@ -1,6 +1,6 @@
 <Ui xsi:schemaLocation="http://www.blizzard.com/wow/ui/..\FrameXML\UI.xsd">
     <Script file="PreLoad.lua"/>
-    <Script file="ScrollView.lua"/>
+    <Script file="ListView.lua"/>
 
     <Frame name="ADTSettingsPanelLayoutTemplate" hidden="true" virtual="true">
         <Size x="128" y="128"/>
@@ -210,7 +210,7 @@
         </Layers>
     </Frame>
 
-    <!-- 移除自研滚动条模板，后续将切换至暴雪 ScrollBox/ScrollBar 体系 -->
+    <!-- 已迁移为自研 ListView（不使用参考插件的滚动条/滚动视图实现） -->
 
     <Button name="ADTTabButtonTemplate" virtual="true">
         <Size x="100" y="40"/>

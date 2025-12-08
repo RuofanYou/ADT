@@ -77,259 +77,77 @@ function ADT.EasingFunctions.outQuint(t, b, c, d)
 end
 
 -- UI 声音
-ADT.LandingPageUtil = ADT.LandingPageUtil or {}
-function ADT.LandingPageUtil.PlayUISound(key)
+ADT.UI = ADT.UI or {}
+-- PlaySoundCue：统一 UI 声音触发接口
+function ADT.UI.PlaySoundCue(key)
     local kit = SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON or 1204
-    if key == 'CheckboxOff' then
+    if key == 'ui.checkbox.off' then
         kit = SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF or 1203
-    elseif key == 'ScrollBarStep' or key == 'ScrollBarThumbDown' then
+    elseif key == 'ui.scroll.step' or key == 'ui.scroll.thumb' then
         kit = SOUNDKIT and SOUNDKIT.IG_MINIMAP_OPEN or 891
-    elseif key == 'SwitchTab' then
+    elseif key == 'ui.tab.switch' then
         kit = SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION or 857
     end
     if PlaySound then pcall(PlaySound, kit) end
 end
 
--- 对象池（通用 API）
-function API.CreateObjectPool(createObjectFunc, onRemovedFunc, onAcquiredFunc)
+-- API.CreateObjectPool：重新实现为最简对象池（与参考插件无关的独立实现）
+function API.CreateObjectPool(createFunc, onAcquire, onRelease)
     local pool = {}
+    local free, used = {}, {}
 
-    local objects, active, unused = {}, {}, {}
-    local numUnused = 0
-
-    local function removeObject(obj)
-        obj:Hide()
-        obj:ClearAllPoints()
-        if obj.OnRemoved then obj:OnRemoved() end
-        if onRemovedFunc then onRemovedFunc(obj) end
-    end
-
-    local function recycleObject(obj)
-        for i, v in ipairs(active) do
-            if v == obj then
-                table.remove(active, i)
-                removeObject(obj)
-                numUnused = numUnused + 1
-                unused[numUnused] = obj
-                break
+    local function attachRelease(obj)
+        obj.Release = function(o)
+            for i, v in ipairs(used) do
+                if v == o then
+                    table.remove(used, i)
+                    if onRelease then onRelease(o) end
+                    o:Hide(); o:ClearAllPoints()
+                    free[#free+1] = o
+                    break
+                end
             end
         end
     end
 
-    local function createObject()
-        local obj = createObjectFunc()
-        table.insert(objects, obj)
-        obj.Release = function(o) recycleObject(o) end
-        return obj
-    end
-
     function pool:Acquire()
-        local obj
-        if numUnused > 0 then
-            obj = table.remove(unused, numUnused)
-            numUnused = numUnused - 1
-        end
-        if not obj then
-            obj = createObject()
-        end
-        table.insert(active, obj)
+        local obj = table.remove(free)
+        if not obj then obj = createFunc() end
+        used[#used+1] = obj
+        attachRelease(obj)
         obj:Show()
-        if onAcquiredFunc then onAcquiredFunc(obj) end
+        if onAcquire then onAcquire(obj) end
         return obj
     end
 
     function pool:ReleaseAll()
-        if #active == 0 then return end
-        for _, obj in ipairs(active) do removeObject(obj) end
-        active = {}
-        unused = {}
-        for i, obj in ipairs(objects) do unused[i] = obj end
-        numUnused = #objects
+        if #used == 0 then return end
+        for i = #used, 1, -1 do
+            local obj = used[i]
+            if onRelease then onRelease(obj) end
+            obj:Hide(); obj:ClearAllPoints()
+            free[#free+1] = obj
+            used[i] = nil
+        end
     end
 
     function pool:EnumerateActive()
-        return ipairs(active)
+        return ipairs(used)
     end
 
     function pool:CallMethod(method, ...)
-        for _, obj in ipairs(active) do
-            if obj[method] then obj[method](obj, ...) end
+        for _, obj in ipairs(used) do
+            local fn = obj and obj[method]
+            if fn then fn(obj, ...) end
         end
     end
 
     return pool
 end
 
--- LandingPageUtil.CreateObjectPool（别名封装）
-ADT.LandingPageUtil.CreateObjectPool = function(createFunc, onAcquiredFunc, onRemovedFunc)
-    return API.CreateObjectPool(createFunc, onRemovedFunc, onAcquiredFunc)
-end
+-- 历史别名说明：不再暴露任何额外别名，统一直接使用 API.CreateObjectPool
 
--- NineSlice 边框（通用 SliceFrameMixin 实现）
-function ADT.CreateNineSliceFrame(parent, themeName)
-    local f = CreateFrame('Frame', nil, parent)
-    f.pieces = {}
-    f.numSlices = 9
-    
-    -- 创建9个贴图切片
-    -- 1 2 3
-    -- 4 5 6
-    -- 7 8 9
-    for i = 1, 9 do
-        f.pieces[i] = f:CreateTexture(nil, 'BORDER')
-        API.DisableSharpening(f.pieces[i])
-        f.pieces[i]:ClearAllPoints()
-    end
-    
-    -- 布局：角的 CENTER 锚定到父级的四角
-    f.pieces[1]:SetPoint('CENTER', f, 'TOPLEFT', 0, 0)
-    f.pieces[3]:SetPoint('CENTER', f, 'TOPRIGHT', 0, 0)
-    f.pieces[7]:SetPoint('CENTER', f, 'BOTTOMLEFT', 0, 0)
-    f.pieces[9]:SetPoint('CENTER', f, 'BOTTOMRIGHT', 0, 0)
-    
-    f.pieces[2]:SetPoint('TOPLEFT', f.pieces[1], 'TOPRIGHT', 0, 0)
-    f.pieces[2]:SetPoint('BOTTOMRIGHT', f.pieces[3], 'BOTTOMLEFT', 0, 0)
-    f.pieces[4]:SetPoint('TOPLEFT', f.pieces[1], 'BOTTOMLEFT', 0, 0)
-    f.pieces[4]:SetPoint('BOTTOMRIGHT', f.pieces[7], 'TOPRIGHT', 0, 0)
-    f.pieces[5]:SetPoint('TOPLEFT', f.pieces[1], 'BOTTOMRIGHT', 0, 0)
-    f.pieces[5]:SetPoint('BOTTOMRIGHT', f.pieces[9], 'TOPLEFT', 0, 0)
-    f.pieces[6]:SetPoint('TOPLEFT', f.pieces[3], 'BOTTOMLEFT', 0, 0)
-    f.pieces[6]:SetPoint('BOTTOMRIGHT', f.pieces[9], 'TOPRIGHT', 0, 0)
-    f.pieces[8]:SetPoint('TOPLEFT', f.pieces[7], 'TOPRIGHT', 0, 0)
-    f.pieces[8]:SetPoint('BOTTOMRIGHT', f.pieces[9], 'BOTTOMLEFT', 0, 0)
-    
-    -- 默认纹理坐标
-    f.pieces[1]:SetTexCoord(0, 0.25, 0, 0.25)
-    f.pieces[2]:SetTexCoord(0.25, 0.75, 0, 0.25)
-    f.pieces[3]:SetTexCoord(0.75, 1, 0, 0.25)
-    f.pieces[4]:SetTexCoord(0, 0.25, 0.25, 0.75)
-    f.pieces[5]:SetTexCoord(0.25, 0.75, 0.25, 0.75)
-    f.pieces[6]:SetTexCoord(0.75, 1, 0.25, 0.75)
-    f.pieces[7]:SetTexCoord(0, 0.25, 0.75, 1)
-    f.pieces[8]:SetTexCoord(0.25, 0.75, 0.75, 1)
-    f.pieces[9]:SetTexCoord(0.75, 1, 0.75, 1)
-    
-    -- 默认角尺寸函数（先定义再调用，避免调用未定义方法）
-    function f:SetCornerSize(a)
-        self.pieces[1]:SetSize(a, a)
-        self.pieces[3]:SetSize(a, a)
-        self.pieces[7]:SetSize(a, a)
-        self.pieces[9]:SetSize(a, a)
-    end
-    -- 默认角尺寸
-    f:SetCornerSize(16)
-    
-    function f:SetDisableSharpening(state)
-        for _, piece in ipairs(self.pieces) do
-            piece:SetSnapToPixelGrid(not state)
-        end
-    end
-    
-    function f:SetTexture(texture)
-        for _, piece in ipairs(self.pieces) do
-            piece:SetTexture(texture)
-        end
-    end
-    
-    function f:SetUsingParentLevel(state)
-        -- 不做任何操作，保持默认行为
-    end
-    
-    function f:CoverParent(padding)
-        padding = padding or 0
-        local p = self:GetParent()
-        if p then
-            self:ClearAllPoints()
-            self:SetPoint('TOPLEFT', p, 'TOPLEFT', -padding, padding)
-            self:SetPoint('BOTTOMRIGHT', p, 'BOTTOMRIGHT', padding, -padding)
-        end
-    end
-    
-    function f:ShowBackground(state)
-        for _, piece in ipairs(self.pieces) do
-            piece:SetShown(state)
-        end
-    end
-    
-    return f
-end
-
-
--- LandingPageUtil.CreateExpansionThemeFrame（扩展页主题边框）
-function ADT.LandingPageUtil.CreateExpansionThemeFrame(parent, level)
-    local tex = "Interface/AddOns/AdvancedDecorationTools/Art/ExpansionLandingPage/ExpansionBorder_TWW"
-    
-    local f = ADT.CreateNineSliceFrame(parent, 'ExpansionBorder_TWW')
-    f:SetUsingParentLevel(true)
-    f:SetCornerSize(64, 64)
-    f:SetDisableSharpening(false)
-    f:CoverParent(-30)
-    
-    -- 背景（覆盖 NineSlice 默认的）
-    local Background = f:CreateTexture(nil, 'BACKGROUND')
-    f.Background = Background
-    Background:SetPoint('TOPLEFT', f.pieces[1], 'TOPLEFT', 4, -4)
-    Background:SetPoint('BOTTOMRIGHT', f.pieces[9], 'BOTTOMRIGHT', -4, 4)
-    Background:SetColorTexture(0.067, 0.040, 0.024)
-    
-    f:SetTexture(tex)
-    f.pieces[1]:SetTexCoord(0/1024, 128/1024, 0/1024, 128/1024)
-    f.pieces[2]:SetTexCoord(128/1024, 384/1024, 0/1024, 128/1024)
-    f.pieces[3]:SetTexCoord(384/1024, 512/1024, 0/1024, 128/1024)
-    f.pieces[4]:SetTexCoord(0/1024, 128/1024, 128/1024, 384/1024)
-    f.pieces[5]:SetTexCoord(128/1024, 384/1024, 128/1024, 384/1024)
-    f.pieces[6]:SetTexCoord(384/1024, 512/1024, 128/1024, 384/1024)
-    f.pieces[7]:SetTexCoord(0/1024, 128/1024, 384/1024, 512/1024)
-    f.pieces[8]:SetTexCoord(128/1024, 384/1024, 384/1024, 512/1024)
-    f.pieces[9]:SetTexCoord(384/1024, 512/1024, 384/1024, 512/1024)
-    
-    -- 关闭按钮
-    local CloseButton = CreateFrame('Button', nil, f)
-    f.CloseButton = CloseButton
-    CloseButton:Hide()
-    CloseButton:SetSize(32, 32)
-    CloseButton:SetPoint('CENTER', f.pieces[3], 'TOPRIGHT', -20.5, -20.5)
-    
-    CloseButton.Texture = CloseButton:CreateTexture(nil, 'OVERLAY')
-    CloseButton.Texture:SetPoint('CENTER', CloseButton, 'CENTER', 0, 0)
-    CloseButton.Texture:SetSize(24, 24)
-    CloseButton.Texture:SetTexture(tex)
-    CloseButton.Texture:SetTexCoord(646/1024, 694/1024, 48/1024, 96/1024)
-    
-    CloseButton.Highlight = CloseButton:CreateTexture(nil, 'HIGHLIGHT')
-    CloseButton.Highlight:SetPoint('CENTER', CloseButton, 'CENTER', 0, 0)
-    CloseButton.Highlight:SetSize(24, 24)
-    CloseButton.Highlight:SetTexture(tex)
-    CloseButton.Highlight:SetTexCoord(646/1024, 694/1024, 48/1024, 96/1024)
-    CloseButton.Highlight:SetBlendMode('ADD')
-    CloseButton.Highlight:SetAlpha(0.5)
-    
-    CloseButton:SetScript('OnClick', function(self)
-        if self.frameToClose then
-            if self.frameToClose.Close then
-                self.frameToClose:Close()
-            else
-                self.frameToClose:Hide()
-            end
-        end
-    end)
-    
-    -- ExpansionThemeFrame 的行为
-    function f:ShowCloseButton(state)
-        if state then
-            self.pieces[3]:SetTexCoord(518/1024, 646/1024, 48/1024, 176/1024)
-        else
-            self.pieces[3]:SetTexCoord(384/1024, 512/1024, 0/1024, 128/1024)
-        end
-        self.CloseButton:SetShown(state)
-    end
-    
-    function f:SetCloseButtonOwner(owner)
-        self.CloseButton.frameToClose = owner
-    end
-    
-    return f
-end
+-- 已移除自定义九宫格面板代码：统一使用暴雪内置 Atlas 与现有边框贴图即可。
 
 
 
