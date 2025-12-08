@@ -104,10 +104,12 @@ end
 local MainFrame = CreateFrame("Frame", nil, UIParent, "ADTSettingsPanelLayoutTemplate")
 CommandDock.SettingsPanel = MainFrame
 do
-    local frameKeys = {"LeftSection", "RightSection", "CentralSection", "SideTab", "TabButtonContainer", "ModuleTab", "ChangelogTab"}
+    local frameKeys = {"LeftSection", "RightSection", "CentralSection", "SideTab", "TabButtonContainer", "ModuleTab", "ChangelogTab", "TopTabOwner"}
     for _, key in ipairs(frameKeys) do
         MainFrame[key] = MainFrame.FrameContainer[key]
     end
+    -- 顶部标签回退为左右布局：隐藏顶栏托管容器，避免遮挡
+    if MainFrame.TopTabOwner then MainFrame.TopTabOwner:Hide() end
 
     -- 创建专用边框Frame（确保在所有子内容之上）
     local BorderFrame = CreateFrame("Frame", nil, MainFrame)
@@ -138,6 +140,77 @@ end
 local SearchBox
 local CategoryHighlight
 local ActiveCategoryInfo = {}
+
+-- 动态收敛左侧分类容器高度
+function MainFrame:UpdateLeftSectionHeight()
+    local LeftSection = self.LeftSection
+    if not LeftSection then return end
+    local n = 0
+    if self.primaryCategoryPool and self.primaryCategoryPool.EnumerateActive then
+        for _ in self.primaryCategoryPool:EnumerateActive() do n = n + 1 end
+    end
+    local topPad = Def.WidgetGap or 14
+    local height = math.max(Def.ButtonSize or 28, topPad + n * (Def.ButtonSize or 28) + topPad)
+    LeftSection:SetHeight(height)
+end
+
+-- 启用“上下布局 + 顶部标签”
+local USE_TOP_TABS = false
+
+-- 顶部标签系统初始化（基于 TabSystemOwner + TabSystemTopButtonTemplate）
+function MainFrame:InitTopTabs()
+    if not USE_TOP_TABS then return end
+    if not (self.TopTabOwner and self.TopTabOwner.TabSystem) then return end
+
+    self.TopTabOwner:SetTabSystem(self.TopTabOwner.TabSystem)
+
+    self.__tabKeyFromID = {}
+    self.__tabIDFromKey = {}
+
+    local list = CommandDock:GetSortedModules() or {}
+    for _, info in ipairs(list) do
+        local tabID = self.TopTabOwner:AddNamedTab(info.categoryName)
+        self.__tabKeyFromID[tabID] = info.key
+        self.__tabIDFromKey[info.key] = tabID
+
+        -- 捕获每次循环的局部值，避免闭包引用同一 upvalue
+        local catKey = info.key
+        local catType = info.categoryType
+
+        -- 选中回调：按分类类型分派到现有渲染函数；若内容未初始化则缓存待应用
+        self.TopTabOwner:SetTabCallback(tabID, function(isUserAction)
+            if not (self.ModuleTab and self.ModuleTab.ScrollView) then
+                self.__pendingTabKey = catKey
+                return
+            end
+            if catType == 'decorList' then
+                self:ShowDecorListCategory(catKey)
+            elseif catType == 'about' then
+                self:ShowAboutCategory(catKey)
+            else
+                self:ShowSettingsCategory(catKey)
+            end
+        end)
+    end
+
+    -- 记录待应用默认标签，等内容区创建后再选中
+    self.__pendingTabKey = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or 'Housing'
+end
+
+-- 空壳下方拼接弹窗（与主弹窗宽度一致）
+-- 预声明：将在 CreateSettingsHeader 定义之后真正实现 EnsureSubPanel
+function MainFrame:EnsureSubPanel() end
+function MainFrame:SetSubPanelShown(_) end
+function MainFrame:SetSubPanelHeight(_) end
+
+function MainFrame:ApplyInitialTabSelection()
+    if not (USE_TOP_TABS and self.TopTabOwner and self.__tabIDFromKey) then return end
+    if not (self.ModuleTab and self.ModuleTab.ScrollView) then return end
+    local key = self.__pendingTabKey or 'Housing'
+    local id = self.__tabIDFromKey[key] or 1
+    self.TopTabOwner:SetTab(id)
+    self.__pendingTabKey = nil
+end
 
 
 -- 取消通用“贴图换肤”函数，全面改用暴雪内置 Atlas/模板
@@ -1042,6 +1115,68 @@ do
 end
 
 
+-- 在通用 Header 构造函数定义完毕后，再实现“下方空壳弹窗”，以复用同一 Header 逻辑
+function MainFrame:EnsureSubPanel()
+    if self.SubPanel then return self.SubPanel end
+
+    local sub = CreateFrame("Frame", nil, self)
+    self.SubPanel = sub
+    -- 与主面板下边无缝拼接；宽度与右侧区域一致
+    local leftOffset = tonumber(self.sideSectionWidth) or ComputeSideSectionWidth() or 180
+    sub:SetPoint("TOPLEFT", self, "BOTTOMLEFT", leftOffset, 0)
+    sub:SetPoint("TOPRIGHT", self, "BOTTOMRIGHT", 0, 0)
+    sub:SetHeight(160)
+    sub:SetFrameStrata(self:GetFrameStrata())
+    sub:SetFrameLevel(self:GetFrameLevel())
+
+    -- 边框与背景：保持与主面板一致
+    local borderFrame = CreateFrame("Frame", nil, sub)
+    borderFrame:SetAllPoints(sub)
+    borderFrame:SetFrameLevel(sub:GetFrameLevel() + 100)
+    sub.BorderFrame = borderFrame
+    local border = borderFrame:CreateTexture(nil, "OVERLAY")
+    border:SetPoint("TOPLEFT", borderFrame, "TOPLEFT", -4, 4)
+    border:SetPoint("BOTTOMRIGHT", borderFrame, "BOTTOMRIGHT", 4, -4)
+    border:SetAtlas("housing-wood-frame")
+    border:SetTextureSliceMargins(16, 16, 16, 16)
+    border:SetTextureSliceMode(Enum.UITextureSliceMode.Stretched)
+    borderFrame.WoodFrame = border
+
+    local bg = sub:CreateTexture(nil, "BACKGROUND")
+    bg:SetAtlas("housing-basic-panel-background")
+    bg:SetPoint("TOPLEFT", sub, "TOPLEFT", -4, -2)
+    bg:SetPoint("BOTTOMRIGHT", sub, "BOTTOMRIGHT", -2, 2)
+    sub.Background = bg
+
+    -- 统一内容容器
+    local content = CreateFrame("Frame", nil, sub)
+    content:SetPoint("TOPLEFT", sub, "TOPLEFT", 10, -8)
+    content:SetPoint("BOTTOMRIGHT", sub, "BOTTOMRIGHT", -10, 10)
+    sub.Content = content
+
+    -- 复用通用 Header：作为子弹窗标题（占位符）
+    local header = CreateSettingsHeader(content)
+    header:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+    header:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, 0)
+    header:SetHeight(Def.ButtonSize)
+    header:SetText("扩展面板（占位标题）")
+    sub.Header = header
+
+    sub:Hide()
+    return sub
+end
+
+function MainFrame:SetSubPanelShown(shown)
+    if not self.SubPanel then return end
+    self.SubPanel:SetShown(shown)
+end
+
+function MainFrame:SetSubPanelHeight(height)
+    if not self.SubPanel then return end
+    self.SubPanel:SetHeight(tonumber(height) or 160)
+end
+
+
 local CreateSelectionHighlight
 do
     local SelectionHighlightMixin = {}
@@ -1105,6 +1240,7 @@ end
 
 do  -- Left Section
     function MainFrame:HighlightButton(button)
+        if not CategoryHighlight then return end
         CategoryHighlight:Hide()
         CategoryHighlight:ClearAllPoints()
         if button then
@@ -1408,6 +1544,10 @@ do  -- Central
 
     -- 仅显示一个“设置类”分类（不与其它分类混排）
     function MainFrame:ShowSettingsCategory(categoryKey)
+        if not (self.ModuleTab and self.ModuleTab.ScrollView) then
+            self.__pendingTabKey = categoryKey
+            return
+        end
         local cat = CommandDock:GetCategoryByKey(categoryKey)
         if not cat or cat.categoryType ~= 'settings' then return end
 
@@ -1496,18 +1636,16 @@ do  -- Central
     end
 
     function MainFrame:RefreshCategoryList()
+        if not self.primaryCategoryPool then return end
         self.primaryCategoryPool:ReleaseAll()
         for index, categoryInfo in ipairs(CommandDock:GetSortedModules()) do
             local categoryButton = self.primaryCategoryPool:Acquire()
             categoryButton:SetCategory(categoryInfo.key, categoryInfo.categoryName, categoryInfo.anyNewFeature)
             categoryButton:SetPoint("TOPLEFT", self.LeftSection, self.primaryCategoryPool.offsetX, self.primaryCategoryPool.leftListFromY - (index - 1) * Def.ButtonSize)
-            
-            -- 装饰列表分类显示数量角标
-            if categoryInfo.categoryType == 'decorList' then
-                local count = CommandDock:GetDecorListCount(categoryInfo.key)
-                categoryButton:ShowCount(count > 0 and count or nil)
-            end
+            -- 根据需求取消临时板/最近放置的数量角标显示，避免不必要的数据遍历
         end
+        -- 动态收敛左侧容器高度：根据分类数量计算
+        self:UpdateLeftSectionHeight()
         -- 保持现有宽度；语言切换时由 RefreshLanguageLayout(true) 统一处理动画与宽度
     end
 
@@ -1517,6 +1655,10 @@ do  -- Central
 
     -- 显示装饰列表分类（临时板或最近放置）
     function MainFrame:ShowDecorListCategory(categoryKey)
+        if not (self.ModuleTab and self.ModuleTab.ScrollView) then
+            self.__pendingTabKey = categoryKey
+            return
+        end
         local cat = CommandDock:GetCategoryByKey(categoryKey)
         if not cat or cat.categoryType ~= 'decorList' then return end
         
@@ -1660,6 +1802,10 @@ do  -- Central
 
     -- 显示信息分类（关于插件）
     function MainFrame:ShowAboutCategory(categoryKey)
+        if not (self.ModuleTab and self.ModuleTab.ScrollView) then
+            self.__pendingTabKey = categoryKey
+            return
+        end
         local cat = CommandDock:GetCategoryByKey(categoryKey)
         if not cat or cat.categoryType ~= 'about' then return end
         
@@ -1736,6 +1882,7 @@ local function CreateUI()
     
     -- 紧凑布局：左侧宽度按“分类文本宽度”动态计算
     local sideSectionWidth = ComputeSideSectionWidth()
+    MainFrame.sideSectionWidth = sideSectionWidth
     local centralSectionWidth = 340  -- 中间：图标 + 长装饰名称(如"小型锯齿奥格瑞玛栅栏") + 数量
     
     MainFrame:SetSize(sideSectionWidth + centralSectionWidth, pageHeight)
@@ -1759,6 +1906,42 @@ local function CreateUI()
         end
     end)
     MainFrame:SetClampedToScreen(true)
+
+    -- 顶部大 Header（对标 HouseEditor Storage 视觉）
+    do
+        local headerHeight = 68
+        local Header = CreateFrame("Frame", nil, MainFrame)
+        MainFrame.Header = Header
+        -- Header 仅覆盖右侧区域（不延伸到左侧分类区）
+        Header:SetPoint("TOPLEFT", MainFrame, "TOPLEFT", sideSectionWidth, 0)
+        Header:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
+        Header:SetHeight(headerHeight)
+
+        local bg = Header:CreateTexture(nil, "ARTWORK")
+        MainFrame.HeaderBackground = bg
+        bg:SetAtlas("house-chest-header-bg")
+        -- 直接铺满 Header 区域（Header 高度 68），并放在 ARTWORK 层级，以确保不被右侧黑底覆盖
+        bg:SetAllPoints(Header)
+
+        local title = Header:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        MainFrame.HeaderTitle = title
+        title:SetPoint("LEFT", Header, "LEFT", 22, -10)
+        title:SetJustifyH("LEFT")
+        title:SetText((ADT.L and ADT.L['Addon Full Name']) or '高级装修工具')
+
+        -- 向下顺延主体区域：将左右分栏的顶部锚到 Header 底部
+        if MainFrame.LeftSection then
+            MainFrame.LeftSection:ClearAllPoints()
+            -- 左侧分类容器顶对 Header 底部，高度稍后按内容动态设置
+            MainFrame.LeftSection:SetPoint("TOPLEFT", MainFrame, "TOPLEFT", 0, -headerHeight)
+        end
+
+        if MainFrame.RightSection then
+            MainFrame.RightSection:ClearAllPoints()
+            MainFrame.RightSection:SetPoint("TOPRIGHT", Header, "BOTTOMRIGHT", 0, 0)
+            MainFrame.RightSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
+        end
+    end
 
     -- 允许缩放 + 右下角手柄（仅改变右侧内容宽度）
     do
@@ -1831,22 +2014,23 @@ local function CreateUI()
     local RightSection = MainFrame.RightSection
     local Tab1 = MainFrame.ModuleTab
 
+    -- 顶部标签布局：左侧压缩为 0 宽度
     LeftSection:SetWidth(sideSectionWidth)
     
     -- 修复：不隐藏 RightSection，而是将 CentralSection 的右边直接锚定到 MainFrame
     -- 这样可以避免 XML 中定义的锚点导致的布局问题
     RightSection:SetWidth(0)
     RightSection:ClearAllPoints()
-    RightSection:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
+    RightSection:SetPoint("TOPRIGHT", MainFrame.Header or MainFrame, "BOTTOMRIGHT", 0, 0)
     RightSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
     
-    -- 重设 CentralSection 的右边锚点
+    -- 重设 CentralSection 的锚点：顶部位于 Header 下方
     CentralSection:ClearAllPoints()
     CentralSection:SetPoint("TOPLEFT", LeftSection, "TOPRIGHT", 0, 0)
     CentralSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
 
 
-    -- LeftSection
+    -- LeftSection：恢复左侧分类 + 右侧内容的左右布局
     do
         -- 暂时隐藏搜索功能，保留代码方便以后恢复
         --[[
@@ -1887,8 +2071,17 @@ local function CreateUI()
         MainFrame.primaryCategoryPool.offsetX = Def.WidgetGap
 
 
-        CategoryHighlight = CreateSelectionHighlight(Tab1)
-        CategoryHighlight:SetSize(categoryButtonWidth, Def.ButtonSize)
+    CategoryHighlight = CreateSelectionHighlight(Tab1)
+    CategoryHighlight:SetSize(categoryButtonWidth, Def.ButtonSize)
+
+        -- 重设主木质边框范围：仅包裹右侧区域（含 Header）
+        if MainFrame.BorderFrame then
+            local bf = MainFrame.BorderFrame
+            bf:ClearAllPoints()
+            -- 边框应覆盖整个右侧面板：从 Header 左缘（即右侧区域左缘）到主面板右下角
+            bf:SetPoint("TOPLEFT", MainFrame.Header or MainFrame, "TOPLEFT", 0, 0)
+            bf:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
+        end
 
         -- 左侧面板采用完整九宫格框体（The War Within 卡片风格）
         do
@@ -1934,12 +2127,14 @@ local function CreateUI()
 
 
     do  -- CentralSection（设置列表所在区域）
-        -- 使用 Housing 基础面板背景（更通用的面板底纹）；移除遮罩层，按你的最新偏好保持原始透明度
-        local Background = CentralSection:CreateTexture(nil, "BACKGROUND")
+        -- 右侧整体黑色背景：覆盖到 Header 区域，保证顶部也有底纹
+        if MainFrame.RightBackground then MainFrame.RightBackground:Hide() end
+        local Background = MainFrame:CreateTexture(nil, "BACKGROUND")
+        MainFrame.RightBackground = Background
         Background:SetAtlas("housing-basic-panel-background")
-        -- 适度内缩，让边缘花纹不被边框压住
-        Background:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", -4, -2)
-        Background:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", -2, 2)
+        -- 顶部从 Header 顶边开始，左缘从 Header 左边开始（Header 已经只覆盖右侧区）
+        Background:SetPoint("TOPLEFT", MainFrame.Header or MainFrame, "TOPLEFT", 0, 0)
+        Background:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", -2, 2)
 
 
         -- 暂不显示自研滚动条，后续将切换为暴雪 ScrollBox 体系
@@ -1960,7 +2155,18 @@ local function CreateUI()
 
 
         -- 初始右侧可用宽度，随着窗口缩放动态更新
-        MainFrame.centerButtonWidth = API.Round(CentralSection:GetWidth() - 2*Def.ButtonSize)
+        local function ComputeCenterWidth()
+            local w = tonumber(CentralSection:GetWidth()) or 0
+            if w <= 0 then
+                local total = tonumber(MainFrame:GetWidth()) or 0
+                local leftw = tonumber(MainFrame.sideSectionWidth) or 0
+                w = math.max(0, total - leftw)
+            end
+            w = API.Round(w - 2*Def.ButtonSize)
+            if w < 120 then w = 120 end
+            return w
+        end
+        MainFrame.centerButtonWidth = ComputeCenterWidth()
         Def.centerButtonWidth = MainFrame.centerButtonWidth
 
 
@@ -1995,6 +2201,9 @@ local function CreateUI()
 
     -- 取消自定义边框相关占位与调用，改由顶部 UIPanelCloseButton 控制关闭
 
+    -- 中央内容区创建完毕，应用待选标签
+    MainFrame:ApplyInitialTabSelection()
+
 
     -- 打开时恢复到上次选中的分类/视图
     function MainFrame:HighlightCategoryByKey(key)
@@ -2009,6 +2218,13 @@ local function CreateUI()
 
     Tab1:SetScript("OnShow", function()
         local key = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or MainFrame.currentDecorCategory or MainFrame.currentAboutCategory or MainFrame.currentSettingsCategory
+        if USE_TOP_TABS and MainFrame.TopTabOwner and MainFrame.__tabIDFromKey then
+            local id = MainFrame.__tabIDFromKey[key] or MainFrame.__tabIDFromKey['Housing'] or 1
+            MainFrame.TopTabOwner:SetTab(id)
+            return
+        end
+
+        -- 旧布局回退逻辑
         local cat = key and CommandDock:GetCategoryByKey(key) or nil
         if cat and cat.categoryType == 'decorList' then
             MainFrame:ShowDecorListCategory(key)
@@ -2041,7 +2257,11 @@ local function CreateUI()
     MainFrame:SetScript("OnSizeChanged", function(self)
         local CentralSection = self.CentralSection
         if not CentralSection or not self.ModuleTab or not self.ModuleTab.ScrollView then return end
-        local newWidth = API.Round(CentralSection:GetWidth() - 2*Def.ButtonSize)
+        local total = tonumber(self:GetWidth()) or 0
+        local leftw = tonumber(self.sideSectionWidth) or 0
+        local w = tonumber(CentralSection:GetWidth()) or (total - leftw)
+        local newWidth = API.Round((w or 0) - 2*Def.ButtonSize)
+        if newWidth < 120 then newWidth = 120 end
         if newWidth <= 0 then return end
         if self.centerButtonWidth ~= newWidth then
             self.centerButtonWidth = newWidth
@@ -2106,7 +2326,9 @@ function MainFrame:ShowUI(mode)
         CreateUI = nil
 
         CommandDock:UpdateCurrentSortMethod()
-        self:RefreshCategoryList()
+        if self.primaryCategoryPool then
+            self:RefreshCategoryList()
+        end
     end
 
     mode = mode or "standalone"
@@ -2116,6 +2338,9 @@ function MainFrame:ShowUI(mode)
     if ADT and ADT.RestoreFramePosition then
         ADT.RestoreFramePosition("SettingsPanelPos", self)
     end
+    -- 确保并显示下方空壳弹窗，默认高度 160，可后续调整
+    self:EnsureSubPanel()
+    self:SetSubPanelShown(true)
     self:Show()
 end
 
