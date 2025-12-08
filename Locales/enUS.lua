@@ -18,6 +18,9 @@ ADT.Locales.enUS = {
     ["Hotkey Store"] = "Store",
     ["Hotkey Recall"] = "Recall",
     ["Hotkey BatchPlace"] = "Batch Place",
+    -- Reset hints (missing keys previously caused English fallback in zhCN)
+    ["Reset Current"] = "Reset",
+    ["Reset All"] = "Reset All",
     ["Duplicate Decor Key"] = "\"Duplicate\" Key",
     ["Enable Duplicate"] = "Enable CTRL+D Duplicate",
     ["Enable Duplicate tooltip"] = "While in Decorate Mode, you can hover the cursor over a decor and then press a key to place another instance of this object.",
@@ -132,6 +135,9 @@ ADT.Locales.zhCN = {
     ["Hotkey Store"] = "存储",
     ["Hotkey Recall"] = "读取",
     ["Hotkey BatchPlace"] = "批量放置",
+    -- Reset hints
+    ["Reset Current"] = "重置",
+    ["Reset All"] = "全部重置",
     ["Duplicate Decor Key"] = "重复热键",
     ["Enable Duplicate"] = "启用 CTRL+D 重复",
     ["Enable Duplicate tooltip"] = "在装饰模式下，鼠标悬停装饰后按下热键，可直接放置一个同款新实例。",

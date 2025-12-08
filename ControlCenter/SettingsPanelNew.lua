@@ -30,19 +30,69 @@ local Def = {
     TextColorNonInteractable = {148/255, 124/255, 102/255},
     TextColorDisabled = {0.5, 0.5, 0.5},
     TextColorReadable = {163/255, 157/255, 147/255},
+    -- 右侧内容区域左侧统一内边距（从左侧容器右边框算起，需与左侧 Category 按钮到右边框的边距一致：Def.WidgetGap）
+    -- 注意：实际读取请使用 GetRightPadding() 以保证与 Def.WidgetGap 一致。
+    RightContentPaddingLeft = 14,
+    -- 左侧分类：标题与数量的视觉间隔以及为数量预留的宽度
+    CategoryLabelToCountGap = 8,
+    CountTextWidthReserve = 22,
+    -- 与 Entry 模板保持一致的左内边距（ADTSettingsPanelEntryTemplate 中文本的 x 偏移）
+    EntryLabelLeftInset = 28,
+    -- Header 左移微调（用于靠近渐变边缘，但不顶边）
+    HeaderLeftNudge = 8,
+    -- About(信息) 面板的纯文本行相对容器的额外左内边距（不使用图标位）
+    AboutTextExtraLeft = 0,
 }
 
+-- 单一权威：右侧内容起始的左内边距，强制与左侧 Category 的外边距一致
+local function GetRightPadding()
+    return Def.WidgetGap
+end
 
--- 依据当前语言返回左侧栏目标宽度（单一权威）
-local function GetSideSectionWidthByLocale()
-    local lang = tostring((ADT and ADT.CurrentLocale) or (GetLocale and GetLocale()) or "enUS")
-    if lang:sub(1, 2) == "en" or lang == "enUS" or lang == "enGB" then
-        return 180 -- 英文更宽，避免单词截断
-    elseif lang == "zhCN" then
-        return 140 -- 中文更紧凑
-    else
-        return 150 -- 其他语言兜底
+
+-- 依据“实际分类文本宽度”动态计算左侧栏目标宽度（单一权威）
+-- 说明：不再使用按语种的固定值；改为测量当前语言下所有分类标题的像素宽度，
+--       再加上控件自身的左右留白，得到最小充分宽度。
+local function ComputeSideSectionWidth()
+    local labelOffset = 9                -- 与 CategoryButton 的 labelOffset 保持一致
+    local meterParent = MainFrame or UIParent
+    -- 复用隐藏量尺，避免频繁创建对象
+    if not meterParent._ADT_TextMeter then
+        local m = meterParent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        m:Hide()
+        meterParent._ADT_TextMeter = m
     end
+    local M = meterParent._ADT_TextMeter
+
+    local function textWidth(text)
+        M:SetText(text or "")
+        local w = math.ceil(M:GetStringWidth() or 0)
+        M:SetText("")
+        return w
+    end
+
+    local maxLabel = 0
+    -- 直接用数据源的分类名称测量，避免按钮本身宽度限制导致的“被截断宽度”。
+    if ControlCenter and ControlCenter.GetSortedModules then
+        local list = ControlCenter:GetSortedModules() or {}
+        for _, cat in ipairs(list) do
+            maxLabel = math.max(maxLabel, textWidth(cat.categoryName))
+        end
+    end
+    -- 兜底：如果数据源不可用，再尝试已创建的按钮标签
+    if maxLabel == 0 and MainFrame and MainFrame.primaryCategoryPool and MainFrame.primaryCategoryPool.EnumerateActive then
+        for _, btn in MainFrame.primaryCategoryPool:EnumerateActive() do
+            if btn and btn.Label and btn.Label.GetText then
+                maxLabel = math.max(maxLabel, textWidth(btn.Label:GetText() or ""))
+            end
+        end
+    end
+
+    -- 计算按钮与侧栏总宽度：按钮左右文本留白 + 计数区域预留(14) + 左侧区域两侧边距
+    local buttonWidth = maxLabel + 2*labelOffset + Def.CountTextWidthReserve + Def.CategoryLabelToCountGap
+    local sideWidth = buttonWidth + 2*Def.WidgetGap
+    -- 返回整数像素，避免锯齿
+    return API.Round(sideWidth)
 end
 
 
@@ -702,8 +752,11 @@ do
 
         local CountContainer = CreateFrame("Frame", nil, f)
         f.CountContainer = CountContainer
-        CountContainer:SetSize(Def.ButtonSize, Def.ButtonSize)
-        CountContainer:SetPoint("RIGHT", f, "RIGHT", 0, 0)
+        -- 使用固定宽度，防止数字位数变化造成视觉跳动（单一权威：与 ComputeSideSectionWidth 里的预留一致）
+        local countWidth = Def.CountTextWidthReserve or 22
+        CountContainer:SetSize(countWidth, Def.ButtonSize)
+        -- 右侧外边距与左侧 labelOffset 对称：9px
+        CountContainer:SetPoint("RIGHT", f, "RIGHT", -f.labelOffset, 0)
         CountContainer:Hide()
         CountContainer:SetAlpha(0)
         MakeFadingObject(CountContainer)
@@ -711,7 +764,9 @@ do
 
         f.Count = CountContainer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         f.Count:SetJustifyH("RIGHT")
-        f.Count:SetPoint("RIGHT", CountContainer, "RIGHT", -9, 0)
+        -- 数字右内边距 2px，避免贴边；与容器宽度分离以获得更稳定的视觉对齐
+        f.Count:ClearAllPoints()
+        f.Count:SetPoint("RIGHT", CountContainer, "RIGHT", -2, 0)
         SetTextColor(f.Count, Def.TextColorNonInteractable)
 
         f:SetScript("OnEnter", f.OnEnter)
@@ -870,7 +925,9 @@ do
         if self.virtual then
             self:Enable()
             self.OptionToggle:SetShown(self.hasOptions)
-            SetTexCoord(self.Box, 737, 783, 65, 111)  -- +1px inset 去除边缘伪影
+            -- 改为使用“方块点”示意（虚拟条目预览也统一用方块点）
+            -- 选中对勾正下方那格（保持同一列）：x=737~783, y=65~111（已做 +1px inset）
+            SetTexCoord(self.Box, 737, 783, 65, 111)
             return
         end
         
@@ -897,9 +954,12 @@ do
 
         if GetDBBool(self.dbKey) then
             if disabled then
-                SetTexCoord(self.Box, 785, 831, 65, 111)  -- +1px inset
+                -- 选中但禁用：维持禁用选中贴图（灰度样式）
+                SetTexCoord(self.Box, 785, 831, 65, 111)  -- +1px inset 灰样式
             else
-                SetTexCoord(self.Box, 737, 783, 17, 63)  -- +1px inset ✓ checked
+                -- 选中：由原对勾改为“对勾正下方的方块点”
+                -- 同列坐标：x=737~783, y=65~111
+                SetTexCoord(self.Box, 737, 783, 65, 111)
             end
             self.OptionToggle:SetShown(self.hasOptions)
         else
@@ -972,16 +1032,38 @@ do
         self.Label:SetText(text)
     end
 
+    function HeaderMixin:SetLeftPadding(pixels)
+        local x = tonumber(pixels) or 8
+        if self.Label then
+            self.Label:ClearAllPoints()
+            self.Label:SetPoint("BOTTOMLEFT", self, "LEFT", x, 5)
+        end
+        if self.Divider then
+            self.Divider:ClearAllPoints()
+            self.Divider:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", x, 6)
+            self.Divider:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, 6)
+        end
+    end
+
 
     function CreateSettingsHeader(parent)
         local f = CreateFrame("Frame", nil, parent, "ADTSettingsPanelHeaderTemplate")
         Mixin(f, HeaderMixin)
         SetTextColor(f.Label, Def.TextColorNonInteractable)
 
-        SkinObjects(f, Def.TextureFile)
-        SetTexCoord(f.Left, 416, 456, 80, 120)
-        SetTexCoord(f.Right, 456, 736, 80, 120)
+        -- 使用 Housing 风格分割线，弃用旧的 SettingsPanel 贴片
+        if f.Left then f.Left:Hide() end
+        if f.Right then f.Right:Hide() end
 
+        local divider = f:CreateTexture(nil, "ARTWORK")
+        f.Divider = divider
+        divider:SetAtlas("house-upgrade-header-divider-horz")
+        divider:SetHeight(2)
+        -- 具体锚点在 SetLeftPadding 中与内容对齐
+
+        -- 统一左边距：标题与右侧内容共用同一左起点（不对齐到图标位）
+        local defaultHeaderLeft = GetRightPadding()
+        f:SetLeftPadding(defaultHeaderLeft)
         return f
     end
 end
@@ -1141,6 +1223,10 @@ do
         SetTexCoord(f.Left, 0, 32, 80, 160)
         SetTexCoord(f.Center, 32, 160, 80, 160)
         SetTexCoord(f.Right, 160, 192, 80, 160)
+        -- 提升到 ARTWORK 层，确保不被左侧背景覆盖
+        if f.Left and f.Left.SetDrawLayer then f.Left:SetDrawLayer("ARTWORK") end
+        if f.Center and f.Center.SetDrawLayer then f.Center:SetDrawLayer("ARTWORK") end
+        if f.Right and f.Right.SetDrawLayer then f.Right:SetDrawLayer("ARTWORK") end
 
         f.d = 0.6
         f:Hide()
@@ -1182,7 +1268,7 @@ do  -- Left Section
                     button:SetSize(btnWidth, Def.ButtonSize)
                 end
                 if button and button.Label and button.labelOffset then
-                    button.Label:SetWidth(btnWidth - 2*button.labelOffset - 14)
+                    button.Label:SetWidth(btnWidth - 2*button.labelOffset - (Def.CountTextWidthReserve + Def.CategoryLabelToCountGap))
                 end
             end
         end
@@ -1236,7 +1322,7 @@ do  -- Left Section
     end
 
     function MainFrame:RefreshLanguageLayout(animated)
-        local target = GetSideSectionWidthByLocale()
+        local target = ComputeSideSectionWidth()
         if animated then
             self:AnimateSideWidthTo(target)
         else
@@ -1339,7 +1425,8 @@ do  -- Central
         local categoryGap = Def.CategoryGap
         local buttonGap = 0
         local subOptionOffset = Def.ButtonSize
-        local offsetX = 0
+        -- 右侧内容整体左内边距（不移动各小节 Header）
+        local offsetX = GetRightPadding()
 
         ActiveCategoryInfo = {}
         self.firstModuleData = nil
@@ -1369,16 +1456,18 @@ do  -- Central
                     templateKey = "Header",
                     setupFunc = function(obj)
                         obj:SetText(categoryInfo.categoryName)
-                        -- 确保纹理可见（对象池复用时可能被隐藏）
-                        if obj.Left then obj.Left:Show() end
-                        if obj.Right then obj.Right:Show() end
+                        -- 使用 Housing 分割线
+                        if obj.Left then obj.Left:Hide() end
+                        if obj.Right then obj.Right:Hide() end
+                        if obj.Divider then obj.Divider:Show() end
                         obj.Label:SetJustifyH("LEFT")
                     end,
                     point = "TOPLEFT",
                     relativePoint = "TOPLEFT",
                     top = top,
                     bottom = bottom,
-                    offsetX = offsetX,
+                    -- Header 与右侧内容共用同一左起点
+                    offsetX = GetRightPadding(),
                 }
                 offsetY = bottom
 
@@ -1452,6 +1541,7 @@ do  -- Central
                 categoryButton:ShowCount(count > 0 and count or nil)
             end
         end
+        -- 保持现有宽度；语言切换时由 RefreshLanguageLayout(true) 统一处理动画与宽度
     end
 
     function MainFrame:UpdateSettingsEntries()
@@ -1473,7 +1563,8 @@ do  -- Central
         local fromOffsetY = Def.ButtonSize
         local offsetY = fromOffsetY
         local buttonGap = 2
-        local offsetX = 0
+        -- 右侧内容左内边距（Header 同步此起点）
+        local offsetX = GetRightPadding()
         
         -- 添加标题（左对齐锚点）
         n = n + 1
@@ -1482,16 +1573,17 @@ do  -- Central
             templateKey = "Header",
             setupFunc = function(obj)
                 obj:SetText(cat.categoryName)
-                -- 确保纹理可见
-                if obj.Left then obj.Left:Show() end
-                if obj.Right then obj.Right:Show() end
+                -- 标题使用 Housing 分割线
+                if obj.Left then obj.Left:Hide() end
+                if obj.Right then obj.Right:Hide() end
+                if obj.Divider then obj.Divider:Show() end
                 obj.Label:SetJustifyH("LEFT")
             end,
             point = "TOPLEFT",
             relativePoint = "TOPLEFT",
             top = offsetY,
             bottom = offsetY + Def.ButtonSize,
-            offsetX = offsetX,
+            offsetX = GetRightPadding(),
         }
         offsetY = offsetY + Def.ButtonSize
         
@@ -1513,6 +1605,7 @@ do  -- Central
                     -- 仅保留页面主标题的分隔纹理；空列表提示不显示分隔线
                     if obj.Left then obj.Left:Hide() end
                     if obj.Right then obj.Right:Hide() end
+                    if obj.Divider then obj.Divider:Hide() end
                     obj.Label:SetJustifyH("LEFT")
                 end,
                 point = "TOPLEFT",
@@ -1536,6 +1629,7 @@ do  -- Central
                             -- 空列表第二行同样不显示分隔线
                             if obj.Left then obj.Left:Hide() end
                             if obj.Right then obj.Right:Hide() end
+                            if obj.Divider then obj.Divider:Hide() end
                             obj.Label:SetJustifyH("LEFT")
                         end,
                         point = "TOPLEFT",
@@ -1610,7 +1704,8 @@ do  -- Central
         local buttonHeight = Def.ButtonSize
         local fromOffsetY = Def.ButtonSize
         local offsetY = fromOffsetY
-        local offsetX = 0
+        -- 右侧内容左内边距（Header 同步此起点）
+        local offsetX = GetRightPadding()
         
         -- 添加标题（保留分隔线，左对齐锚点）
         n = n + 1
@@ -1619,20 +1714,21 @@ do  -- Central
             templateKey = "Header",
             setupFunc = function(obj)
                 obj:SetText(cat.categoryName)
-                -- 确保标题的分隔线可见
-                if obj.Left then obj.Left:Show() end
-                if obj.Right then obj.Right:Show() end
+                -- 确保标题的分割线可见（Housing 风格）
+                if obj.Left then obj.Left:Hide() end
+                if obj.Right then obj.Right:Hide() end
+                if obj.Divider then obj.Divider:Show() end
                 obj.Label:SetJustifyH("LEFT") -- 标题左对齐
             end,
             point = "TOPLEFT",
             relativePoint = "TOPLEFT",
             top = offsetY,
             bottom = offsetY + Def.ButtonSize,
-            offsetX = offsetX,
+            offsetX = GetRightPadding(),
         }
         offsetY = offsetY + Def.ButtonSize * 2
         
-        -- 添加信息文本（隐藏分隔线，居中显示）
+        -- 添加信息文本（隐藏分隔线，更靠左对齐；信息面板不占用 Entry 的“图标位”）
         if cat.getInfoText then
             local infoText = cat.getInfoText()
             -- 按换行符拆分
@@ -1643,10 +1739,13 @@ do  -- Central
                     templateKey = "Header",
                     setupFunc = function(obj)
                         obj:SetText(line)
-                        obj.Label:SetJustifyH("CENTER") -- 内容居中
-                        -- 隐藏分隔线纹理
+                        obj.Label:SetJustifyH("LEFT") -- 信息行更靠左
+                        -- 隐藏分割线纹理
                         if obj.Left then obj.Left:Hide() end
                         if obj.Right then obj.Right:Hide() end
+                        if obj.Divider then obj.Divider:Hide() end
+                        -- 单独设置信息行的左边距：不使用 Entry 的 28px 图标缩进
+                        if obj.SetLeftPadding then obj:SetLeftPadding(GetRightPadding() + (Def.AboutTextExtraLeft or 0)) end
                     end,
                     point = "TOPLEFT",
                     relativePoint = "TOPLEFT",
@@ -1666,8 +1765,8 @@ end
 local function CreateUI()
     local pageHeight = Def.PageHeight
     
-    -- 紧凑布局：左侧固定宽度，中间动态宽度（宽度由语言决定，单一权威：GetSideSectionWidthByLocale）
-    local sideSectionWidth = GetSideSectionWidthByLocale()
+    -- 紧凑布局：左侧宽度按“分类文本宽度”动态计算
+    local sideSectionWidth = ComputeSideSectionWidth()
     local centralSectionWidth = 340  -- 中间：图标 + 长装饰名称(如"小型锯齿奥格瑞玛栅栏") + 数量
     
     MainFrame:SetSize(sideSectionWidth + centralSectionWidth, pageHeight)
@@ -1805,7 +1904,7 @@ local function CreateUI()
             MakeFadingObject(obj)
             obj:SetFadeInAlpha(1)
             obj:SetFadeOutAlpha(0.5)
-            obj.Label:SetWidth(categoryButtonWidth - 2 * obj.labelOffset - 14)
+            obj.Label:SetWidth(categoryButtonWidth - 2 * obj.labelOffset - (Def.CountTextWidthReserve + Def.CategoryLabelToCountGap))
             return obj
         end
 
@@ -1822,34 +1921,21 @@ local function CreateUI()
         CategoryHighlight = CreateSelectionHighlight(Tab1)
         CategoryHighlight:SetSize(categoryButtonWidth, Def.ButtonSize)
 
-
-        -- 6-piece Background
-        local function CreatePiece(point, relativeTo, relativePoint, offsetX, offsetY, l, r, t, b)
-            local tex = MainFrame.SideTab:CreateTexture(nil, "BORDER")
-            tex:SetTexture(Def.TextureFile)
-            tex:SetPoint(point, relativeTo, relativePoint, offsetX, offsetY)
-            SetTexCoord(tex, l, r, t, b)
-            DisableSharpening(tex)
-            return tex
+        -- 左侧面板采用完整九宫格框体（The War Within 卡片风格）
+        do
+            local frame = Tab1:CreateTexture(nil, "BORDER")
+            MainFrame.LeftNineSlice = frame
+            frame:SetAtlas("ui-frame-thewarwithin-cardparchmentwider")
+            -- 经验值：该卡片边框厚度约 28-32px，取 32 以确保角不被拉伸
+            frame:SetTextureSliceMargins(32, 32, 32, 32)
+            frame:SetTextureSliceMode(Enum.UITextureSliceMode.Stretched)
+            frame:SetPoint("TOPLEFT", LeftSection, "TOPLEFT", -4, 4)
+            frame:SetPoint("BOTTOMRIGHT", LeftSection, "BOTTOMRIGHT", 4, -4)
         end
-
-        local r1 = CreatePiece("TOP", LeftSection, "TOPRIGHT", 0, 0,    280, 360, 176, 240)
-        r1:SetSize(40, 32)
-        local r3 = CreatePiece("BOTTOM", LeftSection, "BOTTOMRIGHT", 0, 0,    280, 360, 832, 896)
-        r3:SetSize(40, 32)
-        local r2 = CreatePiece("TOPLEFT", r1, "BOTTOMLEFT", 0, 0,    280, 360, 240, 832)
-        r2:SetPoint("BOTTOMRIGHT", r3, "TOPRIGHT", 0, 0)
-
-        local l1 = CreatePiece("TOPLEFT", LeftSection, "TOPLEFT", 0, 0,    0, 280, 176, 240)
-        l1:SetPoint("BOTTOMRIGHT", r1, "BOTTOMLEFT", 0, 0)
-        local l3 = CreatePiece("BOTTOMLEFT", LeftSection, "BOTTOMLEFT", 0, 0,    0, 280, 832, 896)
-        l3:SetPoint("TOPRIGHT", r3, "TOPLEFT", 0, 0)
-        local l2 = CreatePiece("TOPLEFT", l1, "BOTTOMLEFT", 0, 0,    0, 280, 240, 832)
-        l2:SetPoint("BOTTOMRIGHT", l3, "TOPRIGHT", 0, 0)
     end
 
 
-    do  -- RightSection
+    do  -- RightSection（预览与说明）
         local previewSize = sideSectionWidth - 2*Def.WidgetGap
 
         local preview = Tab1:CreateTexture(nil, "OVERLAY")
@@ -1878,12 +1964,13 @@ local function CreateUI()
     end
 
 
-    do  -- CentralSection
+    do  -- CentralSection（设置列表所在区域）
+        -- 使用 Housing 基础面板背景（更通用的面板底纹）；移除遮罩层，按你的最新偏好保持原始透明度
         local Background = CentralSection:CreateTexture(nil, "BACKGROUND")
-        Background:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/SettingsPanelBackground")
-        Background:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", -8, 0)
-        -- 修复：背景只覆盖 CentralSection，不延伸到被隐藏的右侧区域
-        Background:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", 0, 0)
+        Background:SetAtlas("housing-basic-panel-background")
+        -- 适度内缩，让边缘花纹不被边框压住
+        Background:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", -4, -2)
+        Background:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", -2, 2)
 
 
         local ScrollBar = ControlCenter.CreateScrollBarWithDynamicSize(Tab1)
