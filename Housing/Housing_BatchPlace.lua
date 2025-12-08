@@ -1,5 +1,5 @@
--- Housing_PaintMode.lua
--- 仅包含 Paint Mode (Ctrl键批量放置) 功能
+-- Housing_BatchPlace.lua
+-- 仅包含“按住 Ctrl 批量放置”核心逻辑
 
 local ADDON_NAME, ADT = ...
 local L = ADT.L

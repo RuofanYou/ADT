@@ -1,4 +1,4 @@
--- Housing_History.lua
+-- Housing_Recent.lua：最近放置记录（ADT 独立实现）
 -- 放置历史记录核心逻辑：捕获放置、存储历史、快速重新放置
 local ADDON_NAME, ADT = ...
 local L = ADT.L or {}

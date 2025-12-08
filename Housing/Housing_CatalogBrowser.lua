@@ -1,4 +1,4 @@
--- 装饰物浏览器模块
+-- CatalogBrowser：装饰清单浏览（ADT 独立实现）
 -- 功能：显示所有已放置装饰物的列表，支持搜索、高亮定位
 local ADDON_NAME, ADT = ...
 local L = ADT and ADT.L or {}
@@ -281,6 +281,9 @@ local function CreateBrowserFrame()
     scrollChild = CreateFrame("Frame", nil, scrollFrame)
     scrollChild:SetSize(280, 1)
     scrollFrame:SetScrollChild(scrollChild)
+    if ADT and ADT.Scroll and ADT.Scroll.AttachScrollFrame then
+        ADT.Scroll.AttachScrollFrame(scrollFrame)
+    end
     
     -- 空状态提示
     frame.EmptyText = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontDisable")

@@ -1,5 +1,4 @@
--- Housing_ClipboardPopup.lua
--- 剪切板弹窗：样式与交互尽量对齐 Housing_HistoryPopup
+-- Housing_ClipboardPanel.lua：临时板弹窗（ADT 独立实现）
 
 local ADDON_NAME, ADT = ...
 
@@ -67,6 +66,9 @@ local function CreatePopupFrame()
     local Content = CreateFrame("Frame", nil, ScrollFrame)
     Content:SetSize(POPUP_WIDTH - 36, 1)
     ScrollFrame:SetScrollChild(Content)
+    if ADT and ADT.Scroll and ADT.Scroll.AttachScrollFrame then
+        ADT.Scroll.AttachScrollFrame(ScrollFrame)
+    end
     MainFrame.Content = Content
 
     MainFrame.buttonPool = {}
@@ -255,8 +257,8 @@ if ADT and ADT.Clipboard then
     end
 end
 
--- 弹窗已整合到 GUI，不再自动打开独立弹窗
--- 进入编辑模式时由 SettingsPanelNew 负责显示 GUI
+-- 弹窗已整合到 ADT 控制中心 GUI，不再自动打开独立弹窗
+-- 进入编辑模式时由 GUI 负责显示
 local EditWatcher = CreateFrame("Frame")
 local wasActive = false
 local function UpdateOpenState()

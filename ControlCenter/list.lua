@@ -1,4 +1,4 @@
--- ListView：ADT 专用滚动列表（全新实现，移除与参考插件的相似结构）
+-- ListView：ADT 专用滚动列表（独立实现，无外部依赖）
 
 local ADDON_NAME, ADT = ...
 local API = ADT.API
@@ -43,11 +43,14 @@ function API.CreateListView(parent)
     fs:SetSpacing(4)
     fs:SetText(ADT.L and ADT.L['List Is Empty'] or 'Empty')
 
-    -- 交互
+    -- 交互（滚轮与物理滚动由 ADT.Scroll 统一接管）
     f:EnableMouseWheel(true)
-    f:SetScript('OnMouseWheel', f.OnMouseWheel)
     f:SetScript('OnHide', f.OnHide)
 
+    -- 统一附加滚动物理（单一权威）
+    if ADT and ADT.Scroll and ADT.Scroll.AttachListView then
+        ADT.Scroll.AttachListView(f)
+    end
     return f
 end
 
@@ -74,6 +77,7 @@ end
 function ListViewMixin:OnSizeChanged(force)
     self._viewport = math.floor(self:GetHeight() + 0.5)
     self.ScrollRef:SetWidth(math.floor(self:GetWidth() + 0.5))
+    if ADT and ADT.Scroll and self._adtScroller and self._SyncScrollRange then self:_SyncScrollRange() end
     if force then self:Render(true) end
 end
 
@@ -130,6 +134,9 @@ function ListViewMixin:SetContent(content, retainPosition)
         self._offset = 0
     end
 
+    -- 统一通知滚动物理引擎更新范围（若已附加）
+    if ADT and ADT.Scroll and self._adtScroller and self._SyncScrollRange then self:_SyncScrollRange() end
+
     self:Render(true)
 end
 
@@ -175,7 +182,8 @@ function ListViewMixin:Render(force)
     self:SetOffset(offset)
 end
 
--- 滚动交互（立即滚动，不做平滑插值，避免与参考实现雷同）
+-- —————————— 滚动逻辑 ——————————
+-- 立即滚动（供内部渲染或需要无动画时调用）
 function ListViewMixin:ScrollBy(dy)
     local tgt = (self._offset or 0) + (dy or 0)
     self:ScrollTo(tgt)
@@ -189,13 +197,26 @@ end
 
 function ListViewMixin:ScrollToTop() self:ScrollTo(0) end
 
+-- 滚轮由 ADT.Scroll 附加后的处理接管；保留占位以兼容旧调用
 function ListViewMixin:OnMouseWheel(delta)
-    if (delta > 0 and self:IsAtTop()) or (delta < 0 and self:IsAtBottom()) then return end
-    local step = self._step or 30
-    if IsShiftKeyDown and IsShiftKeyDown() then step = step * 2 end
-    self:ScrollBy(-delta * step)
+    local scroller = self._adtScroller
+    if scroller then
+        local step = self._step or 30
+        if IsShiftKeyDown and IsShiftKeyDown() then step = step * 2 end
+        scroller:AddWheelImpulse(-delta * step)
+    else
+        -- 未附加时退化为立即滚动
+        self:ScrollBy(-(delta or 0) * (self._step or 30))
+    end
 end
 
 function ListViewMixin:OnHide()
-    -- 预留：隐藏时可做批量回收/停止动画等
+    -- 隐藏时通知物理滚动停止
+    if self._adtScroller and self._adtScroller.Stop then self._adtScroller:Stop() end
+end
+
+-- 创建后附加统一滚动物理引擎
+hooksecurefunc(ADT.Scroll or {}, 'AttachListView', function() end) -- 防御：确保 ADT.Scroll 已加载
+if ADT and ADT.Scroll and ADT.Scroll.AttachListView then
+    -- 在 API.CreateListView 底部调用（见下）
 end

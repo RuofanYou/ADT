@@ -1,3 +1,4 @@
+-- Housing_HoverHUD.lua：悬停信息与热键提示 HUD（ADT 独立实现）
 local ADDON_NAME, ADT = ...
 local L = ADT and ADT.L or {}
 

@@ -1,4 +1,4 @@
--- Housing_AdvancedEdit.lua
+-- Housing_AdvancedTools.lua：高级编辑工具（ADT 独立实现）
 -- 目标：虚拟多选 + 同步移动/旋转/缩放（最小可用版本）
 -- 思路：
 -- 1) 维护“选集”（decorGUID 集合）与一个“锚点” decorGUID。
@@ -274,4 +274,3 @@ SlashCmdList["ADTAE"] = function(msg)
     if msg == "toggleh" then M:ToggleHovered() return end
     print("/adtae on|off|clear|anchorh|anchors|toggleh")
 end
-

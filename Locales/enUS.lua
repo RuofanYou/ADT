@@ -9,8 +9,8 @@ ADT.L = ADT.L or {}
 
 -- 英文语言表（默认）
 ADT.Locales.enUS = {
-    ["ModuleName Housing_DecorHover"] = "Decor: Press to Repeat",
-    ["ModuleDescription Housing_DecorHover"] = "In Decorate Mode:\n\n- Hover the cursor over a decor to display its name and its item count in storage.\n\n- Press Ctrl+D to \"duplicate\" the hovered decor (default).\n\nThe new object will not inherit the current angles and scales.",
+    ["ModuleName Housing_HoverHUD"] = "Decor Hover HUD",
+    ["ModuleDescription Housing_HoverHUD"] = "In Decorate Mode:\n\n- Hover the cursor over a decor to display its name and stock.\n\n- Press Ctrl+D to place another instance (default).\n\nThe new object will not inherit the current angles and scales.",
     ["Duplicate"] = "Duplicate",
     ["Hotkey Cut"] = "Cut",
     ["Hotkey Copy"] = "Copy",
@@ -72,6 +72,7 @@ ADT.Locales.enUS = {
     ["SC Housing"] = "General",
     ["SC Clipboard"] = "Clipboard",
     ["SC History"] = "Recent",
+    ["SC AutoRotate"] = "Auto Rotate",
     ["SC About"] = "About",
     ["List Is Empty"] = "No results",
     ["Category Colon"] = "Category: ",
@@ -156,8 +157,8 @@ ADT.Locales.enUS = {
 
 -- 中文语言表
 ADT.Locales.zhCN = {
-    ["ModuleName Housing_DecorHover"] = "装饰物：按下以重复",
-    ["ModuleDescription Housing_DecorHover"] = "在装饰模式：\n\n- 鼠标悬停装饰以显示其名称与库存数量。\n\n- 按下 Ctrl+D 可快速\"复制\"一个相同的装饰进入放置状态（默认）。\n\n新对象不会继承当前角度与缩放。",
+    ["ModuleName Housing_HoverHUD"] = "悬停信息 HUD",
+    ["ModuleDescription Housing_HoverHUD"] = "在装饰模式：\n\n- 鼠标悬停装饰以显示其名称与库存数量。\n\n- 按下 Ctrl+D 可快速放置一个相同的装饰（默认）。\n\n新对象不会继承当前角度与缩放。",
     ["Duplicate"] = "重复",
     ["Hotkey Cut"] = "剪切",
     ["Hotkey Copy"] = "复制",
@@ -221,6 +222,7 @@ ADT.Locales.zhCN = {
     ["SC Housing"] = "通用",
     ["SC Clipboard"] = "临时板",
     ["SC History"] = "最近放置",
+    ["SC AutoRotate"] = "自动旋转",
     ["SC About"] = "信息",
     ["List Is Empty"] = "暂无结果",
     ["Category Colon"] = "分类：",

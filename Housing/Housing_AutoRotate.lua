@@ -76,8 +76,8 @@ M._plannedRID = nil           -- 计划对应的 rid
 M._plannedToken = nil         -- 计划生成时对应的预览 token（用于事件配对）
 M._previewToken = 0           -- 预览会话 token（每次 StartPlacing 递增）
 M._nextIdxByRID = {}          -- 批量放置会话内：期望的“下一索引”（用于纠正意外重置）
-M._pendingCommitByRID = {}    -- 待提交：key=rid(string), value={idx, token, t}
-M._pendingOrder = {}          -- 待提交顺序队列（记录 rid 顺序，保证 PlaceSuccess 次序匹配）
+-- 待提交（单一权威：仅维护一个 FIFO 队列，避免 rid 覆盖与队列不同步）
+M._pendingQueue = {}         -- 每项 { rid=number|string, idx=number, token=number, t=number, skip0=bool }
 
 -- 读取与应用设置（TSP 协议：DB→刷新）
 function M:LoadSettings()
@@ -115,8 +115,8 @@ end
 -- 计算本次应应用的角度（度）
 local function CountPendingForRID(key)
     local c = 0
-    for i = 1, #M._pendingOrder do
-        if M._pendingOrder[i] == key then c = c + 1 end
+    for i = 1, #M._pendingQueue do
+        if tostring(M._pendingQueue[i].rid) == key then c = c + 1 end
     end
     return c
 end
@@ -150,7 +150,7 @@ function M:GetPlannedDegrees(rid)
         local n = #self._seq
         if idx < 1 or idx > n then idx = 1 end
         local v = self._seq[idx]
-        D(string.format("[AutoRotate] Plan seq: rid=%s, idx=%d/%d, v=%s, dbIdx=%s, pend=%d, qlen=%d", tostring(rid), idx, n, tostring(v), tostring((db.SeqIndexByRID[tostring(rid or '')]) or 'nil'), CountPendingForRID(key), #M._pendingOrder))
+        D(string.format("[AutoRotate] Plan seq: rid=%s, idx=%d/%d, v=%s, dbIdx=%s, pend=%d, qlen=%d", tostring(rid), idx, n, tostring(v), tostring((db.SeqIndexByRID[tostring(rid or '')]) or 'nil'), CountPendingForRID(key), #M._pendingQueue))
         return NormalizeDeg(v)
     end
     return 0
@@ -217,11 +217,17 @@ function M:ApplyAutoRotate()
             end
             -- 标记“待提交”：即使后续立即触发下一次 StartPlacing 导致 token 变化，也能在 PlaceSuccess 时正确推进
             do
-                local key = tostring(rid)
-                M._pendingCommitByRID[key] = { idx = self._plannedIdx or 1, token = self._plannedToken, t = GetTime and GetTime() or 0 }
-                table.insert(M._pendingOrder, key)
-                if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("[AutoRotate] Pending commit (skip0): rid=%s, idx=%s, token=%s", key, tostring(self._plannedIdx), tostring(self._plannedToken))) end
+                -- 去重：若队尾已是同一 rid+token，则不重复入队
+                local last = M._pendingQueue[#M._pendingQueue]
+                if not (last and last.rid == rid and last.token == self._plannedToken) then
+                    table.insert(M._pendingQueue, { rid = rid, idx = self._plannedIdx or 1, token = self._plannedToken, t = GetTime and GetTime() or 0, skip0 = true })
+                    if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("[AutoRotate] Pending enqueue(skip0): rid=%s, idx=%s, token=%s, qlen=%d", tostring(rid), tostring(self._plannedIdx), tostring(self._plannedToken), #M._pendingQueue)) end
+                else
+                    if ADT and ADT.DebugPrint then ADT.DebugPrint("[AutoRotate] Skip duplicate enqueue(skip0) for same token") end
+                end
             end
+            -- 标记本预览已消费（即使是 0° 也只应计一次），避免重试又再次入队
+            self._rotatedThisPreview = true
             -- 不再立即推进序列：改为在 PlaceSuccess 时提交
         end
         return
@@ -295,10 +301,8 @@ function M:ApplyAutoRotate()
     end
     -- 记录“待提交”以抵御 StartPlacing 抢先到来导致的 token 不匹配
     do
-        local key = tostring(rid)
-        M._pendingCommitByRID[key] = { idx = self._plannedIdx or 1, token = self._plannedToken, t = GetTime and GetTime() or 0 }
-        table.insert(M._pendingOrder, key)
-        if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("[AutoRotate] Pending commit: rid=%s, idx=%s, token=%s", key, tostring(self._plannedIdx), tostring(self._plannedToken))) end
+        table.insert(M._pendingQueue, { rid = rid, idx = self._plannedIdx or 1, token = self._plannedToken, t = GetTime and GetTime() or 0, skip0 = false })
+        if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("[AutoRotate] Pending enqueue: rid=%s, idx=%s, token=%s, qlen=%d", tostring(rid), tostring(self._plannedIdx), tostring(self._plannedToken), #M._pendingQueue)) end
     end
 
     -- 启动任务
@@ -334,41 +338,67 @@ M:SetScript("OnEvent", function(self, event, ...)
             -- 若之前进入过“待确认取消”窗口，则视为抖动恢复，取消该窗口
             self._pendingCancelCheckToken = nil
         else
-            -- 右键转视角会导致短帧的失选/非预览；这里增加去抖：仅当短时间后仍然不在预览，才按“取消”处理。
+            -- 右键转视角会导致短帧甚至较长时间的失选/非预览。
+            -- 旧逻辑仅 0.12s 去抖，容易把“转视角”误判为取消，进而把序列 pending/guard 清掉 → 序列从起点重来。
+            -- 新逻辑：
+            -- 1) 多段确认（最多 3 次，总计 ~0.36s）；
+            -- 2) 若仍在按住 CTRL（批量放）则默认认为是“转视角”，不按取消处理；
+            -- 3) 仅在最终确认“确实退出预览”时，才清理 pending/guard。
             local checkToken = (self._pendingCancelCheckToken or 0) + 1
             self._pendingCancelCheckToken = checkToken
             local tokenAtSchedule = self._previewToken
-            local keyAtSchedule = tostring(self._currentRID or "")
-            -- 在确认前不立刻把 _inPreviewActive 置为 false，避免阻断当前轮的 Apply 重试
-            C_Timer.After(0.12, function()
+            local ridAtSchedule = self._currentRID
+
+            local function confirmOrRetry(round)
                 -- 若期间已重新选中或开始了新一轮预览，则放弃本次取消判定
                 if M._pendingCancelCheckToken ~= checkToken then return end
                 if M._previewToken ~= tokenAtSchedule then return end
+
                 local stillSelected = (C_HousingBasicMode and C_HousingBasicMode.IsDecorSelected and C_HousingBasicMode.IsDecorSelected()) or false
                 local stillPlacing  = (C_HousingBasicMode and C_HousingBasicMode.IsPlacingNewDecor and C_HousingBasicMode.IsPlacingNewDecor()) or false
+
                 if stillSelected and stillPlacing then
                     -- 抖动恢复：继续尝试自动旋转
                     M._inPreviewActive = true
                     M:TryApplyWithRetries("SelectedChanged-Resume")
                     return
                 end
-                -- 确认属于“取消”情形：清理与本 token 关联的 pending/guard（仅限当前 rid）
+
+                -- 若仍在按 CTRL，大概率是“右键拖拽视角”，继续等待，不做取消
+                if IsControlKeyDown() and (round or 1) < 3 then
+                    C_Timer.After(0.12, function() confirmOrRetry((round or 1) + 1) end)
+                    return
+                end
+
+                -- 最终确认属于“取消”情形：清理与本 token 关联的 pending/guard（仅限当前 rid）
+                if (round or 1) < 3 then
+                    -- 未达到最大确认次数，再等一拍
+                    C_Timer.After(0.12, function() confirmOrRetry((round or 1) + 1) end)
+                    return
+                end
+
                 M._inPreviewActive = false
-                local key = keyAtSchedule
-                if key ~= "" then
-                    local pend = M._pendingCommitByRID[key]
-                    if pend and M._plannedToken and pend.token == M._plannedToken then
-                        M._pendingCommitByRID[key] = nil
-                        if #M._pendingOrder > 0 and M._pendingOrder[#M._pendingOrder] == key then
-                            table.remove(M._pendingOrder, #M._pendingOrder)
+                local rid = ridAtSchedule
+                if rid then
+                    -- 从队列尾部删除“同一预览token”的最后一项（保证仅撤销本次未落地的计划）
+                    for i = #M._pendingQueue, 1, -1 do
+                        local it = M._pendingQueue[i]
+                        if it and it.rid == rid and it.token == tokenAtSchedule then
+                            table.remove(M._pendingQueue, i)
+                            if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("[AutoRotate] Pending dequeue(cancel): rid=%s, token=%s, qlen=%d", tostring(rid), tostring(tokenAtSchedule), #M._pendingQueue)) end
+                            break
                         end
                     end
+                    local key = tostring(rid)
                     local guard = M._nextIdxByRID[key]
                     if guard and guard.speculative and guard.token == M._previewToken then
                         M._nextIdxByRID[key] = nil
                     end
                 end
-            end)
+            end
+
+            -- 延迟确认流程（最多 3 次）
+            C_Timer.After(0.12, function() confirmOrRetry(1) end)
         end
     elseif event == "HOUSING_DECOR_PLACE_SUCCESS" then
         -- 将事件与当前预览配对（防误提交）
@@ -381,37 +411,59 @@ M:SetScript("OnEvent", function(self, event, ...)
             end
         end)
         D(string.format("[AutoRotate] PLACE_SUCCESS: plannedRID=%s, eventRID=%s, token=%s~%s, rotated=%s, qlen(before)=%d",
-            tostring(self._plannedRID), tostring(eventRID), tostring(self._plannedToken), tostring(self._previewToken), tostring(self._rotatedThisPreview), #M._pendingOrder))
+            tostring(self._plannedRID), tostring(eventRID), tostring(self._plannedToken), tostring(self._previewToken), tostring(self._rotatedThisPreview), #M._pendingQueue))
 
-        -- 1) 正常：token 严格匹配；2) 备选：使用我们维护的 FIFO 队列（不依赖 eventRID/token）
+        -- 1) 正常：token 严格匹配；2) 备选：使用我们维护的 FIFO 队列
         local matchedStrict = (self._plannedToken ~= nil) and (self._plannedToken == self._previewToken)
         local matchedByQueue = false
-        local queueRid, queueIdx
+        local pendItem
         if not matchedStrict then
-            queueRid = table.remove(M._pendingOrder, 1)
-            if queueRid then
-                local pend = M._pendingCommitByRID[queueRid]
-                if pend then
-                    queueIdx = pend.idx
-                    matchedByQueue = true
+            pendItem = table.remove(M._pendingQueue, 1)
+            matchedByQueue = (pendItem ~= nil)
+        else
+            -- 严格匹配：从队列中找出当前 token 对应项（若存在），同时拿到 skip0 标记
+            for i = #M._pendingQueue, 1, -1 do
+                local it = M._pendingQueue[i]
+                if it and it.token == self._plannedToken then
+                    pendItem = it
+                    table.remove(M._pendingQueue, i)
+                    if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("[AutoRotate] Pending dequeue(commit strict): rid=%s, token=%s, qlen=%d", tostring(it.rid), tostring(it.token), #M._pendingQueue)) end
+                    break
                 end
             end
         end
         local matched = matchedStrict or matchedByQueue
-        D(string.format("[AutoRotate] PLACE_SUCCESS match: strict=%s, queue=%s, qrid=%s", tostring(matchedStrict), tostring(matchedByQueue), tostring(queueRid)))
+        D(string.format("[AutoRotate] PLACE_SUCCESS match: strict=%s, queue=%s, qlen=%d", tostring(matchedStrict), tostring(matchedByQueue), #M._pendingQueue))
 
         -- 仅在事件与本轮计划完全匹配时才做后续逻辑（补旋转与序列提交）
         if matched then
             -- 移除“落地后补旋转”以避免双重旋转/错位，由预览阶段的 Apply 保证
             -- 计算要提交的索引：优先用待提交表中的 idx，避免与当前 plannedIdx 冲突
-            local commitRID = (matchedByQueue and queueRid) or eventRID or self._plannedRID
-            local commitIdx = (matchedByQueue and queueIdx) or self._plannedIdx or 1
-            if (self.mode == "sequence") and commitRID then
-                CommitSequenceAdvance(commitRID, commitIdx)
+            local commitRID = (pendItem and pendItem.rid) or eventRID or self._plannedRID
+            local commitIdx = (pendItem and pendItem.idx) or self._plannedIdx or 1
+            local allowCommit = true
+            if self.mode == "sequence" then
+                -- 仅当预览期间真的发生了旋转，或此项本身为 0°（skip0）时才推进序列；
+                -- 这样可避免“旋转未发生但索引已推进”的错位。
+                local wasRotated = (self._rotatedThisPreview == true)
+                local isSkip0 = (pendItem and pendItem.skip0) or false
+                allowCommit = wasRotated or isSkip0
+                if not allowCommit and ADT and ADT.DebugPrint then
+                    ADT.DebugPrint(string.format("[AutoRotate] PLACE_SUCCESS no-commit: rotated=false & not skip0 (rid=%s, idx=%s)", tostring(commitRID), tostring(commitIdx)))
+                end
             end
-            -- 清理对应 rid 的待提交
-            if commitRID then M._pendingCommitByRID[tostring(commitRID)] = nil end
-            D(string.format("[AutoRotate] PLACE_SUCCESS committed: rid=%s, idx=%s, qlen(after)=%d, dbNow=%s", tostring(commitRID), tostring(commitIdx), #M._pendingOrder, tostring((GetAutoRotateDB().SeqIndexByRID[tostring(commitRID or '')]) or 'nil')))
+            if (self.mode == "sequence") and commitRID then
+                if allowCommit then
+                    CommitSequenceAdvance(commitRID, commitIdx)
+                    D(string.format("[AutoRotate] PLACE_SUCCESS committed: rid=%s, idx=%s, qlen(after)=%d, dbNow=%s", tostring(commitRID), tostring(commitIdx), #M._pendingQueue, tostring((GetAutoRotateDB().SeqIndexByRID[tostring(commitRID or '')]) or 'nil')))
+                else
+                    -- 未旋转成功：撤销此前设置的“下一索引”投机值，保持 DB 不变，保证下一轮仍使用相同索引
+                    local key = tostring(commitRID)
+                    local guard = M._nextIdxByRID[key]
+                    if guard and guard.speculative then M._nextIdxByRID[key] = nil end
+                    D(string.format("[AutoRotate] PLACE_SUCCESS rollback(nextIdx guard): rid=%s (no commit)", key))
+                end
+            end
         end
 
         -- 学习模式：仅当“你有手动改动”时才更新学习角度；否则保持上次值，避免被 0 覆盖
@@ -439,11 +491,32 @@ M:SetScript("OnEvent", function(self, event, ...)
                 self._plannedToken = nil
             end
         end
+    elseif event == "HOUSING_DECOR_PLACE_FAILURE" then
+        -- 明确的失败/取消：按“取消”流程清理一次（更可靠地对应非放置退出的场景）
+        local tokenAtSchedule = self._previewToken
+        local rid = self._currentRID
+        self._inPreviewActive = false
+        if rid then
+            for i = #M._pendingQueue, 1, -1 do
+                local it = M._pendingQueue[i]
+                if it and it.rid == rid and it.token == tokenAtSchedule then
+                    table.remove(M._pendingQueue, i)
+                    if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("[AutoRotate] Pending dequeue(failure): rid=%s, token=%s, qlen=%d", tostring(rid), tostring(tokenAtSchedule), #M._pendingQueue)) end
+                    break
+                end
+            end
+            local key = tostring(rid)
+            local guard = M._nextIdxByRID[key]
+            if guard and guard.speculative and guard.token == tokenAtSchedule then
+                M._nextIdxByRID[key] = nil
+            end
+        end
     end
 end)
 
 M:RegisterEvent("HOUSING_BASIC_MODE_SELECTED_TARGET_CHANGED")
 M:RegisterEvent("HOUSING_DECOR_PLACE_SUCCESS")
+M:RegisterEvent("HOUSING_DECOR_PLACE_FAILURE")
 
 -- 钩子：捕获“开始抓起”的 recordID；并在预览期间累加 RotateDecor 的增量
 do
@@ -468,7 +541,7 @@ do
                     if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("[AutoRotate] Guard plan override idx=%d (rid=%s)", guard.idx, key)) end
                 end
             end
-            D(string.format("[AutoRotate] StartPlacing(New): rid=%s, dbIdx=%s, qlen=%d", tostring(M._currentRID), tostring((GetAutoRotateDB().SeqIndexByRID[tostring(M._currentRID or '')]) or 'nil'), #M._pendingOrder))
+            D(string.format("[AutoRotate] StartPlacing(New): rid=%s, dbIdx=%s, qlen=%d", tostring(M._currentRID), tostring((GetAutoRotateDB().SeqIndexByRID[tostring(M._currentRID or '')]) or 'nil'), #M._pendingQueue))
             -- 在 StartPlacing 阶段也安排重试，确保就绪后旋转
             M:TryApplyWithRetries("StartPlacingNew")
         end)
@@ -494,7 +567,7 @@ do
                     if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("[AutoRotate] Guard plan override idx=%d (rid=%s)", guard.idx, key)) end
                 end
             end
-            D(string.format("[AutoRotate] StartPlacing(Preview): rid=%s, dbIdx=%s, qlen=%d", tostring(M._currentRID), tostring((GetAutoRotateDB().SeqIndexByRID[tostring(M._currentRID or '')]) or 'nil'), #M._pendingOrder))
+            D(string.format("[AutoRotate] StartPlacing(Preview): rid=%s, dbIdx=%s, qlen=%d", tostring(M._currentRID), tostring((GetAutoRotateDB().SeqIndexByRID[tostring(M._currentRID or '')]) or 'nil'), #M._pendingQueue))
             M:TryApplyWithRetries("StartPlacingPreview")
         end)
     end
@@ -520,7 +593,8 @@ end
 local function RegisterSettings()
     if not (ADT and ADT.ControlCenter and ADT.ControlCenter.AddModule) then return end
     local CC = ADT.ControlCenter
-    local uiOrderBase = 9
+    -- 将自动旋转设置独立到“AutoRotate”分类；ui 顺序从 1 起
+    local uiOrderBase = 1
 
     -- 开关：启用自动旋转
     CC:AddModule({
@@ -531,7 +605,7 @@ local function RegisterSettings()
             ADT.SetDBValue('EnableAutoRotateOnCtrlPlace', state)
             if ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then ADT.AutoRotate:LoadSettings() end
         end,
-        categoryKeys = { 'Housing' },
+        categoryKeys = { 'AutoRotate' },
         uiOrder = uiOrderBase,
     })
 
@@ -550,7 +624,7 @@ local function RegisterSettings()
             ADT.SetDBValue('AutoRotateMode', value)
             if ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then ADT.AutoRotate:LoadSettings() end
         end,
-        categoryKeys = { 'Housing' },
+        categoryKeys = { 'AutoRotate' },
         uiOrder = uiOrderBase + 1,
     })
 
@@ -570,7 +644,7 @@ local function RegisterSettings()
             ADT.SetDBValue('AutoRotatePresetDegrees', value)
             if ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then ADT.AutoRotate:LoadSettings() end
         end,
-        categoryKeys = { 'Housing' },
+        categoryKeys = { 'AutoRotate' },
         uiOrder = uiOrderBase + 2,
     })
 
@@ -694,7 +768,7 @@ local function RegisterSettings()
                 return MenuResponse.Close
             end)
         end,
-        categoryKeys = { 'Housing' },
+        categoryKeys = { 'AutoRotate' },
         uiOrder = uiOrderBase + 3,
     })
 
@@ -712,7 +786,7 @@ local function RegisterSettings()
             ADT.SetDBValue('AutoRotateApplyScope', value)
             if ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then ADT.AutoRotate:LoadSettings() end
         end,
-        categoryKeys = { 'Housing' },
+        categoryKeys = { 'AutoRotate' },
         uiOrder = uiOrderBase + 4,
     })
 
@@ -734,7 +808,7 @@ local function RegisterSettings()
             ADT.SetDBValue('AutoRotateStepDegrees', tonumber(value))
             if ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then ADT.AutoRotate:LoadSettings() end
         end,
-        categoryKeys = { 'Housing' },
+        categoryKeys = { 'AutoRotate' },
         uiOrder = uiOrderBase + 5,
     })
 
@@ -764,7 +838,7 @@ local function RegisterSettings()
                 M:SetStepForRID(rid, tonumber(value))
             end
         end,
-        categoryKeys = { 'Housing' },
+        categoryKeys = { 'AutoRotate' },
         uiOrder = uiOrderBase + 6,
     })
 end
@@ -772,3 +846,11 @@ end
 -- 初始化
 M:LoadSettings()
 RegisterSettings()
+
+-- 注册“模块提供者”，以便在语言切换导致 ControlCenter 重建时，重新注入本模块的设置项。
+if ADT and ADT.ControlCenter and ADT.ControlCenter.RegisterModuleProvider then
+    ADT.ControlCenter:RegisterModuleProvider(function(CC)
+        -- 复用单一权威的注册函数，避免重复实现
+        RegisterSettings()
+    end)
+end

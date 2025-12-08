@@ -1,4 +1,4 @@
--- 控制中心设置面板（简化版实现）
+-- 控制中心 GUI（简化版实现，文件名：gui.lua）
 -- 说明：删除了 ChangelogTab/TabButton/最小化等不必要元素，仅保留
 -- 左侧分类、中间功能列表、右侧预览等核心交互。
 
@@ -570,17 +570,8 @@ do
             MainFrame:ShowAboutCategory(self.categoryKey)
             if ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.scroll.step') end
         else
-            -- 设置类分类：先恢复设置视图，再滚动到对应位置
-            -- 如果当前在装饰列表视图，先切换回设置视图
-            if MainFrame.currentDecorCategory or MainFrame.currentAboutCategory then
-                MainFrame:ShowSettingsView()
-            end
-            -- 延迟一帧确保 ActiveCategoryInfo 已更新
-            C_Timer.After(0.01, function()
-                if ActiveCategoryInfo[self.categoryKey] then
-                    MainFrame.ModuleTab.ScrollView:ScrollTo(ActiveCategoryInfo[self.categoryKey].scrollOffset)
-                end
-            end)
+            -- 设置类分类：仅显示该分类的条目（不与其它分类混排）
+            MainFrame:ShowSettingsCategory(self.categoryKey)
             if ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.scroll.step') end
         end
         if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', self.categoryKey) end
@@ -1415,6 +1406,95 @@ do  -- Central
         end
     end
 
+    -- 仅显示一个“设置类”分类（不与其它分类混排）
+    function MainFrame:ShowSettingsCategory(categoryKey)
+        local cat = ControlCenter:GetCategoryByKey(categoryKey)
+        if not cat or cat.categoryType ~= 'settings' then return end
+
+        self.currentSettingsCategory = categoryKey
+        self.currentDecorCategory = nil
+        self.currentAboutCategory = nil
+        if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', categoryKey) end
+
+        local content = {}
+        local n = 0
+        local buttonHeight = Def.ButtonSize
+        local fromOffsetY = Def.ButtonSize
+        local offsetY = fromOffsetY
+        local buttonGap = 0
+        local subOptionOffset = Def.ButtonSize
+        local offsetX = GetRightPadding()
+
+        -- 分类标题
+        n = n + 1
+        content[n] = {
+            dataIndex = n,
+            templateKey = "Header",
+            setupFunc = function(obj)
+                obj:SetText(cat.categoryName)
+                if obj.Left then obj.Left:Hide() end
+                if obj.Right then obj.Right:Hide() end
+                if obj.Divider then obj.Divider:Show() end
+                obj.Label:SetJustifyH("LEFT")
+            end,
+            point = "TOPLEFT",
+            relativePoint = "TOPLEFT",
+            top = offsetY,
+            bottom = offsetY + buttonHeight,
+            offsetX = GetRightPadding(),
+        }
+        offsetY = offsetY + buttonHeight
+
+        -- 分类内条目
+        for _, data in ipairs(cat.modules) do
+            n = n + 1
+            local top = offsetY
+            local bottom = offsetY + buttonHeight + buttonGap
+            content[n] = {
+                dataIndex = n,
+                templateKey = "Entry",
+                setupFunc = function(obj)
+                    obj.parentDBKey = nil
+                    obj:SetData(data)
+                end,
+                point = "TOPLEFT",
+                relativePoint = "TOPLEFT",
+                top = top,
+                bottom = bottom,
+                offsetX = offsetX,
+            }
+            offsetY = bottom
+
+            if data.subOptions then
+                for _, v in ipairs(data.subOptions) do
+                    n = n + 1
+                    top = offsetY
+                    bottom = offsetY + buttonHeight + buttonGap
+                    content[n] = {
+                        dataIndex = n,
+                        templateKey = "Entry",
+                        setupFunc = function(obj)
+                            obj.parentDBKey = data.dbKey
+                            obj:SetData(v)
+                        end,
+                        point = "TOPLEFT",
+                        relativePoint = "TOPLEFT",
+                        top = top,
+                        bottom = bottom,
+                        offsetX = offsetX + 0.5*subOptionOffset,
+                    }
+                    offsetY = bottom
+                end
+            end
+        end
+
+        self.firstModuleData = cat.modules[1]
+        self.ModuleTab.ScrollView:SetContent(content, false)
+        if self.firstModuleData then
+            self:ShowFeaturePreview(self.firstModuleData)
+        end
+    end
+
     function MainFrame:RefreshCategoryList()
         self.primaryCategoryPool:ReleaseAll()
         for index, categoryInfo in ipairs(ControlCenter:GetSortedModules()) do
@@ -1441,6 +1521,7 @@ do  -- Central
         if not cat or cat.categoryType ~= 'decorList' then return end
         
         self.currentDecorCategory = categoryKey
+        self.currentSettingsCategory = nil
         if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', categoryKey) end
         
         local list = cat.getListData and cat.getListData() or {}
@@ -1584,6 +1665,7 @@ do  -- Central
         
         self.currentDecorCategory = nil
         self.currentAboutCategory = categoryKey
+        self.currentSettingsCategory = nil
         if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', categoryKey) end
         
         local content = {}
@@ -1926,7 +2008,7 @@ local function CreateUI()
     end
 
     Tab1:SetScript("OnShow", function()
-        local key = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or MainFrame.currentDecorCategory or MainFrame.currentAboutCategory
+        local key = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or MainFrame.currentDecorCategory or MainFrame.currentAboutCategory or MainFrame.currentSettingsCategory
         local cat = key and ControlCenter:GetCategoryByKey(key) or nil
         if cat and cat.categoryType == 'decorList' then
             MainFrame:ShowDecorListCategory(key)
@@ -1934,15 +2016,23 @@ local function CreateUI()
         elseif cat and cat.categoryType == 'about' then
             MainFrame:ShowAboutCategory(key)
             MainFrame:HighlightCategoryByKey(key)
+        elseif cat and cat.categoryType == 'settings' then
+            MainFrame:ShowSettingsCategory(key)
+            MainFrame:HighlightCategoryByKey(key)
         else
-            MainFrame:RefreshFeatureList()
-            if key then
-                C_Timer.After(0.01, function()
-                    if ActiveCategoryInfo[key] then
-                        MainFrame.ModuleTab.ScrollView:ScrollTo(ActiveCategoryInfo[key].scrollOffset)
-                    end
-                    MainFrame:HighlightCategoryByKey(key)
-                end)
+            -- 默认回退到第一个“设置类”分类
+            local all = ControlCenter:GetSortedModules()
+            local firstSettings
+            for _, info in ipairs(all) do
+                if info.categoryType ~= 'decorList' and info.categoryType ~= 'about' then
+                    firstSettings = info.key; break
+                end
+            end
+            if firstSettings then
+                MainFrame:ShowSettingsCategory(firstSettings)
+                MainFrame:HighlightCategoryByKey(firstSettings)
+            else
+                MainFrame:RefreshFeatureList()
             end
         end
     end)

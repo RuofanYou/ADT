@@ -1,4 +1,4 @@
--- Housing_HistoryPopup.lua
+-- Housing_RecentPopup.lua：最近放置弹窗（ADT 独立实现）
 -- 放置历史弹窗 UI：显示最近放置的装饰，点击快速放置
 local ADDON_NAME, ADT = ...
 local L = ADT.L or {}
@@ -68,7 +68,7 @@ local function CreatePopupFrame()
     CloseBtn:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", -2, -2)
     CloseBtn:SetScript("OnClick", function() MainFrame:Hide() end)
     
-    -- 滚动框架
+    -- 滚动框架（统一接入 ADT.Scroll）
     local ScrollFrame = CreateFrame("ScrollFrame", nil, MainFrame, "UIPanelScrollFrameTemplate")
     ScrollFrame:SetPoint("TOPLEFT", MainFrame, "TOPLEFT", 8, -36)
     ScrollFrame:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", -28, 8)
@@ -78,6 +78,9 @@ local function CreatePopupFrame()
     local Content = CreateFrame("Frame", nil, ScrollFrame)
     Content:SetSize(POPUP_WIDTH - 36, 1) -- 高度动态调整
     ScrollFrame:SetScrollChild(Content)
+    if ADT and ADT.Scroll and ADT.Scroll.AttachScrollFrame then
+        ADT.Scroll.AttachScrollFrame(ScrollFrame)
+    end
     MainFrame.Content = Content
     
     -- 按钮池
@@ -287,8 +290,8 @@ local function UpdateKeyBinding()
     if isActive then
         KeyFrame:SetScript("OnKeyDown", OnKeyDown)
         KeyFrame:EnableKeyboard(true)
-        -- 弹窗已整合到 GUI，不再自动打开独立弹窗
-        -- 编辑模式下由 SettingsPanelNew 负责显示 GUI
+        -- 弹窗已整合到 ADT 控制中心 GUI，不再自动打开独立弹窗
+        -- 编辑模式下由 GUI 负责显示
         if MainFrame and HouseEditorFrame then
             MainFrame:SetParent(HouseEditorFrame)
             MainFrame:SetFrameStrata("TOOLTIP")

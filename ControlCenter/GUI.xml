@@ -1,6 +1,6 @@
 <Ui xsi:schemaLocation="http://www.blizzard.com/wow/ui/..\FrameXML\UI.xsd">
-    <Script file="PreLoad.lua"/>
-    <Script file="ListView.lua"/>
+    <Script file="boot.lua"/>
+    <Script file="list.lua"/>
 
     <Frame name="ADTSettingsPanelLayoutTemplate" hidden="true" virtual="true">
         <Size x="128" y="128"/>
@@ -225,6 +225,6 @@
     </Button>
 
     <!-- 在所有模板定义完成后再加载主面板脚本 -->
-    <Script file="SettingsPanelNew.lua"/>
+    <Script file="gui.lua"/>
 
 </Ui>

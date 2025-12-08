@@ -33,14 +33,15 @@ local DEFAULTS = {
     SettingsPanelSize = nil,
     -- 语言选择（nil=跟随客户端）
     SelectedLanguage = nil,
-    -- 自动旋转（批量放置增强）默认配置
+    -- 自动旋转（批量放置增强）默认配置（顶层仅放“显式可见的用户选项”）
     EnableAutoRotateOnCtrlPlace = true,
     AutoRotateMode = "preset",         -- 可选："preset" | "learn" | "sequence"
     AutoRotatePresetDegrees = 90,       -- 预设角度（度）
     AutoRotateSequence = "0,90",       -- 序列（逗号分隔），仅在 mode=sequence 生效
     AutoRotateApplyScope = "onlyPaint", -- 仅在按住 CTRL 连续放置时启用："onlyPaint"；或对所有抓取入口启用："all"
     AutoRotateStepDegrees = 15,         -- 基本模式单次步进角度（估值，可在设置中调节）
-    AutoRotateStepByRID = {},           -- 按 decorRecordID 记忆专属步进角度（优先于全局）
+    -- 注意：按 decorRecordID 的专属步进、序列索引、学习记录等运行期/半持久化数据
+    -- 统一收敛到 ADT_DB.AutoRotate 子表中，避免出现重复字段。
 }
 
 local function CopyDefaults(dst, src)
@@ -55,12 +56,47 @@ local function CopyDefaults(dst, src)
     return dst
 end
 
+-- 允许值校验（防御：被其它版本写入异常值时恢复到安全态）
+local function ValidateEnums(db)
+    local mode = db.AutoRotateMode
+    if mode ~= "preset" and mode ~= "learn" and mode ~= "sequence" then
+        db.AutoRotateMode = "preset"
+    end
+end
+
+-- 数据迁移与“单一权威”落盘
+local function MigrateIfNeeded(db)
+    if type(db) ~= "table" then return end
+    -- 统一 AutoRotate 运行期子表
+    db.AutoRotate = db.AutoRotate or {}
+    local ar = db.AutoRotate
+    ar.LastRotationByRID = ar.LastRotationByRID or {}
+    ar.SeqIndexByRID    = ar.SeqIndexByRID    or {}
+    ar.StepByRID        = ar.StepByRID        or {}
+
+    -- 迁移：旧字段 AutoRotateStepByRID → AutoRotate.StepByRID（一次性）
+    if type(db.AutoRotateStepByRID) == "table" then
+        for k, v in pairs(db.AutoRotateStepByRID) do
+            if ar.StepByRID[k] == nil then
+                ar.StepByRID[k] = v
+            end
+        end
+        db.AutoRotateStepByRID = nil
+    end
+
+    -- 未来可在此扩展更多迁移（保持一次性、幂等）
+end
+
 local function GetDB()
     _G.ADT_DB = CopyDefaults(_G.ADT_DB, DEFAULTS)
-    -- 一次性迁移：旧版本默认是 Alt（2），改为 Ctrl+D（3）
+    -- 一次性迁移
+    MigrateIfNeeded(_G.ADT_DB)
+    -- 历史兼容：旧版本默认是 Alt（2），改为 Ctrl+D（3）
     if _G.ADT_DB and _G.ADT_DB.DuplicateKey == 2 then
         _G.ADT_DB.DuplicateKey = 3
     end
+    -- 值校验（防御外部污染）
+    ValidateEnums(_G.ADT_DB)
     return _G.ADT_DB
 end
 

@@ -1,5 +1,5 @@
 
--- 为 SettingsPanelNew 提供所有必需的 API 函数
+-- 为 GUI（控制中心）提供所有必需的 API 函数
 
 local ADDON_NAME, ADT = ...
 
@@ -306,8 +306,14 @@ local function buildModules()
             -- 重新构建设置模块并刷新当前 UI
             if ADT and ADT.ControlCenter then
                 local CC = ADT.ControlCenter
-                CC._sorted = nil
-                CC._dbKeyMap = nil
+                if CC and CC.RebuildModules then
+                    CC:RebuildModules()
+                else
+                    -- 旧版本兜底：直接清空，下次访问会重建
+                    CC._sorted = nil
+                    CC._dbKeyMap = nil
+                    CC._providersApplied = nil
+                end
                 local Main = CC.SettingsPanel
                 local canRefresh = Main and Main.ModuleTab and Main.ModuleTab.ScrollView
                 if canRefresh then
@@ -401,8 +407,17 @@ local function buildModules()
         emptyText = string.format("%s\n%s", (L and L['History Empty Line1']) or '暂无放置记录', (L and L['History Empty Line2']) or '放置装饰后会自动记录'),
     }
 
-    -- 信息分类（关于插件的信息）
+    -- 自动旋转分类（设置类）——需位于“信息”之上
     modules[4] = {
+        key = 'AutoRotate',
+        categoryName = (L and L['SC AutoRotate']) or '自动旋转',
+        categoryType = 'settings', -- 设置类分类
+        modules = {},
+        numModules = 0,
+    }
+
+    -- 信息分类（关于插件的信息）
+    modules[5] = {
         key = 'About',
         categoryName = (L and L['SC About']) or '信息',
         categoryType = 'about', -- 关于信息类分类
@@ -451,8 +466,23 @@ local function buildModules()
 end
 
 local function ensureSorted(self)
+    -- 若未构建，先构建基础模块（语言、剪切板等）
     if not self._sorted then self._sorted = buildModules() end
     if not self._dbKeyMap then self._dbKeyMap = {} end
+
+    -- 语言切换会清空 _sorted/_dbKeyMap；为保持“单一权威 + DRY”，
+    -- 通过“模块提供者”在每次 ensureSorted() 时重新注入外部功能模块（如自动旋转）。
+    -- 提供者是一个函数：function(providerControlCenter) ... end
+    if self._moduleProviders and not self._providersApplied then
+        -- 防止重复注入：同一次生命周期内仅应用一次；当 _sorted 被置空时，会重置该标记。
+        for _, provider in ipairs(self._moduleProviders) do
+            if type(provider) == 'function' then
+                -- 安全调用，避免某个模块异常导致整体失败
+                pcall(provider, self)
+            end
+        end
+        self._providersApplied = true
+    end
 end
 
 function ControlCenter:GetSortedModules()
@@ -467,6 +497,8 @@ local function getCategoryDisplayName(key)
         return (L and L['SC Clipboard']) or '临时板'
     elseif key == 'History' then
         return (L and L['SC History']) or '最近放置'
+    elseif key == 'AutoRotate' then
+        return (L and L['SC AutoRotate']) or '自动旋转'
     elseif key == 'About' then
         return (L and L['SC About']) or '信息'
     end
@@ -522,6 +554,21 @@ function ControlCenter:AddModule(moduleData)
     table.insert(category.modules, moduleData)
     sortCategory(category)
     if dbKey then self._dbKeyMap[dbKey] = moduleData end
+end
+
+-- 注册模块提供者（用于在语言切换等“重建分类”场景下，重新注入外部模块）
+function ControlCenter:RegisterModuleProvider(providerFunc)
+    if type(providerFunc) ~= 'function' then return end
+    self._moduleProviders = self._moduleProviders or {}
+    table.insert(self._moduleProviders, providerFunc)
+end
+
+-- 触发重建：供外部在重大状态变更（如语言切换）后调用
+function ControlCenter:RebuildModules()
+    self._sorted = nil
+    self._dbKeyMap = nil
+    self._providersApplied = nil
+    -- 下次访问 GetSortedModules() 时会自动重建并重新注入
 end
 
 function ControlCenter:GetModule(dbKey)

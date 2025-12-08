@@ -1,4 +1,4 @@
--- Housing_Clipboard.lua
+-- Housing_ClipboardCore.lua：临时板核心逻辑（ADT 独立实现）
 -- 额外剪切板（可视化）：从“选集/悬停/当前选中”采集装饰，列表化保存；
 -- 点击列表项即可进入放置（同最近放置的行为）。
 
