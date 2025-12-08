@@ -217,7 +217,7 @@ function ADT.GetDuplicateKeyName()
     end
 end
 
--- Settings API：在暴雪设置中嵌入我们的独立 GUI（仿 Plumber 注册方式）
+-- Settings API：在暴雪设置中嵌入我们的独立 GUI（嵌入式注册方式）
 local function RegisterSettingsCategory()
     local BlizzardPanel = CreateFrame("Frame", "ADTSettingsContainer", UIParent)
     BlizzardPanel:Hide()

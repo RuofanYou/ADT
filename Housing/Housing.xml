@@ -8,7 +8,7 @@
     <Script file="Housing_Clipboard.lua"/>
     <Script file="Housing_ClipboardPopup.lua"/>
 
-    <!-- 复用与 Plumber 相同的指示条模板，但前缀改为 ADT_ 以避免冲突 -->
+    <!-- 指示条模板（使用 ADT_ 前缀避免冲突） -->
     <Frame name="ADT_HouseEditorInstructionTemplate" virtual="true">
         <KeyValues>
             <KeyValue key="minimumHeight" value="45" type="number"/>

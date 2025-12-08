@@ -90,7 +90,7 @@ function ADT.LandingPageUtil.PlayUISound(key)
     if PlaySound then pcall(PlaySound, kit) end
 end
 
--- 对象池（与 Plumber 一致的 API）
+-- 对象池（通用 API）
 function API.CreateObjectPool(createObjectFunc, onRemovedFunc, onAcquiredFunc)
     local pool = {}
 
@@ -160,12 +160,12 @@ function API.CreateObjectPool(createObjectFunc, onRemovedFunc, onAcquiredFunc)
     return pool
 end
 
--- LandingPageUtil.CreateObjectPool（Plumber 使用的版本）
+-- LandingPageUtil.CreateObjectPool（别名封装）
 ADT.LandingPageUtil.CreateObjectPool = function(createFunc, onAcquiredFunc, onRemovedFunc)
     return API.CreateObjectPool(createFunc, onRemovedFunc, onAcquiredFunc)
 end
 
--- NineSlice 边框（完全照抄 Plumber 的 SliceFrameMixin）
+-- NineSlice 边框（通用 SliceFrameMixin 实现）
 function ADT.CreateNineSliceFrame(parent, themeName)
     local f = CreateFrame('Frame', nil, parent)
     f.pieces = {}
@@ -181,7 +181,7 @@ function ADT.CreateNineSliceFrame(parent, themeName)
         f.pieces[i]:ClearAllPoints()
     end
     
-    -- 布局（与 Plumber 完全一致：角的 CENTER 锚定到父级的角）
+    -- 布局：角的 CENTER 锚定到父级的四角
     f.pieces[1]:SetPoint('CENTER', f, 'TOPLEFT', 0, 0)
     f.pieces[3]:SetPoint('CENTER', f, 'TOPRIGHT', 0, 0)
     f.pieces[7]:SetPoint('CENTER', f, 'BOTTOMLEFT', 0, 0)
@@ -255,7 +255,7 @@ function ADT.CreateNineSliceFrame(parent, themeName)
 end
 
 
--- LandingPageUtil.CreateExpansionThemeFrame（与 Plumber 完全一致）
+-- LandingPageUtil.CreateExpansionThemeFrame（扩展页主题边框）
 function ADT.LandingPageUtil.CreateExpansionThemeFrame(parent, level)
     local tex = "Interface/AddOns/AdvancedDecorationTools/Art/ExpansionLandingPage/ExpansionBorder_TWW"
     
@@ -283,7 +283,7 @@ function ADT.LandingPageUtil.CreateExpansionThemeFrame(parent, level)
     f.pieces[8]:SetTexCoord(128/1024, 384/1024, 384/1024, 512/1024)
     f.pieces[9]:SetTexCoord(384/1024, 512/1024, 384/1024, 512/1024)
     
-    -- 关闭按钮（与 Plumber 完全一致）
+    -- 关闭按钮
     local CloseButton = CreateFrame('Button', nil, f)
     f.CloseButton = CloseButton
     CloseButton:Hide()
@@ -314,7 +314,7 @@ function ADT.LandingPageUtil.CreateExpansionThemeFrame(parent, level)
         end
     end)
     
-    -- ExpansionThemeFrameMixin（与 Plumber 一致）
+    -- ExpansionThemeFrame 的行为
     function f:ShowCloseButton(state)
         if state then
             self.pieces[3]:SetTexCoord(518/1024, 646/1024, 48/1024, 176/1024)

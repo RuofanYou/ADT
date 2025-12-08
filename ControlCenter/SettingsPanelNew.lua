@@ -1,6 +1,6 @@
--- 1:1 复制自 Referrence/Plumber/Modules/ControlCenter/SettingsPanelNew.lua
--- 精简版：删除 ChangelogTab、TabButton 切换、Minimize/Maximize
--- 仅保留核心 GUI：左侧分类、中间列表、右侧预览
+-- 控制中心设置面板（简化版实现）
+-- 说明：删除了 ChangelogTab/TabButton/最小化等不必要元素，仅保留
+-- 左侧分类、中间功能列表、右侧预览等核心交互。
 
 local ADDON_NAME, ADT = ...
 if not ADT.IsToCVersionEqualOrNewerThan(110000) then return end
@@ -882,7 +882,7 @@ do
             SetTexCoord(self.Box, 904, 944, 40, 80)
             self.OptionToggle:Hide()
             self:Enable()
-            -- 设置柔和金色文字（参考 Plumber: 0.922, 0.871, 0.761）
+            -- 设置柔和金色文字（0.922, 0.871, 0.761）
             SetTextColor(self.Label, { 0.922, 0.871, 0.761 })
             self:UpdateDropdownLabel()
             return
@@ -2084,7 +2084,7 @@ function MainFrame:HandleEscape()
     return false
 end
 
--- ESC 关闭功能（与 Plumber 一致）
+-- ESC 关闭功能（按 ESC 关闭面板）
 do
     local CloseDummy = CreateFrame("Frame", "ADTSettingsPanelSpecialFrame", UIParent)
     CloseDummy:Hide()

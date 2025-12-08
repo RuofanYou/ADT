@@ -1,5 +1,4 @@
--- 1:1 复制自 Referrence/Plumber/Modules/ControlCenter/ScrollView 相关代码
--- 补充 Plumber 所需的完整 ScrollView 方法
+-- ScrollView：通用滚动视图实现（含完整方法集）
 
 local ADDON_NAME, ADT = ...
 local API = ADT.API
@@ -14,9 +13,9 @@ local function CreateScrollView(parent, externalScrollBar)
     local f = CreateFrame('Frame', nil, parent)
     API.Mixin(f, ScrollViewMixin)
     f:SetClipsChildren(true)
-    -- 明确开启鼠标滚轮支持：在“通用”分类条目较多且窗口高度较小时，
+    -- 明确开启鼠标滚轮支持：在“通用”分类条目多且窗口较小时，
     -- 允许用户直接使用滚轮滚动列表（与“最近放置/临时板”弹窗体验一致）。
-    -- 注意：Plumber 原版在某些版本由父级接收滚轮，此处显式启用以避免拦截导致的失效。
+    -- 为避免父级抢占滚轮导致的拦截失效，这里显式启用。
     if f.EnableMouseWheel then f:EnableMouseWheel(true) end
 
     f.ScrollRef = CreateFrame('Frame', nil, f)
@@ -209,7 +208,7 @@ function ScrollViewMixin:IsScrollable() return self.scrollable end
 function ScrollViewMixin:IsAtTop() return self.scrollTarget <= 0 end
 function ScrollViewMixin:IsAtBottom() return self.scrollTarget >= self.range end
 
--- Plumber 所需的 Ratio 相关方法
+-- 按比率滚动相关方法
 function ScrollViewMixin:ScrollToRatio(ratio)
     ratio = math.min(1, math.max(0, ratio or 0))
     local offset = ratio * self.range
