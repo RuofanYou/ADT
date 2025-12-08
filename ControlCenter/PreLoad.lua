@@ -603,16 +603,19 @@ local function buildModules()
             local versionLabelFmt = (L and L['Version Label']) or '版本：%s'
             local creditsLabel = (L and L['Credits Label']) or '制作信息'
             local biliLabel = (L and L['Bilibili Label']) or 'bilibili:'
+            local qqLabel = (L and L['QQ Group Label']) or 'QQ Group:'
             -- 不使用空行，避免产生多余分隔符
             return string.format(
                 "|cffffcc00%s|r\n" ..
                 "|cffaaaaaa" .. versionLabelFmt .. "|r\n" ..
                 "|cffcccccc%s|r\n" ..
-                "|cff00aaff%s|r 瑟小瑟",
+                "|cff00aaff%s|r 瑟小瑟\n" ..
+                "|cff00aaff%s|r 980228474",
                 name,
                 ver,
                 creditsLabel,
-                biliLabel
+                biliLabel,
+                qqLabel
             )
         end,
     }

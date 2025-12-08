@@ -108,7 +108,7 @@ ADT.Locales.enUS = {
     
     -- 语言选择
     ["Language"] = "Language",
-    ["Language Auto"] = "Auto (Client)",
+    ["Language Auto"] = "Auto",
     ["Language Reload Hint"] = "Some text may update after /reload",
     -- 空列表/提示
     ["Clipboard Empty Line1"] = "Clipboard is empty",
@@ -122,6 +122,7 @@ ADT.Locales.enUS = {
     ["Version Label"] = "Version: %s",
     ["Credits Label"] = "Credits",
     ["Bilibili Label"] = "bilibili:",
+    ["QQ Group Label"] = "QQ Group:",
 }
 
 -- 中文语言表
@@ -171,6 +172,7 @@ ADT.Locales.zhCN = {
     ["Version Label"] = "版本：%s",
     ["Credits Label"] = "制作信息",
     ["Bilibili Label"] = "bilibili:",
+    ["QQ Group Label"] = "魔兽家宅装修QQ群:",
     
     -- 交互/锁定
     ["LOCKED"] = "已锁定",
@@ -187,7 +189,7 @@ ADT.Locales.zhCN = {
     
     -- 语言选择
     ["Language"] = "语言 / Language",
-    ["Language Auto"] = "自动 (跟随客户端)",
+    ["Language Auto"] = "自动",
     ["Language Reload Hint"] = "部分文字可能需要 /reload 后更新",
     -- 空列表/提示
     ["Clipboard Empty Line1"] = "临时板为空",
