@@ -16,8 +16,6 @@ local DisableSharpening = API.DisableSharpening
 
 
 local Def = {
-    TextureFile = "Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/SettingsPanel.png",
-    RemixFile = "Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/LegionRemixUI.png",   -- [NEW] Remix Atlas
     BackgroundFile = "Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/CommonFrameWithHeader.tga", -- [NEW] HD Background
     ButtonSize = 28,
     WidgetGap = 14,
@@ -135,19 +133,7 @@ local CategoryHighlight
 local ActiveCategoryInfo = {}
 
 
-local function SkinObjects(obj, texture)
-    if obj.SkinnableObjects then
-        for _, _obj in ipairs(obj.SkinnableObjects) do
-            SkinObjects(_obj, texture)
-        end
-    elseif obj.SetTexture then
-        if obj.useTrilinearFilter then
-            obj:SetTexture(texture, nil, nil, "TRILINEAR")
-        else
-            obj:SetTexture(texture)
-        end
-    end
-end
+-- 取消通用“贴图换肤”函数，全面改用暴雪内置 Atlas/模板
 
 local function SetTexCoord(obj, x1, x2, y1, y2)
     obj:SetTexCoord(x1/1024, x2/1024, y1/1024, y2/1024)
@@ -173,10 +159,8 @@ end
 
 local function CreateDivider(frame, width)
     local div = frame:CreateTexture(nil, "OVERLAY")
-    div:SetSize(width, 24)
-    div:SetTexture(Def.TextureFile)
-    DisableSharpening(div)
-    SetTexCoord(div, 416, 672, 16, 64)
+    div:SetSize(width, 8)
+    div:SetAtlas("house-upgrade-header-divider-horz")
     return div
 end
 
@@ -261,7 +245,7 @@ local ADTDropdownMenu
 do
     -- 将常量存储在菜单对象上，避免闭包问题
     local MENU_WIDTH = 160
-    local ITEM_HEIGHT = 24
+    local ITEM_HEIGHT = 20   -- 下拉项更矮，视觉更精致
     local PADDING = 6
     
     -- 菜单项 Mixin
@@ -286,10 +270,8 @@ do
     
     function DropdownItemMixin:SetSelected(selected)
         self.selected = selected
-        if selected then
-            SetTexCoord(self.Radio, 737, 783, 17, 63)  -- 勾选状态
-        else
-            SetTexCoord(self.Radio, 689, 735, 17, 63)  -- 未勾选状态
+        if self.Check then
+            self.Check:SetShown(selected)
         end
     end
     
@@ -309,12 +291,17 @@ do
         f.Highlight:SetColorTexture(1, 0.82, 0, 0.15)
         f.Highlight:Hide()
         
-        -- 单选按钮图标
+        -- 单选按钮：最小化复选框 + 黄色对勾（使用暴雪 Atlas）
         f.Radio = f:CreateTexture(nil, "ARTWORK")
-        f.Radio:SetSize(16, 16)
+        f.Radio:SetSize(14, 14)
         f.Radio:SetPoint("LEFT", f, "LEFT", 4, 0)
-        f.Radio:SetTexture(Def.TextureFile)
+        f.Radio:SetAtlas("checkbox-minimal")
         DisableSharpening(f.Radio)
+        f.Check = f:CreateTexture(nil, "OVERLAY")
+        f.Check:SetPoint("CENTER", f.Radio, "CENTER", 0, 0)
+        f.Check:SetSize(12, 12)
+        f.Check:SetAtlas("common-icon-checkmark-yellow")
+        f.Check:Hide()
         
         -- 文本
         f.Text = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -345,10 +332,9 @@ do
     -- 根据图片素材坐标设置九宫格背景
     local bg = ADTDropdownMenu:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
-    bg:SetTexture(Def.TextureFile)
-    -- 使用 SettingsPanel.png 的左上角深色背景区域
-    bg:SetTexCoord(0/1024, 256/1024, 0/512, 256/512)
-    bg:SetVertexColor(0.15, 0.13, 0.11)
+    -- 使用暴雪通用面板背景
+    bg:SetAtlas("housing-basic-panel-background")
+    bg:SetVertexColor(1, 1, 1)
     ADTDropdownMenu.Background = bg
     
     -- 金色边框（使用九宫格）
@@ -489,178 +475,44 @@ end
 
 local CreateSearchBox
 do
-    local SearchBoxMixin = {}
     local StringTrim = API.StringTrim
 
-    function SearchBoxMixin:SetTexture(texture)
-        SkinObjects(self, texture)
-    end
-
-    function SearchBoxMixin:SetInstruction(text)
-        self.Instruction:SetText(text)
-    end
-
-    function SearchBoxMixin:OnEnable()
-        self:UpdateVisual()
-    end
-
-    function SearchBoxMixin:OnDisable()
-        self:UpdateVisual()
-    end
-
-    function SearchBoxMixin:UpdateVisual()
-        if self:IsEnabled() then
-            if self:HasFocus() then
-                self:SetTextColor(1, 1, 1)
-            elseif self:IsMouseMotionFocus() then
-                self:SetTextColor(1, 1, 1)
-            else
-                SetTextColor(self, Def.TextColorNormal)
-            end
-            self.Left:SetDesaturated(false)
-            self.Center:SetDesaturated(false)
-            self.Right:SetDesaturated(false)
-            self.Left:SetVertexColor(1, 1, 1)
-            self.Center:SetVertexColor(1, 1, 1)
-            self.Right:SetVertexColor(1, 1, 1)
-        else
-            self:SetTextColor(0.5, 0.5, 0.5)
-            self.Left:SetDesaturated(true)
-            self.Center:SetDesaturated(true)
-            self.Right:SetDesaturated(true)
-            self.Left:SetVertexColor(0.5, 0.5, 0.5)
-            self.Center:SetVertexColor(0.5, 0.5, 0.5)
-            self.Right:SetVertexColor(0.5, 0.5, 0.5)
-        end
-    end
-
-    function SearchBoxMixin:OnEscapePressed()
-        self:ClearFocus()
-    end
-
-    function SearchBoxMixin:OnEnterPressed()
-        self:ClearFocus()
-    end
-
-    function SearchBoxMixin:OnTextChanged(userInput)
-        if self.hasOnTextChangeCallback then
-            self.t = 0
-            self:SetScript("OnUpdate", self.OnUpdate)
-        end
-        self.ResetButton:SetShown(self:HasText())
-    end
-
-    function SearchBoxMixin:OnUpdate(elapsed)
-        self.t = self.t + elapsed
-        if self.t > 0.2 then
-            self.t = nil
-            self:SetScript("OnUpdate", nil)
-            if self.searchFunc then
-                if self:IsNumeric() then
-                    self.searchFunc(self, self:GetNumber())
-                else
-                    self.searchFunc(self, StringTrim(self:GetText()))
-                end
-            end
-        end
-    end
-
-    function SearchBoxMixin:SetSearchFunc(searchFunc)
-        self.searchFunc = searchFunc
-        self.hasOnTextChangeCallback = searchFunc ~= nil
-    end
-
-    function SearchBoxMixin:OnHide()
-        self.t = nil
-        self:SetScript("OnUpdate", nil)
-    end
-
-    function SearchBoxMixin:UpdateText()
-        local text = self:GetText()
-        text = StringTrim(text)
-        self:SetText(text or "")
-        if text then
-            self.Instruction:Hide()
-            self.ResetButton:Show()
-        else
-            self.Instruction:Show()
-            self.ResetButton:Hide()
-        end
-    end
-
-    function SearchBoxMixin:OnEditFocusLost()
-        self.Magnifier:SetVertexColor(0.5, 0.5, 0.5)
-        self:UpdateText()
-        self:UnlockHighlight()
-        self:UpdateVisual()
-    end
-
-    function SearchBoxMixin:OnEditFocusGained()
-        self.Instruction:Hide()
-        self.Magnifier:SetVertexColor(1, 1, 1)
-        self:LockHighlight()
-        self:UpdateVisual()
-    end
-
-    function SearchBoxMixin:ClearText()
-        self:SetText("")
-        if not self:HasFocus() then
-            self.Instruction:Show()
-        end
-    end
-
-    function SearchBoxMixin:HasStickyFocus()
-        return self:IsMouseMotionFocus() or self.ResetButton:IsMouseMotionFocus()
-    end
-
-    local function ResetButton_OnEnter(self)
-        SetTexCoord(self.Texture, 904, 944, 0, 40)
-    end
-
-    local function ResetButton_OnLeave(self)
-        SetTexCoord(self.Texture, 864, 904, 0, 40)
-    end
-
-    local function ResetButton_OnClick(self)
-        self:GetParent():ClearText()
-        ADT.LandingPageUtil.PlayUISound("CheckboxOff")
-    end
-
-
     function CreateSearchBox(parent)
-        local f = CreateFrame("EditBox", nil, parent, "ADTEditBoxArtTemplate")
-        Mixin(f, SearchBoxMixin)
-
-        f:SetTexture(Def.TextureFile)
-
-        SetTexCoord(f.Left, 0, 32, 0, 80)
-        SetTexCoord(f.Center, 32, 160, 0, 80)
-        SetTexCoord(f.Right, 160, 192, 0, 80)
-
-        SetTexCoord(f.Magnifier, 984, 1024, 0, 40)
-        f.Magnifier:SetVertexColor(0.5, 0.5, 0.5)
-
-        f:SetInstruction(SEARCH)
-
+        -- 使用暴雪原生 SearchBoxTemplate，避免自定义贴图/切片
+        local f = CreateFrame("EditBox", nil, parent, "SearchBoxTemplate")
+        f:SetAutoFocus(false)
         f:SetSize(168, Def.ButtonSize)
+        f.Instructions:SetText(SEARCH)
 
-        f:SetScript("OnEditFocusGained", f.OnEditFocusGained)
-        f:SetScript("OnEditFocusLost", f.OnEditFocusLost)
-        f:SetScript("OnEscapePressed", f.OnEscapePressed)
-        f:SetScript("OnEnterPressed", f.OnEnterPressed)
-        f:SetScript("OnEnable", f.OnEnable)
-        f:SetScript("OnDisable", f.OnDisable)
-        f:SetScript("OnHide", f.OnHide)
-        f:SetScript("OnTextChanged", f.OnTextChanged)
+        -- 统一文字颜色
+        f:SetTextColor(1, 1, 1)
 
-        f.ResetButton:SetScript("OnEnter", ResetButton_OnEnter)
-        f.ResetButton:SetScript("OnLeave", ResetButton_OnLeave)
-        f.ResetButton:SetScript("OnClick", ResetButton_OnClick)
-        SetTexCoord(f.ResetButton.Texture, 864, 904, 0, 40)
-
-        f:SetSearchFunc(function(self, text)
-            MainFrame:RunSearch(text)
+        -- 文本变化回调（200ms 防抖）
+        local t
+        f:SetScript("OnTextChanged", function(self, userInput)
+            if not userInput then return end
+            t = 0
+            self:SetScript("OnUpdate", function(self2, elapsed)
+                t = t + elapsed
+                if t > 0.2 then
+                    self2:SetScript("OnUpdate", nil)
+                    local text = StringTrim(self2:GetText())
+                    MainFrame:RunSearch(text)
+                end
+            end)
         end)
+
+        -- 清除按钮与 Esc 行为
+        if f.ClearButton then
+            f.ClearButton:SetScript("OnClick", function(btn)
+                local self2 = btn:GetParent()
+                self2:SetText("")
+                MainFrame:RunSearch("")
+                ADT.LandingPageUtil.PlayUISound("CheckboxOff")
+            end)
+        end
+        f:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        f:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
 
         return f
     end
@@ -759,6 +611,7 @@ do
         CountContainer:SetPoint("RIGHT", f, "RIGHT", -f.labelOffset, 0)
         CountContainer:Hide()
         CountContainer:SetAlpha(0)
+        -- 去掉数字背景框，仅淡入文字
         MakeFadingObject(CountContainer)
         CountContainer:SetFadeSpeed(8)
 
@@ -869,25 +722,37 @@ do
         if self.dbKey and self.data then
             ADT.DebugPrint("[SettingsPanel] data.type=" .. tostring(self.data.type))
             -- 下拉菜单类型：使用暴雪 12.0+ Menu API（最佳实践）
-            if self.data.type == 'dropdown' and self.data.options then
+            if self.data.type == 'dropdown' then
                 ADT.DebugPrint("[SettingsPanel] Using MenuUtil.CreateContextMenu")
                 MenuUtil.CreateContextMenu(self, function(owner, root)
-                    local function IsSelected(value)
-                        return ADT.GetDBValue(self.dbKey) == value
-                    end
-                    local function SetSelected(value)
-                        ADT.SetDBValue(self.dbKey, value, true)
-                        if self.data.toggleFunc then
-                            self.data.toggleFunc(value)
+                    if self.data.dropdownBuilder then
+                        self.data.dropdownBuilder(owner, root)
+                    else
+                        if not self.data.options then return end
+                        local function IsSelected(value)
+                            return ADT.GetDBValue(self.dbKey) == value
                         end
-                        self:UpdateDropdownLabel()
-                        if MainFrame.UpdateSettingsEntries then
-                            MainFrame:UpdateSettingsEntries()
+                        local function SetSelected(value)
+                            ADT.SetDBValue(self.dbKey, value, true)
+                            if self.data.toggleFunc then
+                                self.data.toggleFunc(value)
+                            end
+                            self:UpdateDropdownLabel()
+                            if MainFrame.UpdateSettingsEntries then
+                                MainFrame:UpdateSettingsEntries()
+                            end
+                            return MenuResponse.Close
                         end
-                        return MenuResponse.Close
-                    end
-                    for _, opt in ipairs(self.data.options) do
-                        root:CreateRadio(opt.text, IsSelected, SetSelected, opt.value)
+                        for _, opt in ipairs(self.data.options) do
+                            if opt and opt.action == 'button' and opt.onClick then
+                                root:CreateButton(opt.text, function()
+                                    opt.onClick()
+                                    return MenuResponse.Close
+                                end)
+                            else
+                                root:CreateRadio(opt.text, IsSelected, SetSelected, opt.value)
+                            end
+                        end
                     end
                 end)
                 return  -- 不需要执行后续的 UpdateSettingsEntries
@@ -925,18 +790,17 @@ do
         if self.virtual then
             self:Enable()
             self.OptionToggle:SetShown(self.hasOptions)
-            -- 改为使用“方块点”示意（虚拟条目预览也统一用方块点）
-            -- 选中对勾正下方那格（保持同一列）：x=737~783, y=65~111（已做 +1px inset）
-            SetTexCoord(self.Box, 737, 783, 65, 111)
+            -- 虚拟条目：仅显示容器，不显示对勾
+            if self.Box.SetAtlas then self.Box:SetAtlas("checkbox-minimal") end
+            if self.Check then self.Check:Hide() end
             return
         end
         
         -- 下拉菜单类型：显示下拉箭头，使用柔和金色文字
         if self.data and self.data.type == 'dropdown' then
-            self.Box:Show()
-            -- 使用 OptionToggle 的箭头样式区域（可根据实际素材调整）
-            -- SettingsPanel.png 中 904-944, 40-80 是 OptionToggle 图标，这里用来做下拉按钮图标
-            SetTexCoord(self.Box, 904, 944, 40, 80)
+            -- 下拉项不显示左侧复选框/对勾，也不显示右侧更多按钮图标
+            if self.Box then self.Box:Hide() end
+            if self.Check then self.Check:Hide() end
             self.OptionToggle:Hide()
             self:Enable()
             -- 设置柔和金色文字（0.922, 0.871, 0.761）
@@ -953,21 +817,12 @@ do
         end
 
         if GetDBBool(self.dbKey) then
-            if disabled then
-                -- 选中但禁用：维持禁用选中贴图（灰度样式）
-                SetTexCoord(self.Box, 785, 831, 65, 111)  -- +1px inset 灰样式
-            else
-                -- 选中：由原对勾改为“对勾正下方的方块点”
-                -- 同列坐标：x=737~783, y=65~111
-                SetTexCoord(self.Box, 737, 783, 65, 111)
-            end
+            if self.Box.SetAtlas then self.Box:SetAtlas("checkbox-minimal") end
+            if self.Check then self.Check:Show() end
             self.OptionToggle:SetShown(self.hasOptions)
         else
-            if disabled then
-                SetTexCoord(self.Box, 785, 831, 17, 63)  -- +1px inset
-            else
-                SetTexCoord(self.Box, 689, 735, 17, 63)  -- +1px inset ☐ unchecked
-            end
+            if self.Box.SetAtlas then self.Box:SetAtlas("checkbox-minimal") end
+            if self.Check then self.Check:Hide() end
             self.OptionToggle:Hide()
         end
 
@@ -982,7 +837,6 @@ do
         if self:IsEnabled() then
             if self:IsMouseMotionFocus() then
                 SetTextColor(self.Label, Def.TextColorHighlight)
-                SetTexCoord(self.OptionToggle.Texture, 904, 944, 40, 80)
             else
                 -- 下拉菜单使用柔和金色，普通条目使用默认颜色
                 if self.data and self.data.type == 'dropdown' then
@@ -990,7 +844,6 @@ do
                 else
                     SetTextColor(self.Label, Def.TextColorNormal)
                 end
-                SetTexCoord(self.OptionToggle.Texture, 864, 904, 40, 80)
             end
         else
             SetTextColor(self.Label, Def.TextColorDisabled)
@@ -1012,12 +865,21 @@ do
         -- 即便我们做了 +1px inset，仍可能出现“橙色勾边缘发灰/发白”的串色伪影。
         -- 因此这里明确关闭三线性过滤，退回 LINEAR，以保证像素仅在当前切片内采样。
         f.Box.useTrilinearFilter = false
-        SkinObjects(f, Def.TextureFile)
+        if f.Box.SetAtlas then f.Box:SetAtlas("checkbox-minimal") end
+        -- 对勾覆盖层（黄色对勾）
+        local check = f:CreateTexture(nil, "OVERLAY")
+        f.Check = check
+        check:SetAtlas("common-icon-checkmark-yellow")
+        check:SetSize(20, 20)
+        check:SetPoint("CENTER", f.Box, "CENTER", 0, 0)
+        check:Hide()
 
         f.NewTag = CreateNewFeatureMark(f)
 
+        -- 暂不显示独立的“更多选项”按钮图标，保留点击行为
         Mixin(f.OptionToggle, OptionToggleMixin)
         f.OptionToggle:OnLoad()
+        f.OptionToggle.Texture:Hide()
 
         return f
     end
@@ -1218,11 +1080,10 @@ do
         local f = CreateFrame("Frame", nil, parent, "ADTSettingsAnimSelectionTemplate")
         Mixin(f, SelectionHighlightMixin)
 
-        SkinObjects(f, Def.TextureFile)
-
-        SetTexCoord(f.Left, 0, 32, 80, 160)
-        SetTexCoord(f.Center, 32, 160, 80, 160)
-        SetTexCoord(f.Right, 160, 192, 80, 160)
+        -- 改为纯色高亮条，避免依赖自定义贴图切片
+        if f.Left then f.Left:SetColorTexture(1, 1, 1, 0.08) end
+        if f.Center then f.Center:SetColorTexture(1, 1, 1, 0.08) end
+        if f.Right then f.Right:SetColorTexture(1, 1, 1, 0.08) end
         -- 提升到 ARTWORK 层，确保不被左侧背景覆盖
         if f.Left and f.Left.SetDrawLayer then f.Left:SetDrawLayer("ARTWORK") end
         if f.Center and f.Center.SetDrawLayer then f.Center:SetDrawLayer("ARTWORK") end
@@ -1242,9 +1103,12 @@ do  -- Left Section
         CategoryHighlight:Hide()
         CategoryHighlight:ClearAllPoints()
         if button then
-            CategoryHighlight:SetPoint("LEFT", button, "LEFT", 0, 0)
-            CategoryHighlight:SetPoint("RIGHT", button, "RIGHT", 0, 0)
+            -- 窄化高亮条：左右各收缩 6px，降低整体高度
+            CategoryHighlight:SetPoint("LEFT", button, "LEFT", 6, 0)
+            CategoryHighlight:SetPoint("RIGHT", button, "RIGHT", -6, 0)
             CategoryHighlight:SetParent(button)
+            local h = math.max(12, (Def.ButtonSize or 28) - 10)
+            CategoryHighlight:SetHeight(h)
             CategoryHighlight:FadeIn()
         end
     end
@@ -1973,32 +1837,19 @@ local function CreateUI()
         Background:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", -2, 2)
 
 
-        local ScrollBar = ControlCenter.CreateScrollBarWithDynamicSize(Tab1)
-        ScrollBar:SetPoint("TOP", CentralSection, "TOPRIGHT", -12, -0.5*Def.WidgetGap) -- -12 避免与边框重叠
-        ScrollBar:SetPoint("BOTTOM", CentralSection, "BOTTOMRIGHT", -12, 0.5*Def.WidgetGap)
-        -- 提升层级：在自定义边框之上，避免在某些界面比例下被遮挡
-        if MainFrame and MainFrame.GetFrameStrata then
-            -- 与主面板同层级即可；若主面板位于 TOOLTIP，本条保证与其一致
-            ScrollBar:SetFrameStrata(MainFrame:GetFrameStrata() or "FULLSCREEN_DIALOG")
-        else
-            ScrollBar:SetFrameStrata("FULLSCREEN_DIALOG")
-        end
-        ScrollBar:SetFrameLevel((MainFrame:GetFrameLevel() or 0) + 200)
-        ScrollBar:SetAlpha(1)
-        MainFrame.ModuleTab.ScrollBar = ScrollBar
-        ScrollBar:UpdateThumbRange()
+        -- 暂不显示自研滚动条，后续将切换为暴雪 ScrollBox 体系
+        MainFrame.ModuleTab.ScrollBar = nil
 
-
-        local ScrollView = API.CreateScrollView(Tab1, ScrollBar)
+        local ScrollView = API.CreateScrollView(Tab1)
         MainFrame.ModuleTab.ScrollView = ScrollView
-        ScrollBar.ScrollView = ScrollView
         ScrollView:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", 0, -2)
         ScrollView:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", 0, 2)
         ScrollView:SetStepSize(Def.ButtonSize * 2)
         ScrollView:OnSizeChanged()
         ScrollView:EnableMouseBlocker(true)
         ScrollView:SetBottomOvershoot(Def.CategoryGap)
-        ScrollView:SetAlwaysShowScrollBar(true) -- 总显示滚动条，缩小时仍可见
+        -- 不显示滚动条
+        ScrollView:SetAlwaysShowScrollBar(false)
         ScrollView:SetShowNoContentAlert(true)
         ScrollView:SetNoContentAlertText(CATALOG_SHOP_NO_SEARCH_RESULTS or "")
 
@@ -2141,7 +1992,7 @@ function MainFrame:UpdateLayout()
     self.frameWidth = frameWidth
 
     self.ModuleTab.ScrollView:OnSizeChanged()
-    if self.ModuleTab.ScrollBar.OnSizeChanged then
+    if self.ModuleTab.ScrollBar and self.ModuleTab.ScrollBar.OnSizeChanged then
         self.ModuleTab.ScrollBar:OnSizeChanged()
     end
 end
