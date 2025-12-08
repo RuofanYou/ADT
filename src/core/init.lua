@@ -270,7 +270,7 @@ local function RegisterSettingsCategory()
     Settings.RegisterAddOnCategory(category)
 
     BlizzardPanel:SetScript("OnShow", function(self)
-        local Main = ADT and ADT.ControlCenter and ADT.ControlCenter.SettingsPanel
+        local Main = ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel
         if Main and Main.ShowUI then
             Main:Hide()
             Main:SetParent(self)
@@ -282,7 +282,7 @@ local function RegisterSettingsCategory()
     end)
 
     BlizzardPanel:SetScript("OnHide", function(self)
-        local Main = ADT and ADT.ControlCenter and ADT.ControlCenter.SettingsPanel
+        local Main = ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel
         if Main then Main:Hide() end
     end)
 
@@ -304,8 +304,8 @@ f:SetScript("OnEvent", function(self, event, addonName)
             ADT.Housing:LoadSettings()
         end
         -- 若控制中心已构建，刷新一次分类与条目（避免语言切换后残留旧文案）
-        if ADT.ControlCenter and ADT.ControlCenter.SettingsPanel then
-            local Main = ADT.ControlCenter.SettingsPanel
+        if ADT.CommandDock and ADT.CommandDock.SettingsPanel then
+            local Main = ADT.CommandDock.SettingsPanel
             -- 仅当 UI 已构建完毕（存在对象池与滚动容器）时刷新；否则等待真正打开面板时再刷新。
             local canRefresh = Main.ModuleTab and Main.ModuleTab.ScrollView
             if canRefresh then

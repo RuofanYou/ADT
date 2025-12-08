@@ -1,5 +1,5 @@
 
--- 为 GUI（控制中心）提供所有必需的 API 函数
+-- 为 GUI（指挥坞）提供所有必需的 API 函数
 
 local ADDON_NAME, ADT = ...
 
@@ -156,9 +156,9 @@ end
 function ADT.AnyShownModuleOptions() return false end
 function ADT.CloseAllModuleOptions() return false end
 
--- ControlCenter 模块注册
-local ControlCenter = ADT.ControlCenter or {}
-ADT.ControlCenter = ControlCenter
+-- CommandDock 模块注册
+local CommandDock = ADT.CommandDock or {}
+ADT.CommandDock = CommandDock
 
 local L = ADT.L
 
@@ -304,8 +304,8 @@ local function buildModules()
                 ADT.ApplyLocale(locale)
             end
             -- 重新构建设置模块并刷新当前 UI
-            if ADT and ADT.ControlCenter then
-                local CC = ADT.ControlCenter
+            if ADT and ADT.CommandDock then
+                local CC = ADT.CommandDock
                 if CC and CC.RebuildModules then
                     CC:RebuildModules()
                 else
@@ -318,7 +318,29 @@ local function buildModules()
                 local canRefresh = Main and Main.ModuleTab and Main.ModuleTab.ScrollView
                 if canRefresh then
                     if Main.RefreshCategoryList then Main:RefreshCategoryList() end
-                    if Main.RefreshFeatureList then Main:RefreshFeatureList() end
+                    -- 避免切到“混排视图”，保持当前分类的“单分类渲染”
+                    local key = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or Main.currentSettingsCategory or Main.currentDecorCategory or Main.currentAboutCategory
+                    local cat = key and CC:GetCategoryByKey(key) or nil
+                    if cat and cat.categoryType == 'decorList' and Main.ShowDecorListCategory then
+                        Main:ShowDecorListCategory(key)
+                    elseif cat and cat.categoryType == 'about' and Main.ShowAboutCategory then
+                        Main:ShowAboutCategory(key)
+                    else
+                        -- 默认/设置类：采用单分类渲染
+                        local targetKey = key
+                        if not (cat and cat.categoryType == 'settings') then
+                            -- 找到第一个设置类分类作为回退
+                            for _, info in ipairs(CC:GetSortedModules()) do
+                                if info.categoryType == 'settings' then targetKey = info.key break end
+                            end
+                        end
+                        if targetKey and Main.ShowSettingsCategory then
+                            Main:ShowSettingsCategory(targetKey)
+                        elseif Main.RefreshFeatureList then
+                            -- 极端兜底：仍可用混排视图
+                            Main:RefreshFeatureList()
+                        end
+                    end
                     if Main.RefreshLanguageLayout then Main:RefreshLanguageLayout(true) end
                 end
             end
@@ -454,7 +476,7 @@ local function buildModules()
     }
 
     -- 初始化映射（6 个设置模块）
-    ControlCenter._dbKeyMap = {
+    CommandDock._dbKeyMap = {
         [moduleRepeat.dbKey] = moduleRepeat,
         [moduleCopy.dbKey] = moduleCopy,
         [moduleCut.dbKey] = moduleCut,
@@ -472,7 +494,7 @@ local function ensureSorted(self)
 
     -- 语言切换会清空 _sorted/_dbKeyMap；为保持“单一权威 + DRY”，
     -- 通过“模块提供者”在每次 ensureSorted() 时重新注入外部功能模块（如自动旋转）。
-    -- 提供者是一个函数：function(providerControlCenter) ... end
+    -- 提供者是一个函数：function(providerCommandDock) ... end
     if self._moduleProviders and not self._providersApplied then
         -- 防止重复注入：同一次生命周期内仅应用一次；当 _sorted 被置空时，会重置该标记。
         for _, provider in ipairs(self._moduleProviders) do
@@ -485,7 +507,7 @@ local function ensureSorted(self)
     end
 end
 
-function ControlCenter:GetSortedModules()
+function CommandDock:GetSortedModules()
     ensureSorted(self)
     return self._sorted
 end
@@ -518,7 +540,7 @@ local function sortCategory(cat)
 end
 
 -- 动态注册模块（供各功能文件调用）
-function ControlCenter:AddModule(moduleData)
+function CommandDock:AddModule(moduleData)
     if type(moduleData) ~= 'table' then return end
     ensureSorted(self)
 
@@ -557,26 +579,26 @@ function ControlCenter:AddModule(moduleData)
 end
 
 -- 注册模块提供者（用于在语言切换等“重建分类”场景下，重新注入外部模块）
-function ControlCenter:RegisterModuleProvider(providerFunc)
+function CommandDock:RegisterModuleProvider(providerFunc)
     if type(providerFunc) ~= 'function' then return end
     self._moduleProviders = self._moduleProviders or {}
     table.insert(self._moduleProviders, providerFunc)
 end
 
 -- 触发重建：供外部在重大状态变更（如语言切换）后调用
-function ControlCenter:RebuildModules()
+function CommandDock:RebuildModules()
     self._sorted = nil
     self._dbKeyMap = nil
     self._providersApplied = nil
     -- 下次访问 GetSortedModules() 时会自动重建并重新注入
 end
 
-function ControlCenter:GetModule(dbKey)
+function CommandDock:GetModule(dbKey)
     ensureSorted(self)
     return dbKey and self._dbKeyMap and self._dbKeyMap[dbKey]
 end
 
-function ControlCenter:GetModuleCategoryName(dbKey)
+function CommandDock:GetModuleCategoryName(dbKey)
     ensureSorted(self)
     if not dbKey then return end
     for _, cat in ipairs(self._sorted) do
@@ -588,14 +610,14 @@ function ControlCenter:GetModuleCategoryName(dbKey)
     end
 end
 
-function ControlCenter:UpdateCurrentSortMethod() return 1 end
-function ControlCenter:SetCurrentSortMethod(_) end
-function ControlCenter:GetNumFilters() return 1 end
-function ControlCenter:AnyNewFeatureMarker() return false end
-function ControlCenter:FlagCurrentNewFeatureMarkerSeen() end
+function CommandDock:UpdateCurrentSortMethod() return 1 end
+function CommandDock:SetCurrentSortMethod(_) end
+function CommandDock:GetNumFilters() return 1 end
+function CommandDock:AnyNewFeatureMarker() return false end
+function CommandDock:FlagCurrentNewFeatureMarkerSeen() end
 
 -- 获取指定 key 的分类信息（包括装饰列表分类）
-function ControlCenter:GetCategoryByKey(key)
+function CommandDock:GetCategoryByKey(key)
     ensureSorted(self)
     if not key then return nil end
     for _, cat in ipairs(self._sorted) do
@@ -607,7 +629,7 @@ function ControlCenter:GetCategoryByKey(key)
 end
 
 -- 获取装饰列表分类的列表项数量（用于角标显示）
-function ControlCenter:GetDecorListCount(key)
+function CommandDock:GetDecorListCount(key)
     local cat = self:GetCategoryByKey(key)
     if cat and cat.categoryType == 'decorList' and cat.getListData then
         local list = cat.getListData()
@@ -616,7 +638,7 @@ function ControlCenter:GetDecorListCount(key)
     return 0
 end
 
-function ControlCenter:GetSearchResult(text)
+function CommandDock:GetSearchResult(text)
     ensureSorted(self)
     text = string.lower(tostring(text or ''))
     if text == '' then return self:GetSortedModules() end

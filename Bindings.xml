@@ -1,18 +1,13 @@
 <Bindings>
-    <!-- 在“按键绑定”中创建一组 ADT 的快捷键 -->
-    <!-- 仅在首条绑定声明 header，避免重复注册同一 Header（12.0 更严格） -->
     <Binding name="ADT_TOGGLE_HISTORY" header="ADT">
         ADT_ToggleHistory();
     </Binding>
-    <!-- 临时板：仅保留两项快捷键 -->
     <Binding name="ADT_TEMP_STORE">
         ADT_Temp_StoreSelected();
     </Binding>
     <Binding name="ADT_TEMP_RECALL">
         ADT_Temp_RecallTop();
     </Binding>
-    
-    <!-- 高级编辑：虚拟多选 -->
     <Binding name="ADT_ADV_TOGGLE">
         ADT_Adv_Toggle();
     </Binding>
@@ -28,6 +23,4 @@
     <Binding name="ADT_ADV_ANCHOR_SELECTED">
         ADT_Adv_SetAnchor_Selected();
     </Binding>
-
-    <!-- 临时板以外的旧剪切板快捷键全部移除 -->
 </Bindings>

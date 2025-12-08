@@ -1,7 +1,3 @@
--- Housing_AutoRotate.lua
--- 目标：当“抓起预览”时自动旋转（支持：预设角度/学习最近/序列步进）
--- 范围：默认仅在按住 CTRL 进行批量放置（Paint 模式链路）时生效；可在设置中切换为“所有抓取入口”。
-
 local ADDON_NAME, ADT = ...
 local L = ADT and ADT.L or {}
 
@@ -253,7 +249,7 @@ function M:ApplyAutoRotate()
         remaining = steps,
         sign = sign,
         token = self._plannedToken,
-        deadline = (GetTime and (GetTime() + 1.2)) or nil, -- 最长等待约1.2秒
+        deadline = (GetTime and (GetTime() + 3.0)) or nil, -- 右键转视角时可能更久，放宽至 ~3s
         started = false,
     }
     self._rotateJob = job
@@ -312,7 +308,8 @@ end
 
 -- 带重试的应用：在抓起后部分帧未就绪（未选中/未进入预览）时尝试多次
 function M:TryApplyWithRetries(label)
-    local tries = {0, 0.03, 0.06, 0.1, 0.16, 0.22, 0.30, 0.40, 0.50}
+    -- 延长重试窗口，右键拖拽视角时“就绪”可能被拉长
+    local tries = {0, 0.03, 0.06, 0.1, 0.16, 0.22, 0.30, 0.40, 0.50, 0.65, 0.80, 1.00, 1.20}
     for i, t in ipairs(tries) do
         C_Timer.After(t, function()
             if self._rotatedThisPreview then return end
@@ -338,25 +335,35 @@ M:SetScript("OnEvent", function(self, event, ...)
             -- 若之前进入过“待确认取消”窗口，则视为抖动恢复，取消该窗口
             self._pendingCancelCheckToken = nil
         else
-            -- 右键转视角会导致短帧甚至较长时间的失选/非预览。
-            -- 旧逻辑仅 0.12s 去抖，容易把“转视角”误判为取消，进而把序列 pending/guard 清掉 → 序列从起点重来。
-            -- 新逻辑：
-            -- 1) 多段确认（最多 3 次，总计 ~0.36s）；
-            -- 2) 若仍在按住 CTRL（批量放）则默认认为是“转视角”，不按取消处理；
-            -- 3) 仅在最终确认“确实退出预览”时，才清理 pending/guard。
+            -- 右键转视角常导致“非选中/非预览”持续较久。
+            -- 新逻辑：基于时间窗口 + 右键/鼠标观察状态判断，尽量不误判为取消。
             local checkToken = (self._pendingCancelCheckToken or 0) + 1
             self._pendingCancelCheckToken = checkToken
             local tokenAtSchedule = self._previewToken
             local ridAtSchedule = self._currentRID
+            local startAt = (GetTime and GetTime()) or 0
 
-            local function confirmOrRetry(round)
+            local function isRightDragging()
+                local down = false
+                if IsMouseButtonDown then
+                    pcall(function()
+                        down = IsMouseButtonDown("RightButton") or IsMouseButtonDown(2)
+                    end)
+                end
+                local ml = false
+                if IsMouselooking then
+                    pcall(function() ml = IsMouselooking() end)
+                end
+                return down or ml
+            end
+
+            local function confirmOrRetry()
                 -- 若期间已重新选中或开始了新一轮预览，则放弃本次取消判定
                 if M._pendingCancelCheckToken ~= checkToken then return end
                 if M._previewToken ~= tokenAtSchedule then return end
 
                 local stillSelected = (C_HousingBasicMode and C_HousingBasicMode.IsDecorSelected and C_HousingBasicMode.IsDecorSelected()) or false
                 local stillPlacing  = (C_HousingBasicMode and C_HousingBasicMode.IsPlacingNewDecor and C_HousingBasicMode.IsPlacingNewDecor()) or false
-
                 if stillSelected and stillPlacing then
                     -- 抖动恢复：继续尝试自动旋转
                     M._inPreviewActive = true
@@ -364,23 +371,27 @@ M:SetScript("OnEvent", function(self, event, ...)
                     return
                 end
 
-                -- 若仍在按 CTRL，大概率是“右键拖拽视角”，继续等待，不做取消
-                if IsControlKeyDown() and (round or 1) < 3 then
-                    C_Timer.After(0.12, function() confirmOrRetry((round or 1) + 1) end)
+                local now = (GetTime and GetTime()) or startAt
+                local elapsed = now - startAt
+                local dragging = isRightDragging()
+
+                -- 当右键拖拽中：持续等待，不按取消处理
+                if dragging then
+                    C_Timer.After(0.10, confirmOrRetry)
                     return
                 end
 
-                -- 最终确认属于“取消”情形：清理与本 token 关联的 pending/guard（仅限当前 rid）
-                if (round or 1) < 3 then
-                    -- 未达到最大确认次数，再等一拍
-                    C_Timer.After(0.12, function() confirmOrRetry((round or 1) + 1) end)
+                -- 未拖拽：给出宽限（普通 0.6s；若仍按 CTRL 则 1.2s）后再判定取消
+                local grace = IsControlKeyDown() and 1.2 or 0.6
+                if elapsed < grace then
+                    C_Timer.After(0.10, confirmOrRetry)
                     return
                 end
 
+                -- 确认取消：清理与本 token 关联的 pending/guard（仅限当前 rid）
                 M._inPreviewActive = false
                 local rid = ridAtSchedule
                 if rid then
-                    -- 从队列尾部删除“同一预览token”的最后一项（保证仅撤销本次未落地的计划）
                     for i = #M._pendingQueue, 1, -1 do
                         local it = M._pendingQueue[i]
                         if it and it.rid == rid and it.token == tokenAtSchedule then
@@ -391,14 +402,14 @@ M:SetScript("OnEvent", function(self, event, ...)
                     end
                     local key = tostring(rid)
                     local guard = M._nextIdxByRID[key]
-                    if guard and guard.speculative and guard.token == M._previewToken then
+                    if guard and guard.speculative and guard.token == tokenAtSchedule then
                         M._nextIdxByRID[key] = nil
                     end
                 end
             end
 
-            -- 延迟确认流程（最多 3 次）
-            C_Timer.After(0.12, function() confirmOrRetry(1) end)
+            -- 启动确认流程（时间窗 + 右键状态）
+            C_Timer.After(0.10, confirmOrRetry)
         end
     elseif event == "HOUSING_DECOR_PLACE_SUCCESS" then
         -- 将事件与当前预览配对（防误提交）
@@ -589,10 +600,10 @@ do
     end
 end
 
--- 设置模块（接入 ControlCenter）
+-- 设置模块（接入 CommandDock）
 local function RegisterSettings()
-    if not (ADT and ADT.ControlCenter and ADT.ControlCenter.AddModule) then return end
-    local CC = ADT.ControlCenter
+    if not (ADT and ADT.CommandDock and ADT.CommandDock.AddModule) then return end
+    local CC = ADT.CommandDock
     -- 将自动旋转设置独立到“AutoRotate”分类；ui 顺序从 1 起
     local uiOrderBase = 1
 
@@ -847,9 +858,9 @@ end
 M:LoadSettings()
 RegisterSettings()
 
--- 注册“模块提供者”，以便在语言切换导致 ControlCenter 重建时，重新注入本模块的设置项。
-if ADT and ADT.ControlCenter and ADT.ControlCenter.RegisterModuleProvider then
-    ADT.ControlCenter:RegisterModuleProvider(function(CC)
+-- 注册“模块提供者”，以便在语言切换导致 CommandDock 重建时，重新注入本模块的设置项。
+if ADT and ADT.CommandDock and ADT.CommandDock.RegisterModuleProvider then
+    ADT.CommandDock:RegisterModuleProvider(function(CC)
         -- 复用单一权威的注册函数，避免重复实现
         RegisterSettings()
     end)

@@ -1,12 +1,12 @@
 local ADDON_NAME, ADT = ...
 ADT = ADT or {}
 
--- Slash：/adt 打开设置面板（自定义 ControlCenter 样式）
+-- Slash：/adt 打开设置面板（自定义 CommandDock 样式）
 SLASH_ADT1 = "/adt"
 
 -- 单一权威：切换主面板的逻辑集中在此处，供斜杠命令与快捷键复用
 function ADT.ToggleMainUI()
-    local Main = ADT and ADT.ControlCenter and ADT.ControlCenter.SettingsPanel
+    local Main = ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel
     if not Main then return end
     if Settings and ADT.SettingsCategory and SettingsPanel and SettingsPanel:IsShown() then
         Settings.OpenToCategory(ADT.SettingsCategory)
@@ -69,7 +69,7 @@ do
     end
 
     local function ReanchorSettingsPanel()
-        local Main = ADT and ADT.ControlCenter and ADT.ControlCenter.SettingsPanel
+        local Main = ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel
         if not (Main and Main:IsShown()) then return end
         -- 如果当前在暴雪设置页中展示，则不干预
         if IsOwnedByBlizzardSettings(Main) then return end

@@ -1,4 +1,4 @@
--- 控制中心 GUI（简化版实现，文件名：gui.lua）
+-- 指挥坞 GUI（简化版实现，文件名：gui.lua）
 -- 说明：删除了 ChangelogTab/TabButton/最小化等不必要元素，仅保留
 -- 左侧分类、中间功能列表、右侧预览等核心交互。
 
@@ -7,7 +7,7 @@ if not ADT.IsToCVersionEqualOrNewerThan(110000) then return end
 
 local L = ADT.L
 local API = ADT.API
-local ControlCenter = ADT.ControlCenter
+local CommandDock = ADT.CommandDock
 local GetDBBool = ADT.GetDBBool
 
 local Mixin = API.Mixin
@@ -16,7 +16,7 @@ local DisableSharpening = API.DisableSharpening
 
 
 local Def = {
-    BackgroundFile = "Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/CommonFrameWithHeader.tga", -- [NEW] HD Background
+    BackgroundFile = "Interface/AddOns/AdvancedDecorationTools/Art/CommandDock/CommonFrameWithHeader.tga", -- [NEW] HD Background
     ButtonSize = 28,
     WidgetGap = 14,
     PageHeight = 380,  -- 缩小高度：约10行文本+标题+边距
@@ -78,8 +78,8 @@ local function ComputeSideSectionWidth()
 
     local maxLabel = 0
     -- 直接用数据源的分类名称测量，避免按钮本身宽度限制导致的“被截断宽度”。
-    if ControlCenter and ControlCenter.GetSortedModules then
-        local list = ControlCenter:GetSortedModules() or {}
+    if CommandDock and CommandDock.GetSortedModules then
+        local list = CommandDock:GetSortedModules() or {}
         for _, cat in ipairs(list) do
             maxLabel = math.max(maxLabel, textWidth(cat.categoryName))
         end
@@ -102,7 +102,7 @@ end
 
 
 local MainFrame = CreateFrame("Frame", nil, UIParent, "ADTSettingsPanelLayoutTemplate")
-ControlCenter.SettingsPanel = MainFrame
+CommandDock.SettingsPanel = MainFrame
 do
     local frameKeys = {"LeftSection", "RightSection", "CentralSection", "SideTab", "TabButtonContainer", "ModuleTab", "ChangelogTab"}
     for _, key in ipairs(frameKeys) do
@@ -152,7 +152,7 @@ end
 
 local function CreateNewFeatureMark(button, smallDot)
     local newTag = button:CreateTexture(nil, "OVERLAY")
-    newTag:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/NewFeatureTag", nil, nil, smallDot and "TRILINEAR" or "LINEAR")
+    newTag:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/CommandDock/NewFeatureTag", nil, nil, smallDot and "TRILINEAR" or "LINEAR")
     newTag:SetSize(16, 16)
     newTag:SetPoint("RIGHT", button, "LEFT", 0, 0)
     newTag:Hide()
@@ -560,7 +560,7 @@ do
     end
 
     function CategoryButtonMixin:OnClick()
-        local cat = ControlCenter:GetCategoryByKey(self.categoryKey)
+        local cat = CommandDock:GetCategoryByKey(self.categoryKey)
         if cat and cat.categoryType == 'decorList' then
             -- 装饰列表分类：切换到装饰列表视图
             MainFrame:ShowDecorListCategory(self.categoryKey)
@@ -1225,7 +1225,7 @@ do  -- Right Section (已移除，保留函数但添加空检查)
             end
         end
         self.FeatureDescription:SetText(desc)
-        self.FeaturePreview:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/Preview_"..(parentDBKey or moduleData.dbKey))
+        self.FeaturePreview:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/CommandDock/Preview_"..(parentDBKey or moduleData.dbKey))
     end
 
     -- 显示装饰项预览（右侧预览区已移除，函数保留但不执行任何操作）
@@ -1263,7 +1263,7 @@ do  -- Search
     function MainFrame:RunSearch(text)
         if text and text ~= "" then
             self.listGetter = function()
-                return ControlCenter:GetSearchResult(text)
+                return CommandDock:GetSearchResult(text)
             end
             self:RefreshFeatureList()
             for _, button in self.primaryCategoryPool:EnumerateActive() do
@@ -1276,10 +1276,10 @@ do  -- Search
                 end
             end
         else
-            -- 注意：不能直接赋值为 ControlCenter.GetSortedModules（那样会丢失冒号调用的 self）
+            -- 注意：不能直接赋值为 CommandDock.GetSortedModules（那样会丢失冒号调用的 self）
             -- 绑定为闭包，确保以冒号语义调用，避免 self 为 nil。
             self.listGetter = function()
-                return ControlCenter:GetSortedModules()
+                return CommandDock:GetSortedModules()
             end
             self:RefreshFeatureList()
             for _, button in self.primaryCategoryPool:EnumerateActive() do
@@ -1309,7 +1309,7 @@ do  -- Central
         ActiveCategoryInfo = {}
         self.firstModuleData = nil
 
-        local sortedModule = self.listGetter and self.listGetter() or ControlCenter:GetSortedModules()
+        local sortedModule = self.listGetter and self.listGetter() or CommandDock:GetSortedModules()
 
         for index, categoryInfo in ipairs(sortedModule) do
             -- 跳过装饰列表分类和信息分类（它们有自己的渲染方式）
@@ -1408,7 +1408,7 @@ do  -- Central
 
     -- 仅显示一个“设置类”分类（不与其它分类混排）
     function MainFrame:ShowSettingsCategory(categoryKey)
-        local cat = ControlCenter:GetCategoryByKey(categoryKey)
+        local cat = CommandDock:GetCategoryByKey(categoryKey)
         if not cat or cat.categoryType ~= 'settings' then return end
 
         self.currentSettingsCategory = categoryKey
@@ -1497,14 +1497,14 @@ do  -- Central
 
     function MainFrame:RefreshCategoryList()
         self.primaryCategoryPool:ReleaseAll()
-        for index, categoryInfo in ipairs(ControlCenter:GetSortedModules()) do
+        for index, categoryInfo in ipairs(CommandDock:GetSortedModules()) do
             local categoryButton = self.primaryCategoryPool:Acquire()
             categoryButton:SetCategory(categoryInfo.key, categoryInfo.categoryName, categoryInfo.anyNewFeature)
             categoryButton:SetPoint("TOPLEFT", self.LeftSection, self.primaryCategoryPool.offsetX, self.primaryCategoryPool.leftListFromY - (index - 1) * Def.ButtonSize)
             
             -- 装饰列表分类显示数量角标
             if categoryInfo.categoryType == 'decorList' then
-                local count = ControlCenter:GetDecorListCount(categoryInfo.key)
+                local count = CommandDock:GetDecorListCount(categoryInfo.key)
                 categoryButton:ShowCount(count > 0 and count or nil)
             end
         end
@@ -1517,7 +1517,7 @@ do  -- Central
 
     -- 显示装饰列表分类（临时板或最近放置）
     function MainFrame:ShowDecorListCategory(categoryKey)
-        local cat = ControlCenter:GetCategoryByKey(categoryKey)
+        local cat = CommandDock:GetCategoryByKey(categoryKey)
         if not cat or cat.categoryType ~= 'decorList' then return end
         
         self.currentDecorCategory = categoryKey
@@ -1660,7 +1660,7 @@ do  -- Central
 
     -- 显示信息分类（关于插件）
     function MainFrame:ShowAboutCategory(categoryKey)
-        local cat = ControlCenter:GetCategoryByKey(categoryKey)
+        local cat = CommandDock:GetCategoryByKey(categoryKey)
         if not cat or cat.categoryType ~= 'about' then return end
         
         self.currentDecorCategory = nil
@@ -1915,7 +1915,7 @@ local function CreateUI()
         local mask = Tab1:CreateMaskTexture(nil, "OVERLAY")
         mask:SetPoint("TOPLEFT", preview, "TOPLEFT", 0, 0)
         mask:SetPoint("BOTTOMRIGHT", preview, "BOTTOMRIGHT", 0, 0)
-        mask:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/ControlCenter/PreviewMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/CommandDock/PreviewMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         preview:AddMaskTexture(mask)
 
 
@@ -2009,7 +2009,7 @@ local function CreateUI()
 
     Tab1:SetScript("OnShow", function()
         local key = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or MainFrame.currentDecorCategory or MainFrame.currentAboutCategory or MainFrame.currentSettingsCategory
-        local cat = key and ControlCenter:GetCategoryByKey(key) or nil
+        local cat = key and CommandDock:GetCategoryByKey(key) or nil
         if cat and cat.categoryType == 'decorList' then
             MainFrame:ShowDecorListCategory(key)
             MainFrame:HighlightCategoryByKey(key)
@@ -2021,7 +2021,7 @@ local function CreateUI()
             MainFrame:HighlightCategoryByKey(key)
         else
             -- 默认回退到第一个“设置类”分类
-            local all = ControlCenter:GetSortedModules()
+            local all = CommandDock:GetSortedModules()
             local firstSettings
             for _, info in ipairs(all) do
                 if info.categoryType ~= 'decorList' and info.categoryType ~= 'about' then
@@ -2105,7 +2105,7 @@ function MainFrame:ShowUI(mode)
         CreateUI()
         CreateUI = nil
 
-        ControlCenter:UpdateCurrentSortMethod()
+        CommandDock:UpdateCurrentSortMethod()
         self:RefreshCategoryList()
     end
 
