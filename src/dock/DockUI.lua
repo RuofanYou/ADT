@@ -15,15 +15,22 @@ local CreateFrame = CreateFrame
 local DisableSharpening = API.DisableSharpening
 
 
+-- 临时应急：将左侧分类栏改为独立弹窗（禁用滑出动效），定位与右侧面板同级，确保点击优先级。
+-- 复原时将此常量改回 false 即可。
+local USE_STATIC_LEFT_PANEL = true
+
 local Def = {
     BackgroundFile = "Interface/AddOns/AdvancedDecorationTools/Art/CommandDock/CommonFrameWithHeader.tga", -- [NEW] HD Background
     ButtonSize = 28,
+    CategoryHeight = 22,
     WidgetGap = 14,
     PageHeight = 380,  -- 缩小高度：约10行文本+标题+边距
-    CategoryGap = 20,  -- 缩小分类间距
+    CategoryGap = 10,  -- 缩小分类间距
     TabButtonHeight = 40,
 
     TextColorNormal = {215/255, 192/255, 163/255},
+    -- 标题优雅淡金（深色背景下可读、不过分刺眼）
+    TitleColorPaleGold = {0.95, 0.86, 0.55},
     TextColorHighlight = {1, 1, 1},
     TextColorNonInteractable = {148/255, 124/255, 102/255},
     TextColorDisabled = {0.5, 0.5, 0.5},
@@ -46,7 +53,13 @@ local Def = {
     --   - HighlightRightInset：高亮右边缘距按钮右边缘的收缩像素，尽可能把右侧计数也框入
     HighlightTextPaddingLeft = 10,
     HighlightRightInset = 2,
-    HighlightMinHeight = 22,
+    HighlightMinHeight = 18,
+    -- 右侧停靠相关：与屏幕右缘留白
+    ScreenRightMargin = 0,
+    -- 为了与左窗九宫格背景的右侧 +4px 外延对齐，这里默认取 -4 让视觉上“刚好相切不相交”。
+    StaticRightAttachOffset = -4,
+    LeftPanelPadTop = 6,
+    LeftPanelPadBottom = 6,
 }
 
 -- 单一权威：右侧内容起始的左内边距，强制与左侧 Category 的外边距一致
@@ -54,6 +67,10 @@ local function GetRightPadding()
     return Def.WidgetGap
 end
 
+-- 导出 DockUI 共享配置与统一边距函数，供子模块复用
+ADT.DockUI = ADT.DockUI or {}
+ADT.DockUI.Def = Def
+ADT.DockUI.GetRightPadding = GetRightPadding
 
 -- 依据“实际分类文本宽度”动态计算左侧栏目标宽度（单一权威）
 -- 说明：不再使用按语种的固定值；改为测量当前语言下所有分类标题的像素宽度，
@@ -100,6 +117,76 @@ local function ComputeSideSectionWidth()
     return API.Round(sideWidth)
 end
 
+-- 导出侧栏宽度计算（单一权威）
+ADT.DockUI.ComputeSideSectionWidth = ComputeSideSectionWidth
+
+-- Dock 调试设施（按需启用，不默认刷屏）
+do
+    local strataIndex = {
+        BACKGROUND = 0, LOW = 1, MEDIUM = 2, HIGH = 3, DIALOG = 4,
+        FULLSCREEN = 5, FULLSCREEN_DIALOG = 6, TOOLTIP = 7,
+    }
+    local function SIdx(s) return strataIndex[tostring(s or "")] or -1 end
+
+    local function FrameInfo(f)
+        if not f then return "<nil>" end
+        local n = f.GetName and f:GetName() or "<anon>"
+        local s = f.GetFrameStrata and f:GetFrameStrata() or "?"
+        local l = f.GetFrameLevel and f:GetFrameLevel() or -1
+        local m = f.IsMouseEnabled and f:IsMouseEnabled() and 1 or 0
+        local v = f.IsVisible and f:IsVisible() and 1 or 0
+        return string.format("%s strata=%s(%d) level=%d mouse=%d vis=%d", n, tostring(s), SIdx(s), l, m, v)
+    end
+
+    local traceTicker, traceOn
+    local function traceTick()
+        if not (ADT and ADT.DebugPrint) then return end
+        local focus = GetMouseFocus and GetMouseFocus() or nil
+        local focusName = focus and (focus.GetName and focus:GetName()) or tostring(focus)
+        local L = MainFrame and MainFrame.LeftSlideContainer
+        local H = MainFrame and MainFrame.LeftSlideHandle
+        local R = MainFrame and MainFrame.RightSection
+        ADT.DebugPrint(string.format("[DockTrace] focus=%s", tostring(focusName)))
+        if L then ADT.DebugPrint("[DockTrace] LeftSlide  "..FrameInfo(L)) end
+        if H then ADT.DebugPrint("[DockTrace] LeftHandle "..FrameInfo(H)) end
+        if R then ADT.DebugPrint("[DockTrace] RightSect  "..FrameInfo(R)) end
+    end
+
+    function ADT.DockUI.SetTrace(state)
+        traceOn = not not state
+        if traceOn and not traceTicker then
+            traceTicker = C_Timer.NewTicker(0.25, traceTick)
+            if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockTrace] 开启 (0.25s)") end
+        elseif (not traceOn) and traceTicker then
+            traceTicker:Cancel(); traceTicker = nil
+            if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockTrace] 关闭") end
+        end
+    end
+
+    function ADT.DockUI.Diag(reason)
+        if ADT and ADT.DebugPrint then
+            ADT.DebugPrint("[DockDiag] reason="..tostring(reason))
+            traceTick()
+        end
+    end
+
+    function ADT.DockUI.Stack()
+        if not (ADT and ADT.DebugPrint) then return end
+        if not GetMouseFoci then
+            ADT.DebugPrint("[DockStack] GetMouseFoci 不可用（需要 11.0+）")
+            return
+        end
+        local list = {GetMouseFoci()}
+        ADT.DebugPrint("[DockStack] size="..tostring(#list))
+        for i, f in ipairs(list) do
+            local name = f and (f.GetName and f:GetName()) or tostring(f)
+            local s = f and (f.GetFrameStrata and f:GetFrameStrata()) or "?"
+            local l = f and (f.GetFrameLevel and f:GetFrameLevel()) or -1
+            local m = f and (f.IsMouseEnabled and f:IsMouseEnabled()) and 1 or 0
+            ADT.DebugPrint(string.format("[DockStack] %02d %s strata=%s lvl=%d mouse=%d", i, tostring(name), tostring(s), l, m))
+        end
+    end
+end
 
 local MainFrame = CreateFrame("Frame", nil, UIParent, "ADTSettingsPanelLayoutTemplate")
 CommandDock.SettingsPanel = MainFrame
@@ -150,7 +237,8 @@ function MainFrame:UpdateLeftSectionHeight()
         for _ in self.primaryCategoryPool:EnumerateActive() do n = n + 1 end
     end
     local topPad = Def.WidgetGap or 14
-    local height = math.max(Def.ButtonSize or 28, topPad + n * (Def.ButtonSize or 28) + topPad)
+    local catH = Def.CategoryHeight or Def.ButtonSize or 28
+    local height = math.max(catH, topPad + n * catH + topPad)
     LeftSection:SetHeight(height)
 end
 
@@ -197,11 +285,7 @@ function MainFrame:InitTopTabs()
     self.__pendingTabKey = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or 'Housing'
 end
 
--- 空壳下方拼接弹窗（与主弹窗宽度一致）
--- 预声明：将在 CreateSettingsHeader 定义之后真正实现 EnsureSubPanel
-function MainFrame:EnsureSubPanel() end
-function MainFrame:SetSubPanelShown(_) end
-function MainFrame:SetSubPanelHeight(_) end
+-- 空壳下方拼接弹窗：实现迁移至独立模块 src/dock/SubPanel.lua
 
 function MainFrame:ApplyInitialTabSelection()
     if not (USE_TOP_TABS and self.TopTabOwner and self.__tabIDFromKey) then return end
@@ -604,11 +688,17 @@ do
     local CategoryButtonMixin = {}
 
     function CategoryButtonMixin:OnEnter()
+        if ADT and ADT.DebugPrint then
+            ADT.DebugPrint("[DockLeft] OnEnter key="..tostring(self.categoryKey)
+                .." over="..tostring(self:IsMouseOver())
+                .." btn="..(self.GetName and (self:GetName() or "") or ""))
+        end
         MainFrame:HighlightButton(self)
         SetTextColor(self.Label, Def.TextColorHighlight)
     end
 
     function CategoryButtonMixin:OnLeave()
+        if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockLeft] OnLeave key="..tostring(self.categoryKey)) end
         MainFrame:HighlightButton()
         SetTextColor(self.Label, Def.TextColorNormal)
     end
@@ -633,6 +723,11 @@ do
     end
 
     function CategoryButtonMixin:OnClick()
+        if ADT and ADT.DebugPrint then
+            local f = GetMouseFocus and GetMouseFocus()
+            local fname = f and (f.GetName and f:GetName()) or tostring(f)
+            ADT.DebugPrint("[DockLeft] OnClick key="..tostring(self.categoryKey).." focus="..tostring(fname))
+        end
         local cat = CommandDock:GetCategoryByKey(self.categoryKey)
         if cat and cat.categoryType == 'decorList' then
             -- 装饰列表分类：切换到装饰列表视图
@@ -653,10 +748,12 @@ do
 
     function CategoryButtonMixin:OnMouseDown()
         self.Label:SetPoint("LEFT", self, "LEFT", self.labelOffset + 1, -1)
+        if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockLeft] OnMouseDown key="..tostring(self.categoryKey)) end
     end
 
     function CategoryButtonMixin:OnMouseUp()
         self:ResetOffset()
+        if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockLeft] OnMouseUp key="..tostring(self.categoryKey)) end
     end
 
     function CategoryButtonMixin:ResetOffset()
@@ -668,6 +765,7 @@ do
         Mixin(f, CategoryButtonMixin)
         f:SetSize(120, 26)
         f.labelOffset = 9
+        if f.RegisterForClicks then f:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
         f.Label = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         f.Label:SetJustifyH("LEFT")
         f.Label:SetPoint("LEFT", f, "LEFT", 9, 0)
@@ -768,6 +866,10 @@ do
     end
 
     function EntryButtonMixin:OnEnter()
+        if ADT and ADT.DebugPrint then
+            ADT.DebugPrint("[SettingsPanel] Entry OnEnter dbKey="..tostring(self.dbKey)
+                .." over="..tostring(self:IsMouseOver()))
+        end
         MainFrame:HighlightButton(self)
         self:UpdateVisual()
         if not self.isChangelogButton then
@@ -789,9 +891,12 @@ do
     end
 
     function EntryButtonMixin:OnClick()
-        ADT.DebugPrint("[SettingsPanel] OnClick triggered, dbKey=" .. tostring(self.dbKey))
+        if ADT and ADT.DebugPrint then
+            ADT.DebugPrint("[SettingsPanel] OnClick dbKey=" .. tostring(self.dbKey)
+                .." focus="..tostring(GetMouseFocus and (GetMouseFocus():GetName() or "<anon>") or "?"))
+        end
         if self.dbKey and self.data then
-            ADT.DebugPrint("[SettingsPanel] data.type=" .. tostring(self.data.type))
+            if ADT and ADT.DebugPrint then ADT.DebugPrint("[SettingsPanel] data.type=" .. tostring(self.data.type)) end
             -- 下拉菜单类型：使用暴雪 12.0+ Menu API（最佳实践）
             if self.data.type == 'dropdown' then
                 ADT.DebugPrint("[SettingsPanel] Using MenuUtil.CreateContextMenu")
@@ -921,6 +1026,16 @@ do
         end
     end
 
+    -- 返回此条目在中央区域所需的“容器宽度”（不含 CentralSection 的左右留白）
+    -- 依据模板：Label 左 28、右 28
+    function EntryButtonMixin:GetDesiredWidth()
+        local w = 0
+        if self.Label and self.Label.GetStringWidth then
+            w = math.ceil(self.Label:GetStringWidth() or 0)
+        end
+        return w + 56
+    end
+
     function CreateSettingsEntry(parent)
         local f = CreateFrame("Button", nil, parent, "ADTSettingsPanelEntryTemplate")
         Mixin(f, EntryButtonMixin)
@@ -997,9 +1112,22 @@ do
         -- 统一左边距：标题与右侧内容共用同一左起点（不对齐到图标位）
         local defaultHeaderLeft = GetRightPadding()
         f:SetLeftPadding(defaultHeaderLeft)
+        
+        -- 供自动宽度评估
+        function f:GetDesiredWidth()
+            local w = 0
+            if self.Label and self.Label.GetStringWidth then
+                w = math.ceil(self.Label:GetStringWidth() or 0)
+            end
+            -- Header 左侧有 GetRightPadding() 的缩进，右侧也给同等余量
+            return w + 2 * GetRightPadding()
+        end
         return f
     end
 end
+
+-- 导出通用 Header 构造器（单一权威，供子模块调用）
+ADT.DockUI.CreateSettingsHeader = CreateSettingsHeader
 
 
 -- 装饰项按钮（用于临时板和历史记录列表）
@@ -1053,6 +1181,15 @@ do
             SetTextColor(self.Name, Def.TextColorNormal)
             if self.Icon.SetDesaturated then self.Icon:SetDesaturated(false) end
         end
+    end
+
+    -- 依据模板：图标(左 4 + 宽 28) + 名称左间距 8 = 40；右侧数量保留 40
+    function DecorItemMixin:GetDesiredWidth()
+        local w = 0
+        if self.Name and self.Name.GetStringWidth then
+            w = math.ceil(self.Name:GetStringWidth() or 0)
+        end
+        return w + 80
     end
 
     function DecorItemMixin:OnEnter()
@@ -1115,66 +1252,7 @@ do
 end
 
 
--- 在通用 Header 构造函数定义完毕后，再实现“下方空壳弹窗”，以复用同一 Header 逻辑
-function MainFrame:EnsureSubPanel()
-    if self.SubPanel then return self.SubPanel end
-
-    local sub = CreateFrame("Frame", nil, self)
-    self.SubPanel = sub
-    -- 与主面板下边无缝拼接；宽度与右侧区域一致
-    local leftOffset = tonumber(self.sideSectionWidth) or ComputeSideSectionWidth() or 180
-    sub:SetPoint("TOPLEFT", self, "BOTTOMLEFT", leftOffset, 0)
-    sub:SetPoint("TOPRIGHT", self, "BOTTOMRIGHT", 0, 0)
-    sub:SetHeight(160)
-    sub:SetFrameStrata(self:GetFrameStrata())
-    sub:SetFrameLevel(self:GetFrameLevel())
-
-    -- 边框与背景：保持与主面板一致
-    local borderFrame = CreateFrame("Frame", nil, sub)
-    borderFrame:SetAllPoints(sub)
-    borderFrame:SetFrameLevel(sub:GetFrameLevel() + 100)
-    sub.BorderFrame = borderFrame
-    local border = borderFrame:CreateTexture(nil, "OVERLAY")
-    border:SetPoint("TOPLEFT", borderFrame, "TOPLEFT", -4, 4)
-    border:SetPoint("BOTTOMRIGHT", borderFrame, "BOTTOMRIGHT", 4, -4)
-    border:SetAtlas("housing-wood-frame")
-    border:SetTextureSliceMargins(16, 16, 16, 16)
-    border:SetTextureSliceMode(Enum.UITextureSliceMode.Stretched)
-    borderFrame.WoodFrame = border
-
-    local bg = sub:CreateTexture(nil, "BACKGROUND")
-    bg:SetAtlas("housing-basic-panel-background")
-    bg:SetPoint("TOPLEFT", sub, "TOPLEFT", -4, -2)
-    bg:SetPoint("BOTTOMRIGHT", sub, "BOTTOMRIGHT", -2, 2)
-    sub.Background = bg
-
-    -- 统一内容容器
-    local content = CreateFrame("Frame", nil, sub)
-    content:SetPoint("TOPLEFT", sub, "TOPLEFT", 10, -8)
-    content:SetPoint("BOTTOMRIGHT", sub, "BOTTOMRIGHT", -10, 10)
-    sub.Content = content
-
-    -- 复用通用 Header：作为子弹窗标题（占位符）
-    local header = CreateSettingsHeader(content)
-    header:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
-    header:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, 0)
-    header:SetHeight(Def.ButtonSize)
-    header:SetText("扩展面板（占位标题）")
-    sub.Header = header
-
-    sub:Hide()
-    return sub
-end
-
-function MainFrame:SetSubPanelShown(shown)
-    if not self.SubPanel then return end
-    self.SubPanel:SetShown(shown)
-end
-
-function MainFrame:SetSubPanelHeight(height)
-    if not self.SubPanel then return end
-    self.SubPanel:SetHeight(tonumber(height) or 160)
-end
+-- 子面板的实现已迁移至 src/dock/SubPanel.lua
 
 
 local CreateSelectionHighlight
@@ -1256,8 +1334,8 @@ do  -- Left Section
             CategoryHighlight:SetPoint("RIGHT", button, "RIGHT", -insetRight, 0)
             CategoryHighlight:SetParent(button)
             -- 提高高度以匹配容器厚边框，同时保留上下留白
-            local minH = tonumber(Def.HighlightMinHeight) or 22
-            local h = math.max(minH, (Def.ButtonSize or 28) - 4)
+            local minH = tonumber(Def.HighlightMinHeight) or 18
+            local h = math.max(minH, (Def.CategoryHeight or Def.ButtonSize or 28) - 2)
             CategoryHighlight:SetHeight(h)
             CategoryHighlight:FadeIn()
         end
@@ -1270,6 +1348,21 @@ do  -- Left Section
         if not LeftSection then return end
 
         LeftSection:SetWidth(sideWidth)
+
+        -- 同步左侧滑出容器宽度与收起位置
+        if self.LeftSlideContainer then
+            self.LeftSlideContainer:SetWidth(sideWidth)
+        end
+        if self.LeftSlideDriver and self.GetLeftClosedOffset then
+            local closed = self.GetLeftClosedOffset()
+            if math.abs(self.LeftSlideDriver.target) > 0.5 then
+                self.LeftSlideDriver.target = closed
+                if math.abs(self.LeftSlideDriver.x - closed) < 1 then
+                    self.LeftSlideDriver.x = closed
+                    if self.LeftSlideDriver.onUpdate then self.LeftSlideDriver.onUpdate(closed) end
+                end
+            end
+        end
 
         -- 分类按钮宽度与高亮条宽度
         local btnWidth = sideWidth - 2*Def.WidgetGap
@@ -1342,14 +1435,16 @@ do  -- Left Section
         else
             self:_ApplySideWidth(target)
         end
+        -- 语言切换后，文本宽度变化需要重新计算容器宽
+        if self.UpdateAutoWidth then self:UpdateAutoWidth() end
     end
 end
 
 
 do  -- Right Section (已移除，保留函数但添加空检查)
     function MainFrame:ShowFeaturePreview(moduleData, parentDBKey)
-        -- 右侧预览区已移除，函数保留但不执行任何操作
-        if not self.FeatureDescription or not self.FeaturePreview then return end
+        -- 仅更新预览贴图；已移除说明文字
+        if not self.FeaturePreview then return end
         if not moduleData then return end
         local desc = moduleData.description
         local additonalDesc = moduleData.descriptionFunc and moduleData.descriptionFunc() or nil
@@ -1360,14 +1455,13 @@ do  -- Right Section (已移除，保留函数但添加空检查)
                 desc = additonalDesc
             end
         end
-        self.FeatureDescription:SetText(desc)
         self.FeaturePreview:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/CommandDock/Preview_"..(parentDBKey or moduleData.dbKey))
     end
 
     -- 显示装饰项预览（右侧预览区已移除，函数保留但不执行任何操作）
     function MainFrame:ShowDecorPreview(itemData, available)
-        -- 右侧预览区已移除，不执行任何操作
-        if not self.FeatureDescription or not self.FeaturePreview then return end
+        -- 仅更新预览贴图
+        if not self.FeaturePreview then return end
         if not itemData then return end
         -- 设置预览图标
         local icon = itemData.icon or 134400
@@ -1377,20 +1471,6 @@ do  -- Right Section (已移除，保留函数但添加空检查)
             icon = entryInfo.iconTexture
         end
         self.FeaturePreview:SetTexture(icon)
-        
-        -- 构建描述文本
-        local name = itemData.name or (entryInfo and entryInfo.name) or (string.format((ADT.L and ADT.L['Decor #%d']) or '装饰 #%d', tonumber(itemData.decorID) or 0))
-        local desc = name .. "\n\n"
-        if available and available > 0 then
-            desc = desc .. string.format("|cff00ff00%s|r\n\n", string.format((ADT.L and ADT.L['Stock: %d']) or '库存：%d', available))
-        else
-            desc = desc .. string.format("|cffff3333%s|r\n\n", (ADT.L and ADT.L['Stock: 0 (Unavailable)']) or '库存：0（不可放置）')
-        end
-        desc = desc .. string.format("|cffaaaaaa%s|r", (ADT.L and ADT.L['Left Click: Place']) or '左键：开始放置')
-        if self.currentDecorCategory == 'Clipboard' then
-            desc = desc .. string.format("\n|cffff6666%s|r", (ADT.L and ADT.L['Right Click: Remove from Clipboard']) or '右键：从临时板移除')
-        end
-        self.FeatureDescription:SetText(desc)
     end
 end
 
@@ -1540,6 +1620,7 @@ do  -- Central
         if self.firstModuleData then
             self:ShowFeaturePreview(self.firstModuleData)
         end
+        if self.UpdateAutoWidth then self:UpdateAutoWidth() end
     end
 
     -- 仅显示一个“设置类”分类（不与其它分类混排）
@@ -1550,6 +1631,20 @@ do  -- Central
         end
         local cat = CommandDock:GetCategoryByKey(categoryKey)
         if not cat or cat.categoryType ~= 'settings' then return end
+
+        -- 安全兜底：如果目标分类没有任何条目（例如 AutoRotate 仍未注入具体选项），
+        -- 自动回退到第一个“包含条目”的设置类分类（通常是 Housing/通用），
+        -- 避免出现“右侧只有说明、中央列表为空”的错觉。
+        if (not cat.modules) or (#cat.modules == 0) then
+            for _, info in ipairs(CommandDock:GetSortedModules()) do
+                if info.categoryType == 'settings' and info.modules and #info.modules > 0 then
+                    if ADT and ADT.DebugPrint then ADT.DebugPrint("[SettingsPanel] Empty category "..tostring(categoryKey)..", fallback -> "..tostring(info.key)) end
+                    categoryKey = info.key
+                    cat = info
+                    break
+                end
+            end
+        end
 
         self.currentSettingsCategory = categoryKey
         self.currentDecorCategory = nil
@@ -1587,6 +1682,7 @@ do  -- Central
 
         -- 分类内条目
         for _, data in ipairs(cat.modules) do
+            if ADT and ADT.DebugPrint then ADT.DebugPrint("[SettingsPanel] item: "..tostring(data.name).." dbKey="..tostring(data.dbKey)) end
             n = n + 1
             local top = offsetY
             local bottom = offsetY + buttonHeight + buttonGap
@@ -1630,9 +1726,13 @@ do  -- Central
 
         self.firstModuleData = cat.modules[1]
         self.ModuleTab.ScrollView:SetContent(content, false)
+        if USE_STATIC_LEFT_PANEL and self.UpdateStaticLeftPlacement then C_Timer.After(0, function() self:UpdateStaticLeftPlacement() end) end
+        if ADT and ADT.DebugPrint then ADT.DebugPrint("[SettingsPanel] ShowSettingsCategory("..tostring(categoryKey)..") items="..tostring(#content)) end
         if self.firstModuleData then
             self:ShowFeaturePreview(self.firstModuleData)
         end
+        if self.UpdateAutoWidth then self:UpdateAutoWidth() end
+        if USE_STATIC_LEFT_PANEL and self.UpdateStaticLeftPlacement then C_Timer.After(0, function() self:UpdateStaticLeftPlacement() end) end
     end
 
     function MainFrame:RefreshCategoryList()
@@ -1641,11 +1741,13 @@ do  -- Central
         for index, categoryInfo in ipairs(CommandDock:GetSortedModules()) do
             local categoryButton = self.primaryCategoryPool:Acquire()
             categoryButton:SetCategory(categoryInfo.key, categoryInfo.categoryName, categoryInfo.anyNewFeature)
-            categoryButton:SetPoint("TOPLEFT", self.LeftSection, self.primaryCategoryPool.offsetX, self.primaryCategoryPool.leftListFromY - (index - 1) * Def.ButtonSize)
+            categoryButton:SetPoint("TOPLEFT", self.LeftSlideContainer, self.primaryCategoryPool.offsetX, self.primaryCategoryPool.leftListFromY - (index - 1) * (Def.CategoryHeight or Def.ButtonSize))
             -- 根据需求取消临时板/最近放置的数量角标显示，避免不必要的数据遍历
         end
         -- 动态收敛左侧容器高度：根据分类数量计算
         self:UpdateLeftSectionHeight()
+        -- 静态模式下，同步一次弹窗高度与位置
+        if USE_STATIC_LEFT_PANEL and self.UpdateStaticLeftPlacement then self:UpdateStaticLeftPlacement() end
         -- 保持现有宽度；语言切换时由 RefreshLanguageLayout(true) 统一处理动画与宽度
     end
 
@@ -1787,10 +1889,11 @@ do  -- Central
             end
             self:ShowDecorPreview(firstItem, available)
         else
-            -- 空列表时显示提示
-            self.FeaturePreview:SetTexture(134400) -- 问号图标
-            self.FeatureDescription:SetText(cat.emptyText or (ADT.L and ADT.L['List Is Empty']) or "列表为空")
+            -- 空列表时显示提示（已无右侧预览/说明）
+            if self.FeaturePreview then self.FeaturePreview:SetTexture(134400) end
+            if self.FeatureDescription then self.FeatureDescription:SetText(cat.emptyText or (ADT.L and ADT.L['List Is Empty']) or "列表为空") end
         end
+        if self.UpdateAutoWidth then self:UpdateAutoWidth() end
     end
 
     -- 返回设置列表视图
@@ -1873,6 +1976,7 @@ do  -- Central
         end
         
         self.ModuleTab.ScrollView:SetContent(content, false)
+        if self.UpdateAutoWidth then self:UpdateAutoWidth() end
     end
 end
 
@@ -1883,28 +1987,22 @@ local function CreateUI()
     -- 紧凑布局：左侧宽度按“分类文本宽度”动态计算
     local sideSectionWidth = ComputeSideSectionWidth()
     MainFrame.sideSectionWidth = sideSectionWidth
+    -- 右侧仅保留预览，默认更窄；后续在 UpdateAutoWidth 中会按可用空间动态压缩/放宽
+    local rightSectionWidth = math.min(sideSectionWidth, 160)
+    MainFrame.rightSectionWidth = rightSectionWidth
     local centralSectionWidth = 340  -- 中间：图标 + 长装饰名称(如"小型锯齿奥格瑞玛栅栏") + 数量
-    
-    MainFrame:SetSize(sideSectionWidth + centralSectionWidth, pageHeight)
-    if ADT and ADT.RestoreFrameSize then
-        ADT.RestoreFrameSize("SettingsPanelSize", MainFrame)
-    end
-    MainFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+
+    -- 总宽度 = 左侧 + 中间 + 右侧（之前漏算右侧导致中间极窄）
+    MainFrame:SetSize(sideSectionWidth + centralSectionWidth + rightSectionWidth, pageHeight)
+    -- 固定停靠：由我们统一控制定位与尺寸，不再恢复历史尺寸
     MainFrame:SetToplevel(true)
     
-    -- 窗口拖动功能
-    MainFrame:SetMovable(true)
+    -- 禁止玩家拖动移动（固定右侧停靠）
+    MainFrame:SetMovable(false)
     MainFrame:EnableMouse(true)
-    MainFrame:RegisterForDrag("LeftButton")
-    MainFrame:SetScript("OnDragStart", function(self)
-        self:StartMoving()
-    end)
-    MainFrame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        if ADT and ADT.SaveFramePosition then
-            ADT.SaveFramePosition("SettingsPanelPos", self)
-        end
-    end)
+    MainFrame:RegisterForDrag() -- 清空注册
+    MainFrame:SetScript("OnDragStart", nil)
+    MainFrame:SetScript("OnDragStop", nil)
     MainFrame:SetClampedToScreen(true)
 
     -- 顶部大 Header（对标 HouseEditor Storage 视觉）
@@ -1937,13 +2035,16 @@ local function CreateUI()
         end
 
         if MainFrame.RightSection then
+            -- 右侧面板已废弃：保持隐藏且不参与布局
+            MainFrame.RightSection:Hide()
             MainFrame.RightSection:ClearAllPoints()
-            MainFrame.RightSection:SetPoint("TOPRIGHT", Header, "BOTTOMRIGHT", 0, 0)
+            MainFrame.RightSection:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
             MainFrame.RightSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
+            MainFrame.RightSection:SetWidth(0)
         end
     end
 
-    -- 允许缩放 + 右下角手柄（仅改变右侧内容宽度）
+    -- 禁止缩放：移除右下角抓手，并锁定最小尺寸约束仅用于内部自适应
     do
         -- 计算最小尺寸：高度至少能显示两行条目；
         -- 宽度：左侧固定列宽 + 右侧至少能显示“艾尔..”
@@ -1958,51 +2059,82 @@ local function CreateUI()
         local minH = 160
         local minW = sideSectionWidth + rightMin
 
-        MainFrame:SetResizable(true)
-        if MainFrame.SetResizeBounds then
-            MainFrame:SetResizeBounds(minW, minH)
-        else
-            -- 旧版本兼容：确保不会被缩到过小
-            if MainFrame.SetMinResize then MainFrame:SetMinResize(minW, minH) end
+        MainFrame:SetResizable(false)
+        if MainFrame.SetResizeBounds then MainFrame:SetResizeBounds(minW, minH) end
+        -- 隐藏并禁用原抓手
+        if MainFrame.ResizeGrip then MainFrame.ResizeGrip:Hide() end
+    end
+
+    -- 固定停靠函数：右侧对齐，顶部与左侧 StoragePanel 对齐
+    function MainFrame:ApplyDockPlacement()
+        local parent = UIParent
+        if HouseEditorFrame and HouseEditorFrame:IsShown() then
+            parent = HouseEditorFrame
         end
 
-        -- 右下角缩放手柄（使用聊天窗口的抓手贴图）
-        local grip = CreateFrame("Button", nil, MainFrame.BorderFrame or MainFrame)
-        grip:SetSize(16, 16)
-        grip:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
-        grip:SetNormalTexture("Interface/ChatFrame/UI-ChatIM-SizeGrabber-Up")
-        grip:SetHighlightTexture("Interface/ChatFrame/UI-ChatIM-SizeGrabber-Highlight")
-        grip:SetPushedTexture("Interface/ChatFrame/UI-ChatIM-SizeGrabber-Down")
-        -- 为了让“右下角抓手”在缩放时精准跟随鼠标，我们在开始缩放前
-        -- 将面板的锚点归一为 TOPLEFT（基于当前的屏幕绝对位置）。
-        -- 如果保持 CENTER 等锚点，StartSizing("BOTTOMRIGHT") 会以中心为基准放大，
-        -- 视觉上就会出现“右下角不在鼠标上”的错位感。
-        local function ReanchorToTopLeft(f)
-            if not (f and f.GetLeft and f.GetTop and f.ClearAllPoints) then return end
-            local parent = f:GetParent() or UIParent
-            local fScale = f.GetEffectiveScale and f:GetEffectiveScale() or 1
-            local pScale = parent.GetEffectiveScale and parent:GetEffectiveScale() or 1
-            local left = (f:GetLeft() or 0) * (fScale / pScale)
-            local top  = (f:GetTop() or 0)  * (fScale / pScale)
-            f:ClearAllPoints()
-            f:SetPoint("TOPLEFT", parent, "BOTTOMLEFT", left, top)
+        local topY = parent:GetTop() or 0
+        local targetTop = topY
+        if HouseEditorFrame and HouseEditorFrame.StoragePanel and HouseEditorFrame.StoragePanel:GetTop() then
+            targetTop = HouseEditorFrame.StoragePanel:GetTop()
+        end
+        local yOffset = (targetTop or topY) - topY
+
+        self:ClearAllPoints()
+        self:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -Def.ScreenRightMargin, yOffset)
+        -- 静态左窗需要跟随重新贴边
+        if USE_STATIC_LEFT_PANEL and self.UpdateStaticLeftPlacement then
+            C_Timer.After(0, function() if self:IsShown() then self:UpdateStaticLeftPlacement() end end)
+        end
+    end
+
+    -- 自动宽度：根据当前可见内容的字符串宽度，动态放宽中央区域
+    function MainFrame:UpdateAutoWidth()
+        local sidew = tonumber(self.LeftSection and self.LeftSection:GetWidth()) or tonumber(self.sideSectionWidth) or ComputeSideSectionWidth() or 180
+        local margin = 2 * (Def.ButtonSize or 28) -- CentralSection 左右留白（与模板一致）
+
+        local maxNeeded = 0
+        local sv = self.ModuleTab and self.ModuleTab.ScrollView
+        if sv and sv._templates then
+            local function accumulate(poolKey, getter)
+                local pool = sv._templates[poolKey]
+                if not pool then return end
+                for _, obj in pool:EnumerateActive() do
+                    local w
+                    if getter then w = getter(obj) end
+                    if not w and obj.GetDesiredWidth then w = obj:GetDesiredWidth() end
+                    if not w then
+                        -- 兜底：尝试常见字段
+                        local fs = (obj.Label or obj.Name)
+                        if fs and fs.GetStringWidth then w = (fs:GetStringWidth() or 0) end
+                    end
+                    if type(w) == 'number' then maxNeeded = math.max(maxNeeded, math.ceil(w)) end
+                end
+            end
+            accumulate("Entry")
+            accumulate("DecorItem")
+            accumulate("Header")
         end
 
-        grip:SetScript("OnMouseDown", function()
-            if not MainFrame then return end
-            ReanchorToTopLeft(MainFrame)
-            if MainFrame.StartSizing then MainFrame:StartSizing("BOTTOMRIGHT") end
-        end)
-        grip:SetScript("OnMouseUp", function()
-            if MainFrame and MainFrame.StopMovingOrSizing then MainFrame:StopMovingOrSizing() end
-            if ADT and ADT.SaveFrameSize then ADT.SaveFrameSize("SettingsPanelSize", MainFrame) end
-            if ADT and ADT.SaveFramePosition then ADT.SaveFramePosition("SettingsPanelPos", MainFrame) end
-        end)
-        MainFrame.ResizeGrip = grip
+        -- 至少保证一个合理的最小值
+        local minCenter = 240
+        local wantedCenter = math.max(minCenter, maxNeeded)
+        -- 视口最大宽度限制（避免超出屏幕）
+        local parent = self:GetParent() or UIParent
+        local maxTotal = (parent.GetWidth and parent:GetWidth() or 1600) - Def.ScreenRightMargin - 4
+        -- 无右侧栏：总宽 = 左栏 + 中央需求 + 边距
+        local targetTotal = sidew + wantedCenter + margin
+        if targetTotal > maxTotal then targetTotal = maxTotal end
+        self:SetWidth(targetTotal)
+        self.sideSectionWidth = sidew
+        -- 更新锚点确保紧贴右缘
+        self:ApplyDockPlacement()
     end
     
-    MainFrame.FrameContainer:EnableMouse(true)
-    MainFrame.FrameContainer:EnableMouseMotion(true)
+    -- 重要：FrameContainer 仅用于布局与滚轮，不应拦截鼠标点击/悬停。
+    -- 否则会导致左侧滑出列表无法收到 OnEnter/OnClick。
+    MainFrame.FrameContainer:EnableMouse(false)
+    MainFrame.FrameContainer:EnableMouseMotion(false)
+    MainFrame.FrameContainer:EnableMouseWheel(true)
     MainFrame.FrameContainer:SetScript("OnMouseWheel", function(self, delta) end)
 
 
@@ -2017,14 +2149,14 @@ local function CreateUI()
     -- 顶部标签布局：左侧压缩为 0 宽度
     LeftSection:SetWidth(sideSectionWidth)
     
-    -- 修复：不隐藏 RightSection，而是将 CentralSection 的右边直接锚定到 MainFrame
-    -- 这样可以避免 XML 中定义的锚点导致的布局问题
+    -- 移除整个右侧区域：不再占据任何宽度，也不创建任何子内容
+    RightSection:Hide()
     RightSection:SetWidth(0)
     RightSection:ClearAllPoints()
-    RightSection:SetPoint("TOPRIGHT", MainFrame.Header or MainFrame, "BOTTOMRIGHT", 0, 0)
+    RightSection:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
     RightSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
-    
-    -- 重设 CentralSection 的锚点：顶部位于 Header 下方
+
+    -- CentralSection：顶部位于 Header 下方，右侧直接贴 MainFrame 右边
     CentralSection:ClearAllPoints()
     CentralSection:SetPoint("TOPLEFT", LeftSection, "TOPRIGHT", 0, 0)
     CentralSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
@@ -2051,9 +2183,335 @@ local function CreateUI()
         --]]
         local categoryButtonWidth = sideSectionWidth - 2*Def.WidgetGap
 
+        -- 左侧分类面板：根据模式创建容器
+        LeftSection:SetClipsChildren(true)
+        local LeftSlideParent = USE_STATIC_LEFT_PANEL and ((HouseEditorFrame and HouseEditorFrame:IsShown()) and HouseEditorFrame or UIParent) or LeftSection
+        local LeftSlide = CreateFrame("Frame", nil, LeftSlideParent)
+        MainFrame.LeftSlideContainer = LeftSlide
+        if USE_STATIC_LEFT_PANEL then
+            -- 独立弹窗：与右侧面板同级，始终显示，无滑出动效
+            LeftSlide:ClearAllPoints()
+            LeftSlide:SetPoint("TOPRIGHT", MainFrame, "TOPLEFT", Def.StaticRightAttachOffset or 0, 0)
+            LeftSlide:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMLEFT", Def.StaticRightAttachOffset or 0, 0)
+            LeftSlide:SetWidth(sideSectionWidth)
+            LeftSlide:SetFrameStrata("TOOLTIP")
+            LeftSlide:SetFrameLevel((MainFrame:GetFrameLevel() or 0) + 600)
+            LeftSlide:SetToplevel(true)
+            LeftSlide:EnableMouse(true)
+            LeftSlide:EnableMouseMotion(true)
+            -- 导出便于后续跟随右窗位移/尺寸变化
+            function MainFrame:UpdateStaticLeftPlacement()
+                local L = self.LeftSlideContainer; if not L or not L.SetPoint then return end
+                -- 高度按内容行数动态匹配；顶部紧贴右窗 Header 底部
+                local function countCats()
+                    local n = 0
+                    if self.primaryCategoryPool and self.primaryCategoryPool.EnumerateActive then
+                        for _ in self.primaryCategoryPool:EnumerateActive() do n = n + 1 end
+                    end
+                    return n
+                end
+                local topPad = Def.LeftPanelPadTop or Def.WidgetGap or 14
+                local bottomPad = Def.LeftPanelPadBottom or Def.WidgetGap or 14
+                local rowH = Def.CategoryHeight or Def.ButtonSize or 28
+                local wanted = topPad + countCats() * rowH + bottomPad
+                L:ClearAllPoints()
+                if self.Header and self.Header.GetBottom then
+                    L:SetPoint("TOPRIGHT", self.Header, "BOTTOMLEFT", Def.StaticRightAttachOffset or 0, -2)
+                else
+                    L:SetPoint("TOPRIGHT", self, "TOPLEFT", Def.StaticRightAttachOffset or 0, 0)
+                end
+                L:SetWidth(self.sideSectionWidth or sideSectionWidth)
+                L:SetHeight(wanted)
+                L:SetFrameStrata("TOOLTIP")
+                local base = (self:GetFrameLevel() or 0)
+                L:SetFrameLevel(base + 600)
+                L:SetToplevel(true)
+                if ADT and ADT.DebugPrint then
+                    local lt, lb = L:GetTop() or -1, L:GetBottom() or -1
+                    local mt, mb = (self.Header and self.Header:GetBottom()) or (self:GetTop() or -1), self:GetBottom() or -1
+                    ADT.DebugPrint(string.format("[DockLeft] Attach(top=Header) L:%.1f/%.1f  M:%.1f/%.1f w=%d h=%d rows=%d",
+                        lt, lb, mt, mb, math.floor(self.sideSectionWidth or sideSectionWidth), math.floor(wanted), math.floor((wanted - 2*topPad)/rowH)))
+                end
+            end
+            if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockLeft] STATIC mode: LeftSlide promoted to top-level") end
+        else
+            LeftSlide:SetPoint("TOPLEFT", LeftSection, "TOPLEFT", 0, 0)
+            LeftSlide:SetPoint("BOTTOMLEFT", LeftSection, "BOTTOMLEFT", 0, 0)
+            LeftSlide:SetWidth(sideSectionWidth)
+            -- 父容器仅用于承载/裁剪，永不吃鼠标，避免拦截子按钮点击
+            LeftSlide:EnableMouse(false)
+            LeftSlide:EnableMouseMotion(false)
+            if LeftSlide.SetPropagateMouseClicks then LeftSlide:SetPropagateMouseClicks(false) end
+            if LeftSlide.SetPropagateMouseMotion then LeftSlide:SetPropagateMouseMotion(false) end
+        end
+        do
+            local under = math.max(1, (MainFrame:GetFrameLevel() or 0) - 5)
+            LeftSlide:SetFrameLevel(under)
+        end
+
+        local LeftHandle, LHGlow
+        if not USE_STATIC_LEFT_PANEL then
+            LeftHandle = CreateFrame("Frame", nil, LeftSection)
+            MainFrame.LeftSlideHandle = LeftHandle
+            local HANDLE_WIDTH = 12
+            LeftHandle:SetSize(HANDLE_WIDTH, 1)
+            LeftHandle:SetPoint("TOPRIGHT", LeftSection, "TOPRIGHT", 0, 0)
+            LeftHandle:SetPoint("BOTTOMRIGHT", LeftSection, "BOTTOMRIGHT", 0, 0)
+            LeftHandle:EnableMouse(true)
+            LeftHandle:EnableMouseMotion(true)
+            -- 把手需要始终可交互，维持在较高层（与原实现一致）
+            -- 注意：真正需要“在背景下方”的是 LeftSlide 容器本身，而非把手。
+            LeftHandle:SetFrameStrata("TOOLTIP")
+            LHGlow = LeftHandle:CreateTexture(nil, "OVERLAY")
+            LHGlow:SetAllPoints(true)
+            LHGlow:SetColorTexture(1, 0.82, 0, 0.05)
+            LHGlow:Hide()
+        else
+            MainFrame.LeftSlideHandle = nil
+        end
+
+        -- 调试打印（最小化改动：直接静默，避免左下角日志爆炸）
+        local function DockLog(tag, ...) end
+
+        -- 弹簧：x 为相对 LeftSection 左缘的偏移；负值=向左收起
+        local ldriver
+        if not USE_STATIC_LEFT_PANEL then
+            ldriver = API.CreateSpringDriver({ x = 0, stiffness = 320, damping = 34 }, function(x)
+                LeftSlide:ClearAllPoints()
+                LeftSlide:SetPoint("TOPLEFT", LeftSection, "TOPLEFT", x, 0)
+                LeftSlide:SetPoint("BOTTOMLEFT", LeftSection, "BOTTOMLEFT", x, 0)
+                LeftSlide:SetWidth(sideSectionWidth)
+            end)
+            ldriver:AttachFrame(LeftSlide)
+            MainFrame.LeftSlideDriver = ldriver
+        else
+            MainFrame.LeftSlideDriver = nil
+        end
+
+        local function LeftClosedOffset()
+            local w = tonumber(LeftSection:GetWidth()) or sideSectionWidth
+            return math.max(0, w)
+        end
+        MainFrame.GetLeftClosedOffset = LeftClosedOffset
+
+        local openDelay, closeDelay = 0.06, 0.18
+        local closeTimer, closeTicker
+        local closing = false
+        local minOpenDur = 0.15
+        local minOpenUntil = 0
+        local function now() return (GetTimePreciseSec and GetTimePreciseSec()) or GetTime() end
+        local function SetLeftOpen(open, reason)
+            if USE_STATIC_LEFT_PANEL then return end
+            if open then
+                if closing and closeTimer then closeTimer:Cancel() end
+                closing = false
+                minOpenUntil = now() + minOpenDur
+                if math.abs(ldriver.target - 0) > 0.1 then
+                    DockLog("Open-Req", "reason=", reason or "?", "x=", ldriver.x, "target=", ldriver.target)
+                    C_Timer.After(openDelay, function()
+                        minOpenUntil = now() + minOpenDur
+                        ldriver:SetTarget(0)
+                        if LHGlow then LHGlow:Show() end
+                        DockLog("Open-Commit", "x=", ldriver.x, "target=", ldriver.target, "inside=", tostring(LeftSlide:IsMouseOver() or (LeftHandle and LeftHandle:IsMouseOver())))
+                    end)
+                end
+            else
+                if now() < minOpenUntil then return end
+                if closing then return end
+                closing = true
+                if closeTimer then closeTimer:Cancel() end
+                DockLog("Close-Req", "reason=", reason or "?", "x=", ldriver.x, "target=", ldriver.target)
+                closeTimer = C_Timer.NewTimer(closeDelay, function()
+                    ldriver:SetTarget(LeftClosedOffset())
+                    if LHGlow then LHGlow:Hide() end
+                    closing = false
+                    DockLog("Close-Commit", "x=", ldriver.x, "target=", ldriver.target)
+                end)
+            end
+        end
+        MainFrame.SetLeftSlideOpen = SetLeftOpen
+
+        -- 即使禁用鼠标，也可用几何命中判断是否在左侧栏中
+        local function FrameContainsPointer(frame)
+            if not frame or not (frame.IsVisible and frame:IsVisible()) then return false end
+            local left, bottom, width, height = frame:GetRect()
+            if not (left and bottom and width and height) then return false end
+            local x, y = GetCursorPosition()
+            local scale = frame:GetEffectiveScale() or 1
+            x, y = x/scale, y/scale
+            return x >= left and x <= (left + width) and y >= bottom and y <= (bottom + height)
+        end
+        local function LeftPointerInside()
+            return FrameContainsPointer(LeftSlide) or (LeftHandle and LeftHandle:IsShown() and LeftHandle:IsMouseOver())
+        end
+        if not USE_STATIC_LEFT_PANEL then
+            LeftHandle:SetScript("OnEnter", function()
+                if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockLeft] Handle OnEnter") end
+                SetLeftOpen(true, "enter.handle")
+            end)
+            -- 父容器禁鼠标：不再挂 OnEnter/OnLeave，打开/关闭交由把手与Ticker控制
+            LeftSlide:SetScript("OnEnter", nil)
+            LeftHandle:SetScript("OnLeave", function()
+                if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockLeft] Handle OnLeave") end
+                if not LeftPointerInside() then SetLeftOpen(false, "leave.handle") end
+            end)
+            LeftSlide:SetScript("OnLeave", nil)
+        else
+            -- 静态模式不需要任何悬停逻辑
+            LeftSlide:SetScript("OnEnter", nil)
+            LeftSlide:SetScript("OnLeave", nil)
+        end
+        -- 以 10Hz 采样的“稳定收回器”：只有当鼠标离开安全区并超过最小展开时长后才触发收回
+        if not USE_STATIC_LEFT_PANEL then
+            if closeTicker then closeTicker:Cancel() end
+            local insidePrev = nil
+            closeTicker = C_Timer.NewTicker(0.10, function()
+                local inside = LeftPointerInside()
+                if inside ~= insidePrev then
+                    DockLog("Inside-Toggle", "inside=", tostring(inside))
+                    insidePrev = inside
+                end
+                if not inside then
+                    SetLeftOpen(false, "ticker.outside")
+                end
+            end)
+        end
+
+        -- 初始为收起到主弹窗身后
+        if not USE_STATIC_LEFT_PANEL then
+            ldriver.x = LeftClosedOffset(); ldriver.target = ldriver.x; ldriver.onUpdate(ldriver.x)
+        else
+            -- 静态模式：始终可见
+            LeftSlide:Show()
+        end
+        -- 禁止父容器吃点击
+        LeftSlide:SetScript("OnMouseDown", nil)
+        -- 同步：将 LeftSlide 的子按钮层级/strata 始终维持在父之上，避免父容器提层后“吃掉点击”
+        local function SyncLeftChildrenLevels()
+            if not MainFrame or not MainFrame.primaryCategoryPool then return end
+            local parentLevel = LeftSlide:GetFrameLevel() or 0
+            local parentStrata = LeftSlide:GetFrameStrata() or "FULLSCREEN"
+            if LeftSlide.___lastSyncLevel == parentLevel and LeftSlide.___lastSyncStrata == parentStrata then
+                return
+            end
+            LeftSlide.___lastSyncLevel = parentLevel
+            LeftSlide.___lastSyncStrata = parentStrata
+            -- 分类按钮置于父层级之上；高亮条更高一点，但禁用鼠标
+            local childLevel = parentLevel + 20
+            for _, button in MainFrame.primaryCategoryPool:EnumerateActive() do
+                pcall(button.SetFrameStrata, button, parentStrata)
+                pcall(button.SetFrameLevel,  button, childLevel)
+                if not button:IsMouseEnabled() then button:EnableMouse(true) end
+            end
+            if CategoryHighlight then
+                pcall(CategoryHighlight.SetFrameStrata, CategoryHighlight, parentStrata)
+                pcall(CategoryHighlight.SetFrameLevel,  CategoryHighlight, parentLevel + 40)
+                if CategoryHighlight.EnableMouse then CategoryHighlight:EnableMouse(false) end
+            end
+            if ADT and ADT.DebugPrint then
+                ADT.DebugPrint(string.format("[DockLeft] SyncChildren strata=%s base=%d",
+                    tostring(parentStrata), parentLevel))
+            end
+        end
+
+        -- 点击代理：在极端情况下（上层框体抢占）用顶层透明按钮代点
+        local function EnsureProxy(btn)
+            if not btn then return end
+            if btn._proxy and btn._proxy.GetParent and btn._proxy:GetParent() == UIParent then return btn._proxy end
+            local p = CreateFrame("Button", nil, UIParent)
+            p:SetAllPoints(btn)
+            p:SetFrameStrata("TOOLTIP")
+            p:SetFrameLevel( max( (LeftSlide and LeftSlide:GetFrameLevel() or 0) + 3000, 5000) )
+            p:SetToplevel(true)
+            p:EnableMouse(true)
+            p:EnableMouseMotion(true)
+            p:SetScript("OnEnter", function() if btn.OnEnter then btn:OnEnter() end end)
+            p:SetScript("OnLeave", function() if btn.OnLeave then btn:OnLeave() end end)
+            p:SetScript("OnClick", function()
+                if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockLeft] ProxyClick key="..tostring(btn.categoryKey)) end
+                if btn.Click then btn:Click() elseif btn.OnClick then btn:OnClick() end
+            end)
+            -- 几乎透明的命中面
+            local cover = p:CreateTexture(nil, "BACKGROUND")
+            cover:SetAllPoints(true)
+            cover:SetColorTexture(0,0,0,0.01)
+            p._cover = cover
+            btn._proxy = p
+            return p
+        end
+
+        local function UpdateProxiesVisible(show)
+            if not MainFrame or not MainFrame.primaryCategoryPool then return end
+            for _, b in MainFrame.primaryCategoryPool:EnumerateActive() do
+                if not b._proxy then EnsureProxy(b) end
+                if b._proxy then
+                    b._proxy:ClearAllPoints(); b._proxy:SetAllPoints(b)
+                    b._proxy:SetShown(show and b:IsShown())
+                end
+            end
+        end
+
+        if not USE_STATIC_LEFT_PANEL then
+        LeftSlide:HookScript("OnUpdate", function(_, elapsed)
+            local closed = LeftClosedOffset()
+            local isClosed = math.abs(ldriver.x - closed) < 1 and math.abs(ldriver.target - closed) < 0.5
+            -- 父容器不接收鼠标，仅根据几何命中计算“inside”，子按钮自行接收点击
+            if MainFrame then
+                -- 展开：强制置顶到 TOOLTIP strata + 高 FrameLevel，确保可点击
+                -- 收起：降回 FULLSCREEN strata 并压低 FrameLevel，使其处于右侧背景之下
+                if not isClosed then
+                    if LeftSlide:GetFrameStrata() ~= "TOOLTIP" then
+                        LeftSlide:SetFrameStrata("TOOLTIP")
+                    end
+                    local openLevel = (MainFrame:GetFrameLevel() or 0) + 500
+                    if LeftSlide:GetFrameLevel() ~= openLevel then
+                        LeftSlide:SetFrameLevel(openLevel)
+                    end
+                    if not LeftSlide:IsToplevel() then LeftSlide:SetToplevel(true) end
+                    -- 父容器抬升后，立刻同步子按钮层级，确保点击命中子按钮
+                    SyncLeftChildrenLevels(); UpdateProxiesVisible(true)
+                else
+                    local targetLevel = math.max(1, (MainFrame:GetFrameLevel() or 0) - 5)
+                    if LeftSlide:GetFrameLevel() ~= targetLevel then
+                        LeftSlide:SetFrameLevel(targetLevel)
+                    end
+                    if LeftSlide:GetFrameStrata() ~= "FULLSCREEN" then
+                        LeftSlide:SetFrameStrata("FULLSCREEN")
+                    end
+                    if LeftSlide:IsToplevel() then LeftSlide:SetToplevel(false) end
+                    -- 收起态也同步一次并隐藏代理
+                    SyncLeftChildrenLevels(); UpdateProxiesVisible(false)
+                end
+                -- 展开时避免把手遮挡列表项点击；收起时恢复把手以便触发展开
+                if isClosed then
+                    if not LeftHandle:IsMouseEnabled() then LeftHandle:EnableMouse(true) end
+                    if not LeftHandle:IsShown() then LeftHandle:Show() end
+                else
+                    if LeftHandle:IsMouseEnabled() then LeftHandle:EnableMouse(false) end
+                    if LeftHandle:IsShown() then LeftHandle:Hide() end
+                end
+                -- 低频输出：状态摘要（每 0.5s 一次），带上弹簧与命中信息
+                LeftSlide.__dbg_t = (LeftSlide.__dbg_t or 0) + (elapsed or 0)
+                if (LeftSlide.__dbg_t > 0.5) and ADT and ADT.DebugPrint then
+                    LeftSlide.__dbg_t = 0
+                    ADT.DebugPrint(string.format("[DockLeft] state=%s x=%.1f target=%.1f closed=%.1f inside=%s L:%s H:%s R:%s",
+                        isClosed and "closed" or "open", ldriver.x, ldriver.target, LeftClosedOffset(), tostring(LeftPointerInside()),
+                        tostring(LeftSlide:GetFrameStrata()).."/"..tostring(LeftSlide:GetFrameLevel()),
+                        tostring(LeftHandle:GetFrameStrata()).."/"..tostring(LeftHandle:GetFrameLevel()),
+                        tostring(MainFrame:GetFrameStrata()).."/"..tostring(MainFrame:GetFrameLevel())))
+                    if GetMouseFocus then
+                        local f = GetMouseFocus()
+                        local name = f and (f.GetName and f:GetName()) or tostring(f)
+                        ADT.DebugPrint("[DockLeft] focus="..tostring(name))
+                    end
+                end
+            end
+        end)
+        end -- not USE_STATIC_LEFT_PANEL
+
         local function Category_Create()
-            local obj = CreateCategoryButton(Tab1)
-            obj:SetSize(categoryButtonWidth, Def.ButtonSize)
+            local obj = CreateCategoryButton(LeftSlide)
+            obj:SetSize(categoryButtonWidth, Def.CategoryHeight or Def.ButtonSize)
             MakeFadingObject(obj)
             obj:SetFadeInAlpha(1)
             obj:SetFadeOutAlpha(0.5)
@@ -2064,15 +2522,28 @@ local function CreateUI()
         local function Category_Acquire(obj)
             obj:FadeIn(true)
             obj:ResetOffset()
+            -- 采用 AnyUp：避免父级或其他框体抢到 MouseDown 导致 OnClick 不触发
+            if obj.RegisterForClicks then obj:RegisterForClicks("AnyUp") end
+            -- 强制确保分类按钮自身位于可交互顶层，避免被任何背景/父级拦截
+            local parentStrata = LeftSlide and LeftSlide.GetFrameStrata and LeftSlide:GetFrameStrata() or "TOOLTIP"
+            pcall(obj.SetFrameStrata, obj, parentStrata)
+            local base = (LeftSlide and LeftSlide.GetFrameLevel and LeftSlide:GetFrameLevel()) or 10
+            pcall(obj.SetFrameLevel, obj, base + 2000)
+            pcall(obj.SetToplevel, obj, true)
+            obj:EnableMouse(true)
+            -- 确保点击代理存在并与按钮对齐
+            if EnsureProxy then EnsureProxy(obj) end
+            -- 标记：新获取的按钮需要在下一帧由 SyncLeftChildrenLevels 统一校正一次
+            LeftSlide.___lastSyncLevel = nil
         end
 
         MainFrame.primaryCategoryPool = API.CreateObjectPool(Category_Create, Category_Acquire, nil)
         MainFrame.primaryCategoryPool.leftListFromY = -leftListFromY
         MainFrame.primaryCategoryPool.offsetX = Def.WidgetGap
-
-
-    CategoryHighlight = CreateSelectionHighlight(Tab1)
-    CategoryHighlight:SetSize(categoryButtonWidth, Def.ButtonSize)
+        
+    CategoryHighlight = CreateSelectionHighlight(LeftSlide)
+    if CategoryHighlight and CategoryHighlight.EnableMouse then CategoryHighlight:EnableMouse(false) end
+    CategoryHighlight:SetSize(categoryButtonWidth, Def.CategoryHeight or Def.ButtonSize)
 
         -- 重设主木质边框范围：仅包裹右侧区域（含 Header）
         if MainFrame.BorderFrame then
@@ -2085,57 +2556,37 @@ local function CreateUI()
 
         -- 左侧面板采用完整九宫格框体（The War Within 卡片风格）
         do
-            local frame = Tab1:CreateTexture(nil, "BORDER")
+            -- 关键修复：背景贴图必须挂在 LeftSlide 上，确保其跟随 LeftSlide 的 strata/level
+            local frame = LeftSlide:CreateTexture(nil, "BORDER")
             MainFrame.LeftPanelBackground = frame
             frame:SetAtlas("ui-frame-thewarwithin-cardparchmentwider")
             -- 经验值：该卡片边框厚度约 28-32px，取 32 以确保角不被拉伸
             frame:SetTextureSliceMargins(32, 32, 32, 32)
             frame:SetTextureSliceMode(Enum.UITextureSliceMode.Stretched)
-            frame:SetPoint("TOPLEFT", LeftSection, "TOPLEFT", -4, 4)
-            frame:SetPoint("BOTTOMRIGHT", LeftSection, "BOTTOMRIGHT", 4, -4)
+            frame:SetPoint("TOPLEFT", LeftSlide, "TOPLEFT", -4, 4)
+            frame:SetPoint("BOTTOMRIGHT", LeftSlide, "BOTTOMRIGHT", 4, -4)
         end
     end
-
-
-    do  -- RightSection（预览与说明）
-        local previewSize = sideSectionWidth - 2*Def.WidgetGap
-
-        local preview = Tab1:CreateTexture(nil, "OVERLAY")
-        MainFrame.FeaturePreview = preview
-        preview:SetSize(previewSize, previewSize)
-        preview:SetPoint("TOP", RightSection, "TOP", 0, -Def.WidgetGap)
-
-        local mask = Tab1:CreateMaskTexture(nil, "OVERLAY")
-        mask:SetPoint("TOPLEFT", preview, "TOPLEFT", 0, 0)
-        mask:SetPoint("BOTTOMRIGHT", preview, "BOTTOMRIGHT", 0, 0)
-        mask:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/CommandDock/PreviewMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        preview:AddMaskTexture(mask)
-
-
-        local description = Tab1:CreateFontString(nil, "OVERLAY", "GameTooltipText")
-        MainFrame.FeatureDescription = description
-        SetTextColor(description, Def.TextColorReadable)
-        description:SetJustifyH("LEFT")
-        description:SetJustifyV("TOP")
-        description:SetSpacing(4)
-        local visualOffset = 2
-        description:SetPoint("TOPLEFT", preview, "BOTTOMLEFT", visualOffset, -Def.WidgetGap -visualOffset)
-        description:SetPoint("BOTTOMRIGHT", RightSection, "BOTTOMRIGHT", -visualOffset -Def.WidgetGap, Def.WidgetGap)
-        description:SetShadowColor(0, 0, 0)
-        description:SetShadowOffset(1, -1)
-    end
-
-
+    -- 右侧整栏已移除；下面创建中央区域与其背景
     do  -- CentralSection（设置列表所在区域）
-        -- 右侧整体黑色背景：覆盖到 Header 区域，保证顶部也有底纹
-        if MainFrame.RightBackground then MainFrame.RightBackground:Hide() end
-        local Background = MainFrame:CreateTexture(nil, "BACKGROUND")
-        MainFrame.RightBackground = Background
-        Background:SetAtlas("housing-basic-panel-background")
-        -- 顶部从 Header 顶边开始，左缘从 Header 左边开始（Header 已经只覆盖右侧区）
-        Background:SetPoint("TOPLEFT", MainFrame.Header or MainFrame, "TOPLEFT", 0, 0)
-        Background:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", -2, 2)
-
+        -- 右侧统一背景：从 Header 左缘一路覆盖到面板右下，保证 Header 区域下方也有底纹
+        if MainFrame.RightUnifiedBackground then MainFrame.RightUnifiedBackground:Hide() end
+        local RBG = MainFrame:CreateTexture(nil, "BACKGROUND")
+        MainFrame.RightUnifiedBackground = RBG
+        RBG:SetAtlas("housing-basic-panel-background")
+        RBG:ClearAllPoints()
+        RBG:SetPoint("TOPLEFT", MainFrame.Header or MainFrame, "TOPLEFT", 0, 0)
+        RBG:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", -2, 2)
+        -- 再创建中央区域独立背景，层级同为 BACKGROUND，不影响点击
+        --（保留以强化中央区的对比度；两者叠加仍在 BACKGROUND 图层）
+        
+        -- 中央区域独立背景
+        if MainFrame.CenterBackground then MainFrame.CenterBackground:Hide() end
+        local CenterBG = MainFrame:CreateTexture(nil, "BACKGROUND")
+        MainFrame.CenterBackground = CenterBG
+        CenterBG:SetAtlas("housing-basic-panel-background")
+        CenterBG:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", 0, 0)
+        CenterBG:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", 0, 2)
 
         -- 暂不显示自研滚动条，后续将切换为暴雪 ScrollBox 体系
         MainFrame.ModuleTab.ScrollBar = nil
@@ -2160,7 +2611,8 @@ local function CreateUI()
             if w <= 0 then
                 local total = tonumber(MainFrame:GetWidth()) or 0
                 local leftw = tonumber(MainFrame.sideSectionWidth) or 0
-                w = math.max(0, total - leftw)
+                local rightw = tonumber(MainFrame.rightSectionWidth) or leftw
+                w = math.max(0, total - leftw - rightw)
             end
             w = API.Round(w - 2*Def.ButtonSize)
             if w < 120 then w = 120 end
@@ -2217,7 +2669,25 @@ local function CreateUI()
     end
 
     Tab1:SetScript("OnShow", function()
+        if MainFrame.ApplyDockPlacement then MainFrame:ApplyDockPlacement() end
         local key = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or MainFrame.currentDecorCategory or MainFrame.currentAboutCategory or MainFrame.currentSettingsCategory
+        -- 首次无记录时，显式记录并使用 "Housing" 作为默认分类
+        if (not ADT.GetDBValue('LastCategoryKey')) then
+            if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', 'Housing') end
+            key = 'Housing'
+        end
+        -- 显式首选“通用”（Housing）作为回退；若无则再选第一个设置类
+        if not key then
+            local housing = CommandDock:GetCategoryByKey('Housing')
+            if housing and housing.categoryType == 'settings' then
+                key = 'Housing'
+            end
+        end
+        if ADT and ADT.DebugPrint then
+            local cw = MainFrame.CentralSection and MainFrame.CentralSection:GetWidth() or 0
+            local ch = MainFrame.CentralSection and MainFrame.CentralSection:GetHeight() or 0
+            ADT.DebugPrint(string.format("[SettingsPanel] OnShow: key=%s, center=%.1fx%.1f", tostring(key), cw, ch))
+        end
         if USE_TOP_TABS and MainFrame.TopTabOwner and MainFrame.__tabIDFromKey then
             local id = MainFrame.__tabIDFromKey[key] or MainFrame.__tabIDFromKey['Housing'] or 1
             MainFrame.TopTabOwner:SetTab(id)
@@ -2236,12 +2706,19 @@ local function CreateUI()
             MainFrame:ShowSettingsCategory(key)
             MainFrame:HighlightCategoryByKey(key)
         else
-            -- 默认回退到第一个“设置类”分类
+            -- 默认回退到第一个“设置类”分类（若存在 Housing 优先）
             local all = CommandDock:GetSortedModules()
             local firstSettings
+            -- Housing 优先
+            for _, info in ipairs(all) do
+                if info.key == 'Housing' and info.categoryType ~= 'decorList' and info.categoryType ~= 'about' then
+                    firstSettings = 'Housing'; break
+                end
+            end
+            -- 通用不存在时，取第一个设置类
             for _, info in ipairs(all) do
                 if info.categoryType ~= 'decorList' and info.categoryType ~= 'about' then
-                    firstSettings = info.key; break
+                    firstSettings = firstSettings or info.key; break
                 end
             end
             if firstSettings then
@@ -2251,6 +2728,8 @@ local function CreateUI()
                 MainFrame:RefreshFeatureList()
             end
         end
+        if MainFrame.UpdateAutoWidth then MainFrame:UpdateAutoWidth() end
+        if USE_STATIC_LEFT_PANEL and MainFrame.UpdateStaticLeftPlacement then C_Timer.After(0, function() if MainFrame:IsShown() then MainFrame:UpdateStaticLeftPlacement() end end) end
     end)
 
     -- 单一 OnSizeChanged：当窗口缩放时，仅调整右侧内容宽度
@@ -2263,6 +2742,22 @@ local function CreateUI()
         local newWidth = API.Round((w or 0) - 2*Def.ButtonSize)
         if newWidth < 120 then newWidth = 120 end
         if newWidth <= 0 then return end
+
+        -- 同步左侧滑出容器宽度与收起偏移
+        if self.LeftSlideContainer and self.LeftSection then
+            local lw = tonumber(self.LeftSection:GetWidth()) or 0
+            if lw > 0 then self.LeftSlideContainer:SetWidth(lw) end
+            if self.LeftSlideDriver and self.GetLeftClosedOffset then
+                local closed = self.GetLeftClosedOffset()
+                if math.abs(self.LeftSlideDriver.target) > 0.5 then
+                    self.LeftSlideDriver.target = closed
+                    if math.abs(self.LeftSlideDriver.x - closed) < 1 then
+                        self.LeftSlideDriver.x = closed
+                        if self.LeftSlideDriver.onUpdate then self.LeftSlideDriver.onUpdate(closed) end
+                    end
+                end
+            end
+        end
         if self.centerButtonWidth ~= newWidth then
             self.centerButtonWidth = newWidth
             local ScrollView = self.ModuleTab.ScrollView
@@ -2274,6 +2769,23 @@ local function CreateUI()
                 self.ModuleTab.ScrollBar:UpdateThumbRange()
             end
         end
+    end)
+
+    -- 初次创建后立即固定停靠并做一次自适应宽度
+    if MainFrame.ApplyDockPlacement then MainFrame:ApplyDockPlacement() end
+    if MainFrame.UpdateAutoWidth then MainFrame:UpdateAutoWidth() end
+
+    -- 监听分辨率/缩放/编辑器模式变化，保持右侧贴边
+    local AnchorWatcher = CreateFrame("Frame", nil, MainFrame)
+    AnchorWatcher:RegisterEvent("DISPLAY_SIZE_CHANGED")
+    AnchorWatcher:RegisterEvent("UI_SCALE_CHANGED")
+    AnchorWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+    AnchorWatcher:RegisterEvent("HOUSE_EDITOR_MODE_CHANGED")
+    AnchorWatcher:SetScript("OnEvent", function()
+        C_Timer.After(0, function()
+            if MainFrame and MainFrame.ApplyDockPlacement then MainFrame:ApplyDockPlacement() end
+            if MainFrame and MainFrame.UpdateAutoWidth then MainFrame:UpdateAutoWidth() end
+        end)
     end)
 
     -- 注册数据变化回调，实时刷新 GUI
@@ -2335,9 +2847,7 @@ function MainFrame:ShowUI(mode)
     self.mode = mode
     -- 关闭按钮由 UIPanelCloseButton 提供，无需额外控制
     self:UpdateLayout()
-    if ADT and ADT.RestoreFramePosition then
-        ADT.RestoreFramePosition("SettingsPanelPos", self)
-    end
+    -- 固定停靠：不再恢复历史位置，统一由 ApplyDockPlacement 控制
     -- 确保并显示下方空壳弹窗，默认高度 160，可后续调整
     self:EnsureSubPanel()
     self:SetSubPanelShown(true)
@@ -2384,15 +2894,11 @@ do
         
         if isActive then
             if not wasEditorActive then
-                -- 进入编辑模式：自动打开 GUI
+                -- 进入编辑模式：自动打开 GUI，且强制回到“通用”分类（用户可自行再切换）。
                 MainFrame:ShowUI("editor")
-                -- 若没有历史分类记录，首次进入仍默认到“临时板”；
-                -- 若已有 LastCategoryKey，则交由 Tab1:OnShow 的恢复逻辑处理（避免覆盖）。
-                C_Timer.After(0.1, function()
-                    local key = ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')
-                    if not key then
-                        MainFrame:ShowDecorListCategory('Clipboard')
-                    end
+                C_Timer.After(0, function()
+                    MainFrame:ShowSettingsCategory('Housing')
+                    if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', 'Housing') end
                 end)
             end
             -- 调整层级确保在编辑器之上

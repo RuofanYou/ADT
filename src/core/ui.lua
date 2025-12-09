@@ -32,6 +32,32 @@ end
 
 SlashCmdList["ADT"] = function(msg)
     msg = (msg or ""):lower():match("^%s*(.-)%s*$")
+    -- /adt dock ... 子命令：诊断 Dock 交互问题
+    if msg:match("^dock") then
+        local _, sub = msg:match("^(%S+)%s*(.*)$")
+        sub = (sub or ""):lower():match("^%s*(.-)%s*$")
+        local UI = ADT and ADT.DockUI
+        if not UI then
+            if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockDiag] DockUI 尚未加载") end
+            return
+        end
+        if sub == "diag" or sub == "dump" then
+            if UI.Diag then UI.Diag("user") end
+            return
+        end
+        local action, arg = sub:match("^(%S+)%s*(.*)$")
+        if action == "trace" then
+            arg = (arg or ""):lower()
+            if UI.SetTrace then UI.SetTrace(arg == "on" or arg == "1" or arg == "true") end
+            return
+        elseif action == "stack" then
+            if UI.Stack then UI.Stack() else if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockDiag] Stack() 不可用") end end
+            return
+        end
+        -- 未知子命令时给出提示
+        if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockDiag] 用法: /adt dock diag | /adt dock trace on|off") end
+        return
+    end
     -- /adt debug [on|off|show]
     if msg:match("^debug") or msg:match("^dbg") then
         local _, arg = msg:match("^(%S+)%s*(.*)$")

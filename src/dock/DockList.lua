@@ -173,6 +173,9 @@ function ListViewMixin:Render(force)
                     obj:ClearAllPoints()
                     obj:SetPoint(d.point or 'TOP', self.ScrollRef, d.relativePoint or 'TOP', d.offsetX or 0, -d.top)
                     self._actives[i] = obj
+                    if ADT and ADT.DebugPrint then
+                        ADT.DebugPrint(string.format('[ListView] acquire i=%d key=%s top=%d bottom=%d', i, tostring(d.templateKey), d.top or -1, d.bottom or -1))
+                    end
                 end
             end
         end

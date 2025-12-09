@@ -8,6 +8,7 @@
     <Script file="Housing_AdvancedTools.lua"/>
     <Script file="Housing_ClipboardCore.lua"/>
     <Script file="Housing_ClipboardPanel.lua"/>
+    <Script file="Housing_BlizzardGraft.lua"/>
 
     <!-- 指示条模板（使用 ADT_ 前缀避免冲突） -->
     <Frame name="ADT_HouseEditorInstructionTemplate" virtual="true">

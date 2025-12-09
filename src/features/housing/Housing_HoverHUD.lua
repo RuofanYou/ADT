@@ -228,6 +228,24 @@ do
     function DisplayFrameMixin:UpdateVisuals() end
     function DisplayFrameMixin:UpdateControl() end
 
+    -- 统一样式访问
+    local function GetCFG()
+        return (ADT and ADT.HousingInstrCFG) or {
+            Row={minHeight=22,hSpacing=8,vSpacing=2,vPadEach=1},
+            Typography={instructionScale=0.78,controlScaleBase=0.78,minFontSize=9},
+            Control={height=24,bgHeight=22,textPad=22,minScale=0.70},
+        }
+    end
+
+    local function ScaleFont(fs, scale, minSize)
+        if not (fs and fs.GetFont and fs.SetFont) then return end
+        local path, size, flags = fs:GetFont()
+        if not size or size <= 0 then return end
+        local newSize = math.max(minSize or 9, math.floor(size * scale + 0.5))
+        if newSize ~= size then fs:SetFont(path, newSize, flags) end
+        if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
+    end
+
     function DisplayFrameMixin:SetHotkey(instruction, bindingText)
         self.InstructionText:SetText(instruction)
 
@@ -236,26 +254,46 @@ do
         self.Control.Background:Show()
         self.Control.Icon:Hide()
 
-        local textWidth = (self.Control.Text:GetWrappedWidth()) + 20
-        self.Control.Background:SetWidth(textWidth)
+        -- 统一样式：字号、行高、键帽大小
+        local CFG = GetCFG()
+        ScaleFont(self.InstructionText, CFG.Typography.instructionScale, CFG.Typography.minFontSize)
+        ScaleFont(self.Control.Text, CFG.Typography.controlScaleBase, CFG.Typography.minFontSize)
+
+        -- 统一行高与对齐
+        self.minimumHeight = CFG.Row.minHeight
+        self.spacing = CFG.Row.hSpacing
+        self.topPadding = CFG.Row.vPadEach
+        self.bottomPadding = CFG.Row.vPadEach
+        self.align = "center"
+        if self.Control then self.Control:SetHeight(CFG.Row.minHeight) end
+
+        -- 计算键帽宽度（按留白 textPad），并让左侧文本右对齐到键帽左侧
+        local textWidth = math.ceil(self.Control.Text:GetWrappedWidth()) + (CFG.Control.textPad or 22)
+        if self.Control.Background then
+            self.Control.Background:SetHeight(CFG.Control.bgHeight or 22)
+            self.Control.Background:SetWidth(textWidth)
+            self.Control.Background:ClearAllPoints()
+            self.Control.Background:SetPoint("CENTER", self.Control, "CENTER", 0, 0)
+        end
         self.Control:SetWidth(textWidth)
+        self.Control:SetHeight(CFG.Row.minHeight)
 
         self.InstructionText:ClearAllPoints()
-        if textWidth > 50 then
-            self.InstructionText:SetPoint("RIGHT", self, "RIGHT", -textWidth - 5, 0)
-        else
-            self.InstructionText:SetPoint("RIGHT", self, "RIGHT", -55, 0)
-        end
+        self.InstructionText:SetPoint("RIGHT", self, "RIGHT", -textWidth - 5, 0)
     end
 
     function DisplayFrameMixin:OnLoad()
         self.alpha = 0
         self:SetAlpha(0)
 
-        self.Control.Icon:SetAtlas("housing-hotkey-icon-leftclick")
-        self.Control.Icon:Show()
+        -- 需求：顶部这一行仅显示“装饰名(+库存)”，不显示任何鼠标类图标/键帽
+        if self.Control and self.Control.Icon then self.Control.Icon:Hide() end
+        if self.Control and self.Control.Background then self.Control.Background:Hide() end
+        if self.Control and self.Control.Text then self.Control.Text:Hide() end
+
         self.InstructionText:SetText(HOUSING_DECOR_SELECT_INSTRUCTION)
-        self.InstructionText:SetFontObject("GameFontHighlightMedium")
+        -- 字体交由 Housing_BlizzardGraft 的统一样式驱动，不在本地强制覆盖
+        if self.InstructionText.SetJustifyV then self.InstructionText:SetJustifyV("MIDDLE") end
     end
 
     local function FadeIn_OnUpdate(self, elapsed)
@@ -301,7 +339,12 @@ do
                 displayName = "|A:BonusChest-Lock:16:16|a " .. displayName
             end
         end
-        self.InstructionText:SetText(displayName)
+        -- 行内不再显示装饰名（避免与右侧标题重复）；本行仅承担库存数字展示
+        self.InstructionText:SetText("")
+        -- 同步到 Dock 下方面板 Header：用与“操作说明”同一字号/字色的标题显示当前悬停装饰名
+        if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then
+            ADT.DockUI.SetSubPanelHeaderText(displayName)
+        end
         
         local decorID = decorInstanceInfo.decorID
         local entryInfo = GetCatalogDecorInfo(decorID)
@@ -346,7 +389,8 @@ local function Blizzard_HouseEditor_OnLoaded()
         local CTRL = CTRL_KEY_TEXT or "CTRL"
         local function addHint(prev, label, key)
             local line = CreateFrame("Frame", nil, DisplayFrame, "ADT_HouseEditorInstructionTemplate")
-            line:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", 0, 0)
+            local CFG = (ADT and ADT.HousingInstrCFG and ADT.HousingInstrCFG.Row) or { vSpacing = 2 }
+            line:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", 0, - (CFG.vSpacing or 2))
             line:SetWidth(420)
             Mixin(line, DisplayFrameMixin)
             line:SetHotkey(label, key)
@@ -392,6 +436,10 @@ local function Blizzard_HouseEditor_OnLoaded()
         end
 
         DisplayFrame:NormalizeKeycapWidth()
+        -- 统一把 BlizzardGraft 的“行样式”应用到我们自建的行，保证字号/间距一致
+        if ADT and ADT.ApplyHousingInstructionStyle then
+            ADT.ApplyHousingInstructionStyle(DisplayFrame)
+        end
     end
 
     container.UnselectedInstructions = { DisplayFrame }
@@ -564,6 +612,10 @@ do
             if DisplayFrame then
                 DisplayFrame:FadeOut(0.5)
             end
+            -- 清空右侧 Header 文本
+            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then
+                ADT.DockUI.SetSubPanelHeaderText("")
+            end
         end
     end
 
@@ -695,6 +747,9 @@ do
         if DisplayFrame and DisplayFrame.SubFrame then
             DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", ADT.GetDuplicateKeyName())
             if DisplayFrame.NormalizeKeycapWidth then DisplayFrame:NormalizeKeycapWidth() end
+            if ADT and ADT.ApplyHousingInstructionStyle then
+                ADT.ApplyHousingInstructionStyle(DisplayFrame)
+            end
             if not dupeEnabled then
                 DisplayFrame.SubFrame:Hide()
             end
@@ -815,6 +870,12 @@ function EL:OnLocaleChanged()
     end
     if DisplayFrame.NormalizeKeycapWidth then
         DisplayFrame:NormalizeKeycapWidth()
+        if ADT and ADT.ApplyHousingInstructionStyle then
+            ADT.ApplyHousingInstructionStyle(DisplayFrame)
+        end
+        if ADT and ADT.ApplyHousingInstructionStyle then
+            ADT.ApplyHousingInstructionStyle(DisplayFrame)
+        end
     end
     -- 重新应用可见性（用户开关可能影响）
     if self.UpdateHintVisibility then self:UpdateHintVisibility() end

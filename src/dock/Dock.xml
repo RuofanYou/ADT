@@ -226,5 +226,7 @@
 
     <!-- 在所有模板定义完成后再加载主面板脚本 -->
     <Script file="DockUI.lua"/>
+    <!-- 子面板拆分为独立脚本（依赖 DockUI 暴露的共享构造） -->
+    <Script file="SubPanel.lua"/>
 
 </Ui>

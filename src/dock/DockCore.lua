@@ -76,6 +76,78 @@ function ADT.EasingFunctions.outQuint(t, b, c, d)
     return c * (t*t*t*t*t + 1) + b
 end
 
+-- 物理弹簧（简易、稳定）：x'' = -k(x-target) - c x'
+-- 说明：
+--  - 采用半隐式欧拉积分，帧间 dt 夹紧到 [0, 1/30] 以避免卡顿时的不稳定。
+--  - stiffness(刚度) 与 damping(阻尼) 为可调参数，便于统一动效风格。
+--  - 返回更新后的 x、v；调用方可据此设置 UI 偏移。
+function API.SpringStep(x, v, target, stiffness, damping, dt)
+    stiffness = tonumber(stiffness) or 260
+    damping   = tonumber(damping)   or 28
+    dt = math.min(math.max(dt or 0, 0), 1/30)
+    local a = -stiffness * (x - target) - damping * v
+    v = v + a * dt
+    x = x + v * dt
+    return x, v
+end
+
+-- 创建标准弹簧驱动器
+-- 用法：
+--   local s = API.CreateSpringDriver({x=initial, stiffness=280, damping=30}, function(x)
+--       -- 根据 x 更新 UI 偏移
+--   end)
+--   s:SetTarget(0) / s:SetTarget(200)
+--   s:AttachFrame(frame)  -- 自动注册/卸载 OnUpdate
+function API.CreateSpringDriver(opts, onUpdate)
+    local driver = {}
+    driver.x = (opts and opts.x) or 0
+    driver.v = 0
+    driver.target = (opts and opts.target) or driver.x
+    driver.stiffness = (opts and opts.stiffness) or 280
+    driver.damping = (opts and opts.damping) or 30
+    driver.onUpdate = onUpdate
+
+    function driver:SetTarget(t)
+        self.target = tonumber(t) or 0
+        self:_ensureTick()
+    end
+
+    function driver:_tick(_, elapsed)
+        local nx, nv = API.SpringStep(self.x, self.v, self.target, self.stiffness, self.damping, elapsed)
+        self.x, self.v = nx, nv
+        if self.onUpdate then pcall(self.onUpdate, self.x) end
+        -- 静止阈值：位置<0.5px 且速度很小即停表
+        if math.abs(self.x - self.target) < 0.5 and math.abs(self.v) < 2 then
+            self.x = self.target; self.v = 0
+            if self.onUpdate then pcall(self.onUpdate, self.x) end
+            self:_stopTick()
+        end
+    end
+
+    function driver:_ensureTick()
+        if self.frame and not self.ticking then
+            self.ticking = true
+            self.frame:SetScript("OnUpdate", function(_, e) driver:_tick(_, e) end)
+        end
+    end
+
+    function driver:_stopTick()
+        if self.frame and self.ticking then
+            self.ticking = false
+            self.frame:SetScript("OnUpdate", nil)
+        end
+    end
+
+    function driver:AttachFrame(frame)
+        self.frame = frame
+        if self.ticking then
+            self.frame:SetScript("OnUpdate", function(_, e) driver:_tick(_, e) end)
+        end
+    end
+
+    return driver
+end
+
 -- UI 声音
 ADT.UI = ADT.UI or {}
 -- PlaySoundCue：统一 UI 声音触发接口
@@ -496,14 +568,21 @@ local function ensureSorted(self)
     -- 通过“模块提供者”在每次 ensureSorted() 时重新注入外部功能模块（如自动旋转）。
     -- 提供者是一个函数：function(providerCommandDock) ... end
     if self._moduleProviders and not self._providersApplied then
-        -- 防止重复注入：同一次生命周期内仅应用一次；当 _sorted 被置空时，会重置该标记。
+        -- 注意：provider 里通常会调用 CommandDock:AddModule，而该函数内部又会
+        -- 调用 ensureSorted()。如果此处在“调用 provider 之后”才设置
+        -- _providersApplied=true，就会导致重入，再次触发 provider 循环，
+        -- 形成递归/堆栈溢出或把 _sorted 状态弄乱，表现为“切到某分类后
+        -- 中央列表为空，且其它分类也无法再渲染”。
+        -- 解决：在进入 provider 循环之前，先将 _providersApplied 置为 true，
+        -- 把本次“应用提供者”的过程视为已开始，从而阻止重入。
+        self._providersApplied = true
         for _, provider in ipairs(self._moduleProviders) do
             if type(provider) == 'function' then
                 -- 安全调用，避免某个模块异常导致整体失败
                 pcall(provider, self)
             end
         end
-        self._providersApplied = true
+        -- 如需在 provider 失败时重试，可在外部显式调用 RebuildModules()。
     end
 end
 

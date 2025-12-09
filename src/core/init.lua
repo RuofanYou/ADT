@@ -23,7 +23,7 @@ local DEFAULTS = {
     PlacementHistory = {},
     -- 额外剪切板（持久化，可视化列表）
     ExtraClipboard = {},
-    -- 调试开关：仅当开启时才向聊天框 print
+    -- 调试开关（仅在开启时才向聊天框 print）
     DebugEnabled = false,
     -- UI 位置持久化：历史弹窗
     HistoryPopupPos = nil,
