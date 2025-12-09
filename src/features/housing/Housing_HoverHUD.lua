@@ -277,9 +277,10 @@ do
         end
         self.Control:SetWidth(textWidth)
         self.Control:SetHeight(CFG.Row.minHeight)
-
-        self.InstructionText:ClearAllPoints()
-        self.InstructionText:SetPoint("RIGHT", self, "RIGHT", -textWidth - 5, 0)
+        -- 锚点交由 BlizzardGraft 的统一样式处理（左文左对齐/右键帽右对齐）
+        if ADT and ADT.ApplyHousingInstructionStyle then
+            ADT.ApplyHousingInstructionStyle(self)
+        end
     end
 
     function DisplayFrameMixin:OnLoad()
@@ -290,8 +291,11 @@ do
         if self.Control and self.Control.Icon then self.Control.Icon:Hide() end
         if self.Control and self.Control.Background then self.Control.Background:Hide() end
         if self.Control and self.Control.Text then self.Control.Text:Hide() end
-
-        self.InstructionText:SetText(HOUSING_DECOR_SELECT_INSTRUCTION)
+        -- 注意：这里若设置为 HOUSING_DECOR_SELECT_INSTRUCTION，会在
+        -- Housing_BlizzardGraft.lua 的 stripLine() 中被识别为“官方选择装饰行”而强制隐藏，
+        -- 导致我们自建的 HoverHUD 整块不可见。为避免被误杀，初始化为""，
+        -- 实际悬停时会由 SetDecorInfo() 把装饰名同步到右侧 Header，不依赖本行文本。
+        self.InstructionText:SetText("")
         -- 字体交由 Housing_BlizzardGraft 的统一样式驱动，不在本地强制覆盖
         if self.InstructionText.SetJustifyV then self.InstructionText:SetJustifyV("MIDDLE") end
     end
@@ -303,6 +307,10 @@ do
             self:SetScript("OnUpdate", nil)
         end
         self:SetAlpha(self.alpha)
+        -- 与下方面板标题严格同步 alpha
+        if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
+            ADT.DockUI.SetSubPanelHeaderAlpha(self.alpha)
+        end
     end
 
     local function FadeOut_OnUpdate(self, elapsed)
@@ -313,12 +321,21 @@ do
         end
         if self.alpha > 1 then
             self:SetAlpha(1)
+            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
+                ADT.DockUI.SetSubPanelHeaderAlpha(1)
+            end
         else
             self:SetAlpha(self.alpha)
+            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
+                ADT.DockUI.SetSubPanelHeaderAlpha(self.alpha)
+            end
         end
     end
 
     function DisplayFrameMixin:FadeIn()
+        if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
+            ADT.DockUI.SetSubPanelHeaderAlpha(0)
+        end
         self:SetScript("OnUpdate", FadeIn_OnUpdate)
     end
 
@@ -327,6 +344,17 @@ do
             self.alpha = 2
         end
         self:SetScript("OnUpdate", FadeOut_OnUpdate)
+    end
+
+    -- 向外暴露与“说明行”一致的淡入/淡出方法，供其它控件（如右侧 Header.Label）复用。
+    if ADT and ADT.Housing then
+        ADT.Housing.FadeMixin = ADT.Housing.FadeMixin or {}
+        if not ADT.Housing.FadeMixin.FadeIn then
+            ADT.Housing.FadeMixin.FadeIn = function(self, ...) return DisplayFrameMixin.FadeIn(self, ...) end
+        end
+        if not ADT.Housing.FadeMixin.FadeOut then
+            ADT.Housing.FadeMixin.FadeOut = function(self, ...) return DisplayFrameMixin.FadeOut(self, ...) end
+        end
     end
 
     function DisplayFrameMixin:SetDecorInfo(decorInstanceInfo)
@@ -344,6 +372,9 @@ do
         -- 同步到 Dock 下方面板 Header：用与“操作说明”同一字号/字色的标题显示当前悬停装饰名
         if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then
             ADT.DockUI.SetSubPanelHeaderText(displayName)
+            if ADT.DockUI.SetSubPanelHeaderAlpha then
+                ADT.DockUI.SetSubPanelHeaderAlpha(self.alpha or 0)
+            end
         end
         
         local decorID = decorInstanceInfo.decorID
@@ -370,15 +401,18 @@ local function Blizzard_HouseEditor_OnLoaded()
 
     if not DisplayFrame then
         DisplayFrame = CreateFrame("Frame", nil, container, "ADT_HouseEditorInstructionTemplate")
-        DisplayFrame:SetPoint("RIGHT", HouseEditorFrame.BasicDecorModeFrame, "RIGHT", -30, 0)
-        DisplayFrame:SetWidth(420)
+        -- 让 DisplayFrame 横向占满 Instructions 容器，可随 Dock 宽度自适应
+        DisplayFrame:ClearAllPoints()
+        DisplayFrame:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
+        DisplayFrame:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, 0)
         Mixin(DisplayFrame, DisplayFrameMixin)
         DisplayFrame:OnLoad()
 
         local SubFrame = CreateFrame("Frame", nil, DisplayFrame, "ADT_HouseEditorInstructionTemplate")
         DisplayFrame.SubFrame = SubFrame
+        SubFrame:ClearAllPoints()
+        SubFrame:SetPoint("TOPLEFT",  DisplayFrame, "BOTTOMLEFT",  0, 0)
         SubFrame:SetPoint("TOPRIGHT", DisplayFrame, "BOTTOMRIGHT", 0, 0)
-        SubFrame:SetWidth(420)
         Mixin(SubFrame, DisplayFrameMixin)
         -- 默认显示 CTRL+D，兼容旧版通过 ADT.GetDuplicateKeyName() 返回文本
         SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or "CTRL+D")
@@ -390,8 +424,9 @@ local function Blizzard_HouseEditor_OnLoaded()
         local function addHint(prev, label, key)
             local line = CreateFrame("Frame", nil, DisplayFrame, "ADT_HouseEditorInstructionTemplate")
             local CFG = (ADT and ADT.HousingInstrCFG and ADT.HousingInstrCFG.Row) or { vSpacing = 2 }
+            line:ClearAllPoints()
+            line:SetPoint("TOPLEFT",  prev, "BOTTOMLEFT",  0, - (CFG.vSpacing or 2))
             line:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", 0, - (CFG.vSpacing or 2))
-            line:SetWidth(420)
             Mixin(line, DisplayFrameMixin)
             line:SetHotkey(label, key)
             if line.LockStatusText then line.LockStatusText:Hide() end
@@ -426,12 +461,14 @@ local function Blizzard_HouseEditor_OnLoaded()
             end
             local keycapWidth = maxTextWidth + 20
             for _, f in ipairs(frames) do
-                if f and f.Control and f.Control.Background and f.InstructionText then
+                if f and f.Control and f.Control.Background then
                     f.Control.Background:SetWidth(keycapWidth)
                     f.Control:SetWidth(keycapWidth)
-                    f.InstructionText:ClearAllPoints()
-                    f.InstructionText:SetPoint("RIGHT", f, "RIGHT", -keycapWidth - 5, 0)
+                    -- 文本锚点/对齐由统一样式负责
                 end
+            end
+            if ADT and ADT.ApplyHousingInstructionStyle then
+                ADT.ApplyHousingInstructionStyle(self)
             end
         end
 
@@ -447,6 +484,23 @@ local function Blizzard_HouseEditor_OnLoaded()
     if IsDecorSelected() then
         DisplayFrame:Hide()
     end
+end
+
+-- 允许 Blizzard_Graft 在“采纳/切换模式后”把 HoverHUD 挂到当前正在使用的 Instructions 容器下
+-- 解决：当活跃模式不是 Basic 时，原先挂在 Basic.Instructions 下的 HoverHUD 不可见的问题。
+function EL:ReparentHoverHUD(newParent)
+    if not (DisplayFrame and newParent and newParent.GetName) then return end
+    local cur = DisplayFrame:GetParent()
+    if cur == newParent then return end
+    DisplayFrame:ClearAllPoints()
+    DisplayFrame:SetParent(newParent)
+    DisplayFrame:SetPoint("TOPLEFT",  newParent, "TOPLEFT",  0, 0)
+    DisplayFrame:SetPoint("TOPRIGHT", newParent, "TOPRIGHT", 0, 0)
+    if DisplayFrame.NormalizeKeycapWidth then DisplayFrame:NormalizeKeycapWidth() end
+    if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame) end
+    DisplayFrame:Show()
+    -- 重新应用一次显隐与标题联动
+    if self.UpdateHintVisibility then self:UpdateHintVisibility() end
 end
 
 --
@@ -504,15 +558,42 @@ do
 
     -- 误操作保护：选中事件处理（立即阻止选中锁定装饰）
     function EL:OnSelectedTargetChanged(hasSelected, targetType)
-        if not hasSelected then return end
-        -- 检查开关是否启用
+        -- 统一：选中/取消选中都要处理 UI
+        if not hasSelected then
+            -- 取消选中：若仍在悬停，则不做淡出，直接交回“悬停跟随”；否则才淡出
+            local hovered = IsHoveringDecor() and GetHoveredDecorInfo()
+            if hovered and hovered.name then
+                if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(true) end
+                if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then ADT.DockUI.SetSubPanelHeaderText(hovered.name) end
+                -- alpha 后续由悬停 OnUpdate 统一驱动
+            else
+                if ADT and ADT.DockUI and ADT.DockUI.FadeOutHeader then ADT.DockUI.FadeOutHeader(0.5) end
+                -- 悬停恢复后再由 OnUpdate 接手
+            end
+            return
+        end
+        -- 检查开关是否启用（仅用于“误操作保护”拦截；显示标题不受此开关影响）
         local protectionEnabled = ADT.GetDBValue("EnableProtection")
         if protectionEnabled == nil then protectionEnabled = true end
-        if not protectionEnabled then return end
         
         -- 获取选中装饰的信息
         local info = (C_HousingBasicMode and C_HousingBasicMode.GetSelectedDecorInfo and C_HousingBasicMode.GetSelectedDecorInfo())
             or (C_HousingExpertMode and C_HousingExpertMode.GetSelectedDecorInfo and C_HousingExpertMode.GetSelectedDecorInfo())
+        if info and info.name then
+            -- 智能：若标题已在显示同一名称且 alpha>0.6，则不再次淡入，避免“闪一下”
+            local headerText = ADT and ADT.DockUI and ADT.DockUI.GetSubPanelHeaderText and ADT.DockUI.GetSubPanelHeaderText()
+            local headerAlpha = ADT and ADT.DockUI and ADT.DockUI.GetSubPanelHeaderAlpha and ADT.DockUI.GetSubPanelHeaderAlpha()
+            local sameShowing = (headerText == info.name) and (tonumber(headerAlpha) or 0) > 0.6
+            if sameShowing then
+                if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
+                if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha then ADT.DockUI.SetSubPanelHeaderAlpha(1) end
+            else
+                -- 正常流程：设置文本并淡入
+                if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
+                if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then ADT.DockUI.SetSubPanelHeaderText(info.name) end
+                if ADT and ADT.DockUI and ADT.DockUI.FadeInHeader then ADT.DockUI.FadeInHeader() end
+            end
+        end
         if not info or not info.decorGUID then return end
         
         -- 检查是否受保护
@@ -596,6 +677,11 @@ do
 
     function EL:OnHoveredTargetChanged(hasHoveredTarget, targetType)
         if hasHoveredTarget then
+            -- 只要进入“悬停链路”，立即把 Header 切回“跟随悬停”的统一驱动，
+            -- 防止此前处于“选中专用 fader”状态导致后续悬停不再更新 alpha。
+            if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then
+                ADT.DockUI.SetHeaderAlphaFollow(true)
+            end
             if not self.isUpdating then
                 self.t = 0
                 self.isUpdating = true
@@ -611,10 +697,6 @@ do
             end
             if DisplayFrame then
                 DisplayFrame:FadeOut(0.5)
-            end
-            -- 清空右侧 Header 文本
-            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then
-                ADT.DockUI.SetSubPanelHeaderText("")
             end
         end
     end
@@ -634,6 +716,10 @@ do
         if IsHoveringDecor() then
             local info = GetHoveredDecorInfo()
             if info then
+                -- 再次确保：一旦有有效悬停对象，Header 进入“跟随悬停”模式
+                if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then
+                    ADT.DockUI.SetHeaderAlphaFollow(true)
+                end
                 -- 仅在使用“修饰键触发”模式时监听（Ctrl/Alt 直接松开触发）。
                 if self.dupeEnabled and self.dupeKey then
                     self:RegisterEvent("MODIFIER_STATE_CHANGED")
@@ -648,7 +734,7 @@ do
         end
         self:UnregisterEvent("MODIFIER_STATE_CHANGED")
         if DisplayFrame then
-            DisplayFrame:FadeOut()
+            DisplayFrame:FadeOut(0.5)
         end
     end
 

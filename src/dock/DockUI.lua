@@ -54,12 +54,17 @@ local Def = {
     HighlightTextPaddingLeft = 10,
     HighlightRightInset = 2,
     HighlightMinHeight = 18,
+    -- 文本高亮左右统一内边距（用于静态左窗，以字符串宽度为准包裹）
+    HighlightTextPadX = 6,
+    -- 右侧视觉微调：因字体字形右侧外延/阴影，右边看起来会略宽；
+    -- 这里提供 -2 的缺省补偿，让左右观感一致
+    HighlightRightBias = -2,
     -- 右侧停靠相关：与屏幕右缘留白
     ScreenRightMargin = 0,
     -- 为了与左窗九宫格背景的右侧 +4px 外延对齐，这里默认取 -4 让视觉上“刚好相切不相交”。
     StaticRightAttachOffset = -4,
-    LeftPanelPadTop = 6,
-    LeftPanelPadBottom = 6,
+    LeftPanelPadTop = 14,
+    LeftPanelPadBottom = 14,
 }
 
 -- 单一权威：右侧内容起始的左内边距，强制与左侧 Category 的外边距一致
@@ -110,8 +115,9 @@ local function ComputeSideSectionWidth()
         end
     end
 
-    -- 计算按钮与侧栏总宽度：按钮左右文本留白 + 计数区域预留(14) + 左侧区域两侧边距
-    local buttonWidth = maxLabel + 2*labelOffset + Def.CountTextWidthReserve + Def.CategoryLabelToCountGap
+    -- 计算按钮与侧栏总宽度：仅按文本宽度与左右留白；
+    -- 需求变更：取消一切“右侧计数”预留，保证左右视觉对称。
+    local buttonWidth = maxLabel + 2*labelOffset
     local sideWidth = buttonWidth + 2*Def.WidgetGap
     -- 返回整数像素，避免锯齿
     return API.Round(sideWidth)
@@ -704,6 +710,11 @@ do
     end
 
     function CategoryButtonMixin:SetCategory(key, text, anyNewFeature)
+        if ADT and ADT.API and ADT.API.StringTrim then
+            text = ADT.API.StringTrim(text or "")
+        else
+            text = tostring(text or ""):match("^%s*(.-)%s*$")
+        end
         self.Label:SetText(text)
         self.cateogoryName = string.lower(text)
         self.categoryKey = key
@@ -714,12 +725,16 @@ do
     end
 
     function CategoryButtonMixin:ShowCount(count)
-        if count and count > 0 then
+        -- 计数显示/隐藏，并根据当前按钮宽度重新计算 Label 的可用宽度，
+        -- 保证左右内边距对称（无计数时不预留右侧空白）。
+        local hasCount = count and count > 0
+        if hasCount then
             self.Count:SetText(count)
             self.CountContainer:FadeIn()
         else
             self.CountContainer:FadeOut()
         end
+        if self.UpdateLabelWidth then self:UpdateLabelWidth() end
     end
 
     function CategoryButtonMixin:OnClick()
@@ -798,6 +813,17 @@ do
         f:SetScript("OnMouseUp", f.OnMouseUp)
 
         f.NewTag = CreateNewFeatureMark(f, true)
+
+        -- 统一的 Label 宽度自适应：根据是否显示计数决定是否预留右侧空间
+        function f:UpdateLabelWidth()
+            local bw = tonumber(self:GetWidth()) or 0
+            if bw <= 0 then return end
+            local reserve = 0
+            if self.CountContainer and self.CountContainer:IsShown() then
+                reserve = (Def.CountTextWidthReserve + Def.CategoryLabelToCountGap)
+            end
+            self.Label:SetWidth(bw - 2 * self.labelOffset - reserve)
+        end
 
         return f
     end
@@ -1291,8 +1317,7 @@ do
         local f = CreateFrame("Frame", nil, parent, "ADTSettingsAnimSelectionTemplate")
         Mixin(f, SelectionHighlightMixin)
 
-        -- 使用暴雪 Atlas：housing-basic-container（与截图一致）
-        -- 彻底摆脱 SettingsPanel.png 切片依赖
+        -- 统一改用纯色矩形，保证左右对称
         if f.Left then f.Left:Hide() end
         if f.Center then f.Center:Hide() end
         if f.Right then f.Right:Hide() end
@@ -1300,12 +1325,7 @@ do
         local bg = f:CreateTexture(nil, "ARTWORK")
         f.Background = bg
         bg:SetAllPoints(true)
-        if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("housing-basic-container") then
-            bg:SetAtlas("housing-basic-container")
-        else
-            -- 兜底视觉：半透明金色条，防止在极端版本下出现空白
-            bg:SetColorTexture(1.0, 0.82, 0.0, 0.15)
-        end
+        bg:SetColorTexture(0, 0, 0, 0.30)
 
         f.d = 0.6
         f:Hide()
@@ -1322,18 +1342,24 @@ do  -- Left Section
         CategoryHighlight:Hide()
         CategoryHighlight:ClearAllPoints()
         if button then
-            -- 使用 housing-basic-container：
-            -- 左边缘相对“文本起点”向左外扩，高亮应覆盖文本并留出可读留白
-            local labelOffset = tonumber(button.labelOffset) or 9
-            local textPad = tonumber(Def.HighlightTextPaddingLeft) or 10
-            local insetLeft = math.max(0, labelOffset - textPad)
-
-            -- 右边缘尽量贴近按钮右缘，把计数容器也包含在内
-            local insetRight = tonumber(Def.HighlightRightInset) or 2
-            CategoryHighlight:SetPoint("LEFT", button, "LEFT", insetLeft, 0)
-            CategoryHighlight:SetPoint("RIGHT", button, "RIGHT", -insetRight, 0)
+            if USE_STATIC_LEFT_PANEL and button.Label and button.Label.GetStringWidth then
+                local padX = tonumber(Def.HighlightTextPadX) or 6
+                local strW = button.Label:GetStringWidth() or 0
+                -- 以文本中心为基准，左右各 padX：真正的几何对称
+                local w = math.ceil(strW) + 2*padX
+                local cx = math.floor(strW * 0.5 + 0.5)
+                CategoryHighlight:ClearAllPoints()
+                CategoryHighlight:SetPoint("CENTER", button.Label, "LEFT", cx, 0)
+                CategoryHighlight:SetWidth(w)
+            else
+                local labelOffset = tonumber(button.labelOffset) or 9
+                local textPad = tonumber(Def.HighlightTextPaddingLeft) or 10
+                local insetLeft = math.max(0, labelOffset - textPad)
+                local insetRight = tonumber(Def.HighlightRightInset) or 2
+                CategoryHighlight:SetPoint("LEFT", button, "LEFT", insetLeft, 0)
+                CategoryHighlight:SetPoint("RIGHT", button, "RIGHT", -insetRight, 0)
+            end
             CategoryHighlight:SetParent(button)
-            -- 提高高度以匹配容器厚边框，同时保留上下留白
             local minH = tonumber(Def.HighlightMinHeight) or 18
             local h = math.max(minH, (Def.CategoryHeight or Def.ButtonSize or 28) - 2)
             CategoryHighlight:SetHeight(h)
@@ -1374,9 +1400,7 @@ do  -- Left Section
                 if button and button.SetSize then
                     button:SetSize(btnWidth, Def.ButtonSize)
                 end
-                if button and button.Label and button.labelOffset then
-                    button.Label:SetWidth(btnWidth - 2*button.labelOffset - (Def.CountTextWidthReserve + Def.CategoryLabelToCountGap))
-                end
+                if button and button.UpdateLabelWidth then button:UpdateLabelWidth() end
             end
         end
 
@@ -2515,7 +2539,7 @@ local function CreateUI()
             MakeFadingObject(obj)
             obj:SetFadeInAlpha(1)
             obj:SetFadeOutAlpha(0.5)
-            obj.Label:SetWidth(categoryButtonWidth - 2 * obj.labelOffset - (Def.CountTextWidthReserve + Def.CategoryLabelToCountGap))
+            if obj.UpdateLabelWidth then obj:UpdateLabelWidth() end
             return obj
         end
 
@@ -2531,6 +2555,7 @@ local function CreateUI()
             pcall(obj.SetFrameLevel, obj, base + 2000)
             pcall(obj.SetToplevel, obj, true)
             obj:EnableMouse(true)
+            if obj.UpdateLabelWidth then obj:UpdateLabelWidth() end
             -- 确保点击代理存在并与按钮对齐
             if EnsureProxy then EnsureProxy(obj) end
             -- 标记：新获取的按钮需要在下一帧由 SyncLeftChildrenLevels 统一校正一次

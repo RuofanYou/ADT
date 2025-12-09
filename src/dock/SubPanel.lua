@@ -89,6 +89,91 @@ local function AttachTo(main)
         end
 
         sub.Header = header
+
+        -- 自适应高度：根据 Content 子节点的“实际可见范围”动态调节 SubPanel 高度
+        -- 说明：
+        -- - 不依赖业务侧（Housing）的行数/字体/布局细节，完全依据可见像素范围计算；
+        -- - 避免双实现（DRY）：高度唯一权威改为由 SubPanel 自身测量；业务侧只需触发一次“请求自适应”。
+        do
+            local AUTO_MIN = 160
+            local AUTO_MAX = 1024
+            local INSET_TOP = 14   -- content 与 sub 顶边的内边距（CreateFrame 时的锚点偏移）
+            local INSET_BOTTOM = 10 -- content 与 sub 底边的内边距
+            local pendingTicker
+            local lastApplied
+
+            local function DeepestBottom(frame)
+                if not (frame and frame.GetBottom) then return nil end
+                local minB = frame:GetBottom()
+                if frame.GetChildren then
+                    for _, ch in ipairs({frame:GetChildren()}) do
+                        if ch and (not ch.IsShown or ch:IsShown()) then
+                            local b = DeepestBottom(ch)
+                            if b then minB = (minB and math.min(minB, b)) or b end
+                        end
+                    end
+                end
+                return minB
+            end
+
+            local function ComputeRequiredHeight()
+                if not (sub and sub.Content) then return end
+                local cont = sub.Content
+                local topMost, bottomMost
+                for _, ch in ipairs({cont:GetChildren()}) do
+                    if ch and (not ch.IsShown or ch:IsShown()) then
+                        local ct = ch.GetTop and ch:GetTop()
+                        local cb = DeepestBottom(ch) or (ch.GetBottom and ch:GetBottom())
+                        if ct and cb then
+                            topMost = topMost and math.max(topMost, ct) or ct
+                            bottomMost = bottomMost and math.min(bottomMost, cb) or cb
+                        end
+                    end
+                end
+                if not (topMost and bottomMost) then return nil end
+                local contentPixels = math.max(0, topMost - bottomMost)
+                local target = math.floor(contentPixels + INSET_TOP + INSET_BOTTOM + 0.5)
+                target = math.max(AUTO_MIN, math.min(AUTO_MAX, target))
+                return target
+            end
+
+            local function ApplyAutoHeightOnce()
+                local h = ComputeRequiredHeight()
+                if not h then return false end
+                if lastApplied and math.abs((lastApplied or 0) - h) <= 1 then
+                    -- 变化很小则认为已稳定
+                    return true
+                end
+                sub:SetHeight(h)
+                lastApplied = h
+                return false
+            end
+
+            local function RequestAutoResize()
+                if pendingTicker then return end
+                -- 短期采样多次以等待暴雪 VerticalLayout 完成排版（字体缩放/行隐藏等）
+                local count, maxSample = 0, 12
+                pendingTicker = C_Timer.NewTicker(0.02, function(t)
+                    count = count + 1
+                    local stable = ApplyAutoHeightOnce()
+                    if stable or count >= maxSample then
+                        t:Cancel(); pendingTicker = nil
+                    end
+                end)
+            end
+
+            -- 对外暴露统一入口：ADT.DockUI.RequestSubPanelAutoResize()
+            ADT.DockUI = ADT.DockUI or {}
+            ADT.DockUI.RequestSubPanelAutoResize = function()
+                if sub:IsShown() then RequestAutoResize() end
+            end
+
+            -- 尺寸/可见性变动时触发一次
+            sub:HookScript("OnShow", RequestAutoResize)
+            if sub.Content.HookScript then
+                sub.Content:HookScript("OnSizeChanged", function() RequestAutoResize() end)
+            end
+        end
         sub:Hide()
         return sub
     end
@@ -116,5 +201,84 @@ ADT.DockUI.SetSubPanelHeaderText = function(text)
     local main = ADT.CommandDock and ADT.CommandDock.SettingsPanel
     if not (main and main.EnsureSubPanel) then return end
     local sub = main:EnsureSubPanel()
-    if sub and sub.Header and sub.Header.SetText then sub.Header:SetText(text or "") end
+    if not (sub and sub.Header and sub.Header.Label) then return end
+    sub.Header:SetText(text or "")
+    if text and text ~= "" then sub.Header.Label:Show() end
+end
+
+ADT.DockUI.SetSubPanelHeaderAlpha = function(alpha)
+    local main = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+    if not (main and main.SubPanel and main.SubPanel.Header and main.SubPanel.Header.Label) then return end
+    local label = main.SubPanel.Header.Label
+    local a = tonumber(alpha) or 0
+    a = math.max(0, math.min(1, a))
+    label:SetAlpha(a)
+    if a <= 0.001 then label:Hide() else label:Show() end
+end
+
+-- 统一：是否让 Header Alpha 跟随 HoverHUD 的 DisplayFrame OnUpdate
+local _follow = true
+function ADT.DockUI.SetHeaderAlphaFollow(state)
+    _follow = not not state
+    if _follow then
+        -- 取消任何正在运行的 Header 专用淡入/淡出，以避免与“悬停跟随”双源竞争
+        local main = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+        if main and main.SubPanel and main.SubPanel.Header then
+            local f = main.SubPanel.Header._ADT_HeaderFader
+            if f and f.SetScript then f:SetScript("OnUpdate", nil) end
+        end
+    end
+end
+function ADT.DockUI.IsHeaderAlphaFollowEnabled() return _follow end
+
+-- 供“选中场景”使用的 Header 专用 fader（仍然使用 HoverHUD 的 FadeMixin，以保持节奏一致）
+local function EnsureHeaderFader()
+    local main = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+    if not (main and main.SubPanel and main.SubPanel.Header and main.SubPanel.Header.Label) then return nil end
+    local header = main.SubPanel.Header
+    if not header._ADT_HeaderFader then
+        local f = CreateFrame("Frame", nil, header)
+        f.target = header.Label
+        function f:SetAlpha(a)
+            self.alpha = a or 0
+            if self.target and self.target.SetAlpha then self.target:SetAlpha(self.alpha) end
+        end
+        function f:GetAlpha()
+            if self.target and self.target.GetAlpha then return self.target:GetAlpha() end
+            return self.alpha or 0
+        end
+        if ADT.Housing and ADT.Housing.FadeMixin then
+            Mixin(f, ADT.Housing.FadeMixin)
+        end
+        header._ADT_HeaderFader = f
+    end
+    return header._ADT_HeaderFader
+end
+
+function ADT.DockUI.FadeInHeader()
+    local f = EnsureHeaderFader(); if not f then return end
+    _follow = false
+    if f.SetAlpha then f:SetAlpha(0) end
+    if f.FadeIn then f:FadeIn() end
+end
+
+function ADT.DockUI.FadeOutHeader(delay)
+    local f = EnsureHeaderFader(); if not f then return end
+    _follow = false
+    if f.FadeOut then f:FadeOut(tonumber(delay) or 0.5) end
+end
+
+-- 只读：获取当前 Header 文本与 Alpha，供上层判重/智能节流
+function ADT.DockUI.GetSubPanelHeaderText()
+    local main = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+    if not (main and main.SubPanel and main.SubPanel.Header and main.SubPanel.Header.Label) then return nil end
+    return main.SubPanel.Header.Label:GetText()
+end
+
+function ADT.DockUI.GetSubPanelHeaderAlpha()
+    local main = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+    if not (main and main.SubPanel and main.SubPanel.Header and main.SubPanel.Header.Label) then return 0 end
+    local a = main.SubPanel.Header.Label:GetAlpha()
+    if type(a) ~= 'number' then return 0 end
+    return a
 end

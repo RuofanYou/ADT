@@ -2,6 +2,7 @@
 -- 目的：
 -- 1) 把右上角“装饰计数  已用/上限（house-decor-budget-icon）”嵌入 DockUI 的 Header，替换原标题文字。
 -- 2) 把右侧（或右下角）HouseEditor 的“操作说明/键位提示”面板（Instructions 容器）重挂到 DockUI 的下方面板中显示。
+-- 3) 在进入家宅编辑器时，常驻显示“放置的装饰”列表（使用暴雪官方模板）。
 -- 约束：
 -- - 严格依赖 Housing 事件与 API（单一权威）：
 --     计数：C_HousingDecor.GetSpentPlacementBudget() / GetMaxPlacementBudget()
@@ -37,6 +38,8 @@ local CFG = {
         hSpacing  = 8,    -- 左右两列之间的间距（默认 10）
         vSpacing  = -10,    -- 不同行之间的垂直间距（容器级）
         vPadEach  = 1,    -- 每行上下额外内边距（topPadding/bottomPadding）
+        leftPad   = 6,    -- 行左内边距
+        rightPad  = 6,    -- 行右内边距（按键气泡与行右侧距离）
     },
     -- 右侧“按键气泡”
     Control = {
@@ -71,6 +74,8 @@ local HeaderTitleBackup
 -- 前向声明：避免在闭包中捕获到全局未定义的 IsHouseEditorShown
 --（Lua 的词法作用域要求在首次使用前声明局部变量，否则将解析为全局）
 local IsHouseEditorShown
+
+-- 更新：按需微调“放置的装饰”官方面板（仅布局/交互禁用），不改其数据与刷新逻辑。
 
 -- 让预算控件在自身容器内居中：计算“图标 + 间距 + 文本”的组合宽度，
 -- 将图标的 LEFT 锚点向右偏移一半剩余空间。
@@ -281,37 +286,12 @@ local function _ADT_ComputeInstrNaturalHeight(instr)
     return h or 0
 end
 
-local function _ADT_TargetSubHeight()
-    local dock = GetDock()
-    if not dock then return end
-    local sub = dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel())
-    if not sub then return end
-    local headerH = (sub.Header and sub.Header.GetHeight and sub.Header:GetHeight()) or 0
-    local paddingTop     = CFG.Layout.contentTopPadding
-    local headerTopNudge = CFG.Layout.headerTopNudge
-    local gapBelowHeader = CFG.Layout.headerToInstrGap
-    local paddingBottom  = CFG.Layout.contentBottomPadding
-    local instrH = _ADT_ComputeInstrNaturalHeight(AdoptState and AdoptState.instr)
-    local target = math.floor(paddingTop + headerTopNudge + headerH + gapBelowHeader + instrH + paddingBottom + 0.5)
-    target = math.max(CFG.Layout.subPanelMinHeight, math.min(CFG.Layout.subPanelMaxHeight, target))
-    return target
-end
-
+-- 高度自适应改由 SubPanel 统一测量与驱动；此处仅发出“请求自适配”。
 local function _ADT_QueueResize()
-    if not (AdoptState and AdoptState.instr) then return end
-    if AdoptState._resizeTicker then return end
-    AdoptState._resizeTicker = C_Timer.NewTicker(0.01, function(t)
-        if not IsHouseEditorShown() then t:Cancel(); AdoptState._resizeTicker=nil; return end
-        if AdoptState.instr and AdoptState.instr.UpdateLayout then AdoptState.instr:UpdateLayout() end
-        local dock = GetDock(); if dock and _ADT_TargetSubHeight then
-            local h = _ADT_TargetSubHeight()
-            if h then dock:SetSubPanelHeight(h) end
-        end
-        AdoptState._resizeCount = (AdoptState._resizeCount or 0) + 1
-        if AdoptState._resizeCount >= 2 then
-            t:Cancel(); AdoptState._resizeTicker=nil; AdoptState._resizeCount=nil
-        end
-    end)
+    if not IsHouseEditorShown() then return end
+    if ADT and ADT.DockUI and ADT.DockUI.RequestSubPanelAutoResize then
+        ADT.DockUI.RequestSubPanelAutoResize()
+    end
 end
 
 --
@@ -331,6 +311,17 @@ end
 
 -- 前置声明，避免调用顺序问题
 local _ADT_AlignControl
+local _ADT_AnchorRowColumns
+local function _ADT_SetRowFixedWidth(row)
+    if not row or not row.SetFixedWidth then return end
+    local dock = GetDock()
+    local sub = dock and (dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()))
+    local content = sub and sub.Content
+    local w = content and content:GetWidth()
+    if w and w > 0 then
+        row:SetFixedWidth(w)
+    end
+end
 
 local function _ADT_ApplyTypographyToRow(row)
     if not row then return end
@@ -339,10 +330,15 @@ local function _ADT_ApplyTypographyToRow(row)
     row.spacing = CFG.Row.hSpacing
     row.topPadding = CFG.Row.vPadEach
     row.bottomPadding = CFG.Row.vPadEach
+    -- 关键：让整行占满父容器宽度（VerticalLayoutFrame 会据此把行宽设为可用宽度）
+    row.expand = true
+    row.leftPadding  = CFG.Row.leftPad or 0
+    row.rightPadding = CFG.Row.rightPad or 0
     local fs = row.InstructionText
     if fs then
         _ADT_ScaleFont(fs, CFG.Typography.instructionScale)
         if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
+        if fs.SetJustifyH then fs:SetJustifyH("LEFT") end
     end
     local ctext = row.Control and row.Control.Text
     if ctext then
@@ -353,6 +349,10 @@ local function _ADT_ApplyTypographyToRow(row)
     if row.Control then
         _ADT_AlignControl(row)
     end
+    -- 统一锚点：左列贴左、右列贴右
+    _ADT_AnchorRowColumns(row)
+    -- 行宽固定为内容区宽度，确保右对齐时贴到 SubPanel 右缘
+    _ADT_SetRowFixedWidth(row)
 end
 
 -- 前置声明，避免在定义之前被调用
@@ -407,8 +407,19 @@ function _ADT_FitControlText(row)
     if not contentW then return end
 
     local spacing = row.spacing or CFG.Row.hSpacing or 10
-    local leftW = row.InstructionText and row.InstructionText:GetWidth() or 0
-    local maxRight = math.max(20, contentW - leftW - spacing - 12) -- 留一点右边距
+    -- 使用文本实际宽度（不裁剪）来评估右侧可用空间
+    -- 注意：使用“实际显示宽度”而非 Unbounded 宽度。
+    -- Unbounded 会按完整字符串长度估算，远大于可分配宽度，
+    -- 在我们自建 HoverHUD 行（存在统一 keycap 宽度）时会把右侧可用空间压缩过度，
+    -- 导致键帽文本被 _ADT_FitControlText 过度缩小。
+    local leftW = 0
+    if row.InstructionText then
+        leftW = (row.InstructionText.GetWidth and row.InstructionText:GetWidth())
+              or (row.InstructionText.GetStringWidth and row.InstructionText:GetStringWidth())
+              or 0
+        leftW = math.ceil(leftW)
+    end
+    local maxRight = math.max(20, contentW - (CFG.Row.leftPad or 6) - leftW - spacing - (CFG.Row.rightPad or 6))
     local text = row.Control.Text
     if not (text and text:IsShown()) then return end
 
@@ -460,7 +471,28 @@ function _ADT_AlignControl(row)
         -- 与 Control 垂直居中对齐，避免上下偏移
         bg:SetPoint("CENTER", ctrl, "CENTER", 0, 0)
     end
+    -- 键帽容器右对齐到行右边缘
+    ctrl:ClearAllPoints()
+    ctrl:SetPoint("RIGHT", row, "RIGHT", - (CFG.Row.rightPad or 6), 0)
     -- 文本仍锚在背景中心，无需额外处理
+end
+
+-- 左文左对齐 + 右键帽右对齐：文本占据“左边缘 → 键帽左边缘”的剩余宽度
+function _ADT_AnchorRowColumns(row)
+    if not row then return end
+    local fs = row.InstructionText
+    local ctrl = row.Control
+    local spacing = row.spacing or CFG.Row.hSpacing or 8
+    if fs and fs.ClearAllPoints and fs.SetPoint then
+        fs:ClearAllPoints()
+        fs:SetPoint("LEFT", row, "LEFT", CFG.Row.leftPad or 6, 0)
+        if ctrl and ctrl.IsShown and ctrl:IsShown() then
+            fs:SetPoint("RIGHT", ctrl, "LEFT", -spacing, 0)
+        else
+            fs:SetPoint("RIGHT", row, "RIGHT", - (CFG.Row.rightPad or 6), 0)
+        end
+        if fs.SetJustifyH then fs:SetJustifyH("LEFT") end
+    end
 end
 
 local function _ADT_RestoreTypography(instr)
@@ -491,6 +523,98 @@ local function GetActiveModeFrame()
         end
     end
     return nil
+end
+
+--
+-- 三、“放置的装饰”面板：跟随 Dock.SubPanel 贴合定位 + 禁止拖拽与关闭
+--
+local function GetPlacedDecorListFrame()
+    local hf = _G.HouseEditorFrame
+    local expert = hf and hf.ExpertDecorModeFrame
+    local list = expert and expert.PlacedDecorList
+    return list
+end
+
+local function AnchorPlacedList()
+    local list = GetPlacedDecorListFrame()
+    if not list then return end
+    local dock = GetDock()
+    local sub = dock and (dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()))
+    if not sub then return end
+
+    -- 锚到我们 SubPanel 的下方，左右对齐，形成“相切衔接”
+    list:ClearAllPoints()
+    list:SetPoint("TOPLEFT",  sub, "BOTTOMLEFT",  0, -6)
+    list:SetPoint("TOPRIGHT", sub, "BOTTOMRIGHT", 0, -6)
+    list:SetClampedToScreen(true)
+
+    Debug("[PlacedList] Anchor -> below SubPanel, w="..tostring(sub:GetWidth()))
+
+    -- 禁止玩家拖动：去掉 DragBar 功能并锁定 movable
+    pcall(function()
+        if list.DragBar then
+            list.DragBar:Hide()
+            list.DragBar:EnableMouse(false)
+            if list.DragBar.SetOnDragStartCallback then
+                list.DragBar:SetOnDragStartCallback(function() return false end)
+            end
+            if list.DragBar.SetOnDragStopCallback then
+                list.DragBar:SetOnDragStopCallback(function() return false end)
+            end
+            list.DragBar:SetScript("OnDragStart", nil)
+            list.DragBar:SetScript("OnDragStop", nil)
+        end
+        if list.SetMovable then list:SetMovable(false) end
+        -- 一些模板还会在自身注册拖拽，这里兜底移除
+        if list.RegisterForDrag then list:RegisterForDrag() end
+        list:SetScript("OnDragStart", nil)
+        list:SetScript("OnDragStop", nil)
+    end)
+
+    -- 禁用关闭按钮：隐藏并去掉点击响应（仍可通过原生“清单按钮”开/关）
+    if list.CloseButton then
+        list.CloseButton:Hide()
+        if list.CloseButton.Disable then list.CloseButton:Disable() end
+        list.CloseButton:EnableMouse(false)
+        list.CloseButton:SetScript("OnClick", nil)
+    end
+
+    list._ADT_anchored = true
+end
+
+local function EnsurePlacedListHooks()
+    local list = GetPlacedDecorListFrame()
+    if not list or list._ADT_hooksInstalled then return end
+
+    -- 在面板显示/尺寸变化时保持贴合
+    list:HookScript("OnShow", function() Debug("[PlacedList] OnShow"); AnchorPlacedList() end)
+    list:HookScript("OnSizeChanged", function() AnchorPlacedList() end)
+    local dock = GetDock()
+    local sub = dock and (dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()))
+    if sub and sub.HookScript then
+        sub:HookScript("OnSizeChanged", function() if list:IsShown() then AnchorPlacedList() end end)
+    end
+    list._ADT_hooksInstalled = true
+end
+
+-- 判断是否处于“专家编辑模式”
+local function IsExpertModeActive()
+    local hf = _G.HouseEditorFrame
+    if not hf then return false end
+    local active = GetActiveModeFrame()
+    if active and hf.ExpertDecorModeFrame and active == hf.ExpertDecorModeFrame then
+        return true
+    end
+    return hf.ExpertDecorModeFrame and hf.ExpertDecorModeFrame:IsShown() or false
+end
+
+-- 若当前为专家模式，则强制显示清单并贴合
+local function ShowPlacedListIfExpertActive()
+    if not IsExpertModeActive() then Debug("[PlacedList] Not expert mode; skip show"); return end
+    local list = GetPlacedDecorListFrame()
+    if not list then return end
+    if not list:IsShown() then Debug("[PlacedList] Auto-Show"); list:Show() else Debug("[PlacedList] Already shown") end
+    AnchorPlacedList()
 end
 
 -- 绑定到前向声明的同名局部变量，而不是重新声明新的 local
@@ -548,8 +672,26 @@ local function AdoptInstructionsIntoDock()
     instr:SetParent(sub.Content)
     instr:SetPoint("TOPLEFT",  sub.Header,  "BOTTOMLEFT",  0, -CFG.Layout.headerToInstrGap)
     instr:SetPoint("TOPRIGHT", sub.Header,  "BOTTOMRIGHT", 0, -CFG.Layout.headerToInstrGap)
+    -- 去除容器额外左右内边距，并固定为内容区宽度，便于子行按“左贴左、右贴右”扩展
+    instr.leftPadding, instr.rightPadding = 0, 0
+    instr:SetFixedWidth(sub.Content:GetWidth())
+    if sub.Content.HookScript then
+        sub.Content:HookScript("OnSizeChanged", function(_, w)
+            if instr and instr.SetFixedWidth and w then instr:SetFixedWidth(w) end
+        end)
+    end
     if instr.UpdateAllVisuals then instr:UpdateAllVisuals() end
     if instr.UpdateLayout then instr:UpdateLayout() end
+    -- 任何由暴雪内部引起的尺寸变化（文本换行、行显隐）都会触发：
+    if instr.HookScript then
+        instr:HookScript("OnSizeChanged", function()
+            _ADT_QueueResize()
+        end)
+        instr:HookScript("OnShow", function()
+            C_Timer.After(0, _ADT_QueueResize)
+            C_Timer.After(0.05, _ADT_QueueResize)
+        end)
+    end
 
     -- 定制化：隐藏“选择装饰/放置装饰”整行 + 去掉所有鼠标图标（保留键位按钮）
     local function _ADT_ShouldHideRowByText(text)
@@ -586,6 +728,7 @@ local function AdoptInstructionsIntoDock()
     local children = {instr:GetChildren()}
     for _, ch in ipairs(children) do stripLine(ch) end
     if instr.UpdateLayout then instr:UpdateLayout() end
+    _ADT_QueueResize()
 
     -- 如果官方暴露了直接 key，进一步保险
     if instr.SelectInstruction then
@@ -604,6 +747,13 @@ local function AdoptInstructionsIntoDock()
         instr.PlaceInstruction:Hide()
     end
     AdoptState.instr = instr
+    -- 同步：把我们的 HoverHUD 重挂到 Dock 下方面板的内容容器中（不再依赖 Instructions 容器高度/裁剪）
+    if ADT and ADT.Housing and ADT.Housing.ReparentHoverHUD then
+        local dock = GetDock()
+        local sub = dock and (dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()))
+        local parent = sub and sub.Content or instr
+        pcall(ADT.Housing.ReparentHoverHUD, ADT.Housing, parent)
+    end
 
     -- 保持与 HouseEditor 同样的像素感：忽略父缩放并以 1.0 绘制
     if instr.SetIgnoreParentScale then instr:SetIgnoreParentScale(true) end
@@ -684,13 +834,28 @@ local function TrySetupHooks()
             ShowBudgetInHeader();
             C_Timer.After(0, AdoptInstructionsIntoDock)
             C_Timer.After(0.1, AdoptInstructionsIntoDock)
+            C_Timer.After(0, EnsurePlacedListHooks)
+            C_Timer.After(0.05, AnchorPlacedList)
+            C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end)
         hooksecurefunc(HouseEditorFrameMixin, "OnHide", function()
-            RestoreHeaderTitle(); RestoreInstructions()
+            RestoreHeaderTitle(); RestoreInstructions();
         end)
         hooksecurefunc(HouseEditorFrameMixin, "OnActiveModeChanged", function()
             C_Timer.After(0, AdoptInstructionsIntoDock)
+            C_Timer.After(0, EnsurePlacedListHooks)
+            C_Timer.After(0.05, AnchorPlacedList)
+            C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end)
+        -- 专家模式 Frame 本体 OnShow：这是最稳的时点，直接确保展示与贴合
+        if _G.HouseEditorExpertDecorModeMixin then
+            hooksecurefunc(HouseEditorExpertDecorModeMixin, "OnShow", function(self)
+                local list = self and self.PlacedDecorList
+                if list then list:Show() end
+                EnsurePlacedListHooks(); AnchorPlacedList()
+            end)
+        end
+        -- 进入专家模式时自动显示官方“放置的装饰”清单（并在 OnShow 时贴合到 Dock.SubPanel 下缘）
         -- 对行控件进行二次清理：若设置了 _ADTForceHideControl 或检测到“选择装饰”文本，则强制隐藏
         if _G.HouseEditorInstructionMixin then
             hooksecurefunc(HouseEditorInstructionMixin, "UpdateControl", function(self)
@@ -747,7 +912,7 @@ local function TrySetupHooks()
             hooksecurefunc(HouseEditorInstructionsContainerMixin, "UpdateLayout", function(self)
                 -- UpdateLayout 完成后，右侧键帽宽度可能变化，再走一次贴合
                 if self then
-                    for _, ch in ipairs({self:GetChildren()}) do _ADT_FitControlText(ch) end
+                    for _, ch in ipairs({self:GetChildren()}) do _ADT_SetRowFixedWidth(ch); _ADT_AlignControl(ch); _ADT_AnchorRowColumns(ch); _ADT_FitControlText(ch) end
                 end
                 _ADT_QueueResize()
             end)
@@ -762,22 +927,25 @@ if EventRegistry and EventRegistry.RegisterCallback then
     EventRegistry:RegisterCallback("HouseEditor.StateUpdated", function(_, isActive)
         TrySetupHooks()
         if isActive then
-            ShowBudgetInHeader()
+            ShowBudgetInHeader();
             C_Timer.After(0, AdoptInstructionsIntoDock)
             C_Timer.After(0.1, AdoptInstructionsIntoDock)
+            C_Timer.After(0, EnsurePlacedListHooks)
+            C_Timer.After(0.05, AnchorPlacedList)
+            C_Timer.After(0.05, ShowPlacedListIfExpertActive)
             -- 启动轮询直到成功采用
             if not EL._adoptTicker then
                 local attempts = 0
                 EL._adoptTicker = C_Timer.NewTicker(0.25, function(t)
                     attempts = attempts + 1
                     if not IsHouseEditorShown() then t:Cancel(); EL._adoptTicker=nil; return end
-                    AdoptInstructionsIntoDock()
+                    AdoptInstructionsIntoDock(); EnsurePlacedListHooks(); AnchorPlacedList(); ShowPlacedListIfExpertActive()
                     if AdoptState.instr then t:Cancel(); EL._adoptTicker=nil; Debug("轮询采纳成功") return end
                     if attempts >= 20 then t:Cancel(); EL._adoptTicker=nil; Debug("轮询超时，未能采纳 Instructions") end
                 end)
             end
         else
-            RestoreHeaderTitle()
+            RestoreHeaderTitle();
             RestoreInstructions()
         end
     end, EL)
@@ -785,21 +953,34 @@ end
 
 -- 事件：模式变化/加载/登录
 EL:RegisterEvent("HOUSE_EDITOR_MODE_CHANGED")
+-- 选中目标变化：行数/内容会改变，需要触发一次自适应高度
+EL:RegisterEvent("HOUSING_BASIC_MODE_SELECTED_TARGET_CHANGED")
+EL:RegisterEvent("HOUSING_EXPERT_MODE_SELECTED_TARGET_CHANGED")
 EL:RegisterEvent("ADDON_LOADED")
 EL:RegisterEvent("PLAYER_LOGIN")
 EL:SetScript("OnEvent", function(_, event, arg1)
     if event == "HOUSE_EDITOR_MODE_CHANGED" then
         C_Timer.After(0, AdoptInstructionsIntoDock)
+        C_Timer.After(0, EnsurePlacedListHooks)
+        C_Timer.After(0.05, AnchorPlacedList)
+        C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+        C_Timer.After(0.05, _ADT_QueueResize)
+        C_Timer.After(0.15, _ADT_QueueResize)
+    elseif event == "HOUSING_BASIC_MODE_SELECTED_TARGET_CHANGED" or event == "HOUSING_EXPERT_MODE_SELECTED_TARGET_CHANGED" then
+        -- 选中/取消选中都会改动说明行，分多帧排版
+        C_Timer.After(0, _ADT_QueueResize)
+        C_Timer.After(0.03, _ADT_QueueResize)
+        C_Timer.After(0.1, _ADT_QueueResize)
     elseif event == "ADDON_LOADED" and (arg1 == "Blizzard_HouseEditor" or arg1 == ADDON_NAME) then
         TrySetupHooks()
         if IsHouseEditorShown() then
-            ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock)
+            ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0, EnsurePlacedListHooks); C_Timer.After(0.05, AnchorPlacedList); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end
     elseif event == "PLAYER_LOGIN" then
         TrySetupHooks()
         C_Timer.After(0.5, function()
             if IsHouseEditorShown() then
-                ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock)
+                ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0, EnsurePlacedListHooks); C_Timer.After(0.05, AnchorPlacedList); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
             end
         end)
     end
@@ -809,6 +990,6 @@ end)
 C_Timer.After(1.0, function()
     TrySetupHooks()
     if IsHouseEditorShown() then
-        ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock)
+        ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0, EnsurePlacedListHooks); C_Timer.After(0.05, AnchorPlacedList); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
     end
 end)
