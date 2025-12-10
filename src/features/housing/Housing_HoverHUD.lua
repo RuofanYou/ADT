@@ -343,7 +343,13 @@ do
     end
 
     local function FadeIn_OnUpdate(self, elapsed)
-        self.alpha = self.alpha + 5 * elapsed
+        -- 兼容：某些使用 FadeMixin 的“代理帧”（如 Header 专用 fader）
+        -- 并未调用 OnLoad 初始化 alpha，此处以当前可见 Alpha 作为起点。
+        local cur = tonumber(self.alpha)
+        if cur == nil then
+            cur = (self.GetAlpha and self:GetAlpha()) or 0
+        end
+        self.alpha = cur + 5 * (elapsed or 0)
         if self.alpha >= 1 then
             self.alpha = 1
             self:SetScript("OnUpdate", nil)
@@ -356,7 +362,11 @@ do
     end
 
     local function FadeOut_OnUpdate(self, elapsed)
-        self.alpha = self.alpha - 2 * elapsed
+        local cur = tonumber(self.alpha)
+        if cur == nil then
+            cur = (self.GetAlpha and self:GetAlpha()) or 0
+        end
+        self.alpha = cur - 2 * (elapsed or 0)
         if self.alpha <= 0 then
             self.alpha = 0
             self:SetScript("OnUpdate", nil)
@@ -375,6 +385,11 @@ do
     end
 
     function DisplayFrameMixin:FadeIn()
+        -- 若 alpha 未初始化，则以当前可见 Alpha 作为起点，避免 nil 运算
+        if self.alpha == nil then
+            local a = (self.GetAlpha and self:GetAlpha()) or 0
+            self.alpha = tonumber(a) or 0
+        end
         if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
             ADT.DockUI.SetSubPanelHeaderAlpha(0)
         end
@@ -382,6 +397,10 @@ do
     end
 
     function DisplayFrameMixin:FadeOut(delay)
+        if self.alpha == nil then
+            local a = (self.GetAlpha and self:GetAlpha()) or 0
+            self.alpha = tonumber(a) or 0
+        end
         if delay then
             self.alpha = 2
         end
@@ -814,7 +833,17 @@ do
             local sameName = (headerText == info.name)
             if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
             if not sameName then
-                if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then ADT.DockUI.SetSubPanelHeaderText(info.name) end
+                -- 修复：专家模式切换到“不同名称”的装饰时，若此前 Header 仍在执行“淡出”
+                --（例如来自悬停阶段的 FadeOutHeader 计时器），仅设置新文本无法停止旧动画，
+                -- 会出现“标题短暂显示后又自己淡出”的错觉。
+                -- 方案：名称变化时也显式触发一次 Header 淡入（从当前 Alpha 补完），
+                -- 以此终止任何正在运行的淡出并保证标题常亮。
+                if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then
+                    ADT.DockUI.SetSubPanelHeaderText(info.name)
+                end
+                if ADT and ADT.DockUI and ADT.DockUI.FadeInHeader then
+                    ADT.DockUI.FadeInHeader(true) -- 从当前 Alpha 补完到 1，并取消旧的 OnUpdate
+                end
             else
                 if (tonumber(headerAlpha) or 0) < 1 then
                     if ADT and ADT.DockUI and ADT.DockUI.FinishHeaderFadeIn then ADT.DockUI.FinishHeaderFadeIn() end
