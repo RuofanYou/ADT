@@ -19,6 +19,16 @@ local CFG = {
         contentBottomPadding = 10,
         subPanelMinHeight = 160,
         subPanelMaxHeight = 720,
+        -- ============ 新增：宽度约束（Dock/子面板统一权威） ============
+        -- 中央区域（不含左侧分类栏）的最小宽度，避免短文案把面板压窄导致换行/省略。
+        -- 对应 DockUI.UpdateAutoWidth 中的 minCenter。
+        dockMinCenterWidth = 300,
+        -- Dock 主体“总宽度”相对当前视口宽度的最大占比（0~1）。
+        -- 设为 0 或 nil 表示不以比例限制，仅受屏幕边距与内容驱动。
+        dockMaxTotalWidthRatio = 0.4,
+        -- 子面板在计算“所需中心宽度”时的硬上限占比（防极端超长 token 拉爆）。
+        -- 仅用于 SubPanel 内部测量，不直接决定 Dock 总宽。
+        subPanelMaxViewportRatio = 0.80,
     },
     -- 每一“行”说明（HouseEditorInstructionTemplate）的视觉参数
     Row = {
@@ -105,6 +115,23 @@ local CFG = {
         verticalTopNudge = 0,
         -- 防止越出屏幕底部的安全边距
         safetyBottomPad = 8,
+    },
+    -- Dock 列表（Clipboard/Recent）的库存数字与名称间距（配置驱动，分类可独立）
+    DockDecorList = {
+        -- 通用默认（各分类未覆写则继承本组）
+        Common = {
+            countRightInset = 20,   -- 库存数字距右边框的内缩像素
+            nameToCountGap  = 8,   -- 名称与库存数字之间的间距
+            countWidth      = 32,  -- 库存数字区域固定宽度（影响测宽与文本锚点）
+        },
+        -- 两个装饰列表型分类可分别调整
+        Clipboard = {
+            -- 不写表示继承 Common
+            -- 示例：countRightInset = 8, nameToCountGap = 6, countWidth = 28
+        },
+        Recent = {
+            -- 示例：countRightInset = 6, nameToCountGap = 10
+        },
     },
 }
 

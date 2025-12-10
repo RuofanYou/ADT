@@ -14,6 +14,8 @@ local ADDON_NAME, ADT = ...
 if not ADT or not ADT.CommandDock then return end
 
 local CommandDock = ADT.CommandDock
+-- 前置声明：供早期函数安全引用（避免隐式全局）
+local EL -- 事件承载帧将在文末初始化
 
 local function Debug(msg)
     if ADT and ADT.DebugPrint then ADT.DebugPrint("[Graft] " .. tostring(msg)) end
@@ -1074,8 +1076,34 @@ local function AdoptInstructionsIntoDock()
         end
     end
     if not instr then
-        Debug("未发现 Instructions 容器，跳过重挂(Active=" .. tostring(active) .. ")")
-        dock:SetSubPanelShown(false)
+        -- 修复：在“模式切换（尤其是专家→基础）且存在选中/悬停目标”时，
+        -- 暴雪的 Instructions 容器常在数帧后才创建/切换完成，旧逻辑会立即隐藏 SubPanel，
+        -- 造成右侧下方面板整块消失且不一定能再被重新展示。
+        -- 新策略（KISS + 单一权威）：
+        -- - 不再立刻隐藏 SubPanel；先把 HoverHUD 重挂到 SubPanel.Content 以保持有“正文”，
+        -- - 由统一自适应高度与判空逻辑决定是否可见；
+        -- - 同时启动一次短周期轮询，直到成功采纳官方 Instructions 为止。
+        local sub = dock:EnsureSubPanel()
+        dock:SetSubPanelShown(true)
+        if ADT and ADT.Housing and ADT.Housing.ReparentHoverHUD and sub and sub.Content then
+            pcall(ADT.Housing.ReparentHoverHUD, ADT.Housing, sub.Content)
+        end
+        if ADT and ADT.DockUI and ADT.DockUI.RequestSubPanelAutoResize then
+            ADT.DockUI.RequestSubPanelAutoResize()
+        end
+        -- 轮询采纳：与 HouseEditor.StateUpdated 的实现保持一致，但也覆盖“模式切换”场景
+        if not (EL and EL._adoptTicker) then
+            local attempts = 0
+            EL = EL or CreateFrame("Frame")
+            EL._adoptTicker = C_Timer.NewTicker(0.25, function(t)
+                attempts = attempts + 1
+                if not IsHouseEditorShown() then t:Cancel(); EL._adoptTicker=nil; return end
+                -- 再尝试一次采纳；成功后终止轮询
+                AdoptInstructionsIntoDock()
+                if AdoptState.instr then t:Cancel(); EL._adoptTicker=nil; Debug("轮询采纳成功(模式切换)") return end
+                if attempts >= 20 then t:Cancel(); EL._adoptTicker=nil; Debug("轮询超时，未能采纳 Instructions") end
+            end)
+        end
         return
     end
 
@@ -1097,8 +1125,28 @@ local function AdoptInstructionsIntoDock()
     -- - 只限定宽度与顶部锚点，让 VerticalLayoutFrame 自行计算“自然高度”，供后续自适应使用。
     instr:ClearAllPoints()
     instr:SetParent(sub.Content)
-    instr:SetPoint("TOPLEFT",  sub.Header,  "BOTTOMLEFT",  0, -CFG.Layout.headerToInstrGap)
-    instr:SetPoint("TOPRIGHT", sub.Header,  "BOTTOMRIGHT", 0, -CFG.Layout.headerToInstrGap)
+    -- 顺延排版：若我们自建的 HoverHUD 可用，则让官方说明排在其下方；
+    -- 否则退回到“排在 Header 下方”。
+    do
+        local df = ADT and ADT.Housing and ADT.Housing.GetDisplayFrame and ADT.Housing:GetDisplayFrame()
+        local gap = CFG.Layout.headerToInstrGap
+        if df and df.GetHeight then
+            instr:SetPoint("TOPLEFT",  df, "BOTTOMLEFT",  0, -gap)
+            instr:SetPoint("TOPRIGHT", df, "BOTTOMRIGHT", 0, -gap)
+            -- 当 HUD 尺寸变化时，要求重新排版与自适应高度
+            if df.HookScript and not df._ADT_HookedForInstrFollow then
+                df._ADT_HookedForInstrFollow = true
+                df:HookScript("OnSizeChanged", function()
+                    if instr and instr.MarkDirty then instr:MarkDirty() end
+                    if instr and instr.UpdateLayout then instr:UpdateLayout() end
+                    _ADT_QueueResize()
+                end)
+            end
+        else
+            instr:SetPoint("TOPLEFT",  sub.Header,  "BOTTOMLEFT",  0, -gap)
+            instr:SetPoint("TOPRIGHT", sub.Header,  "BOTTOMRIGHT", 0, -gap)
+        end
+    end
     -- 去除容器额外左右内边距，并固定为内容区宽度，便于子行按“左贴左、右贴右”扩展
     instr.leftPadding, instr.rightPadding = 0, 0
     instr:SetFixedWidth(sub.Content:GetWidth())
@@ -1304,7 +1352,7 @@ end
 --
 -- 三、统一入口：HouseEditor 打开/关闭与模式变化时同步
 --
-local EL = CreateFrame("Frame")
+EL = CreateFrame("Frame")
 
 local function TrySetupHooks()
     if not _G.HouseEditorFrameMixin or EL._hooksInstalled then return end
@@ -1329,6 +1377,7 @@ local function TrySetupHooks()
             pcall(function() if ADT and ADT.DockUI and ADT.DockUI.AttachPlacedListButton then ADT.DockUI.AttachPlacedListButton() end end)
             EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow();
             C_Timer.After(0, AdoptInstructionsIntoDock)
+            C_Timer.After(0.1, AdoptInstructionsIntoDock)
             C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end)
         -- 专家模式 Frame 本体 OnShow：这是最稳的时点，直接确保展示与贴合
@@ -1442,6 +1491,7 @@ EL:SetScript("OnEvent", function(_, event, arg1)
     if event == "HOUSE_EDITOR_MODE_CHANGED" then
         EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow();
         C_Timer.After(0, AdoptInstructionsIntoDock)
+        C_Timer.After(0.1, AdoptInstructionsIntoDock)
         C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         C_Timer.After(0.05, _ADT_QueueResize)
         C_Timer.After(0.15, _ADT_QueueResize)

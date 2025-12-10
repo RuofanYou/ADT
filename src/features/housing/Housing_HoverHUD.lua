@@ -5,6 +5,7 @@ local L = ADT and ADT.L or {}
 -- 直接使用暴雪 Housing API
 local C_HousingDecor = C_HousingDecor
 local GetHoveredDecorInfo = C_HousingDecor.GetHoveredDecorInfo
+local GetDecorInstanceInfoForGUID = C_HousingDecor.GetDecorInstanceInfoForGUID
 --local GetDecorInstanceInfoForGUID = C_HousingDecor.GetDecorInstanceInfoForGUID
 local IsHoveringDecor = C_HousingDecor.IsHoveringDecor
 local GetActiveHouseEditorMode = C_HouseEditor.GetActiveHouseEditorMode
@@ -776,6 +777,11 @@ function EL:ReparentHoverHUD(newParent)
     if DisplayFrame.RecalculateHeight then DisplayFrame:RecalculateHeight() end
 end
 
+-- 只读：暴露 DisplayFrame，供 Blizzard_Graft 做顺序排版（让官方说明跟在我们 HUD 之后）
+function EL:GetDisplayFrame()
+    return DisplayFrame
+end
+
 --
 -- 事件监听与核心逻辑
 --
@@ -858,10 +864,38 @@ do
         local protectionEnabled = ADT.GetDBValue("EnableProtection")
         if protectionEnabled == nil then protectionEnabled = true end
         
-        -- 获取选中装饰的信息
+        -- 选中态下：首先更新“标题=装饰名”。
+        -- 单一权威：优先 SelectedDecorInfo，若缺 name 再以 decorGUID 反查实例信息获取 name（12.0 专家模式常见）。
+        do
+            local rid, sname = self:GetSelectedDecorRecordIDAndName()
+            if (sname and sname ~= "") then
+                local headerText = ADT and ADT.DockUI and ADT.DockUI.GetSubPanelHeaderText and ADT.DockUI.GetSubPanelHeaderText()
+                local headerAlpha = ADT and ADT.DockUI and ADT.DockUI.GetSubPanelHeaderAlpha and ADT.DockUI.GetSubPanelHeaderAlpha()
+                local sameName = (headerText == sname)
+                if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
+                if not sameName then
+                    if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then ADT.DockUI.SetSubPanelHeaderText(sname) end
+                    if ADT and ADT.DockUI and ADT.DockUI.FadeInHeader then ADT.DockUI.FadeInHeader(true) end
+                else
+                    if (tonumber(headerAlpha) or 0) < 1 then
+                        if ADT and ADT.DockUI and ADT.DockUI.FinishHeaderFadeIn then ADT.DockUI.FinishHeaderFadeIn() end
+                    end
+                end
+                if InExpertMode() and ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha then
+                    ADT.DockUI.SetSubPanelHeaderAlpha(1)
+                end
+            end
+        end
+
+        -- 获取选中装饰的信息（用于误操作保护等后续逻辑）
         local info = (C_HousingBasicMode and C_HousingBasicMode.GetSelectedDecorInfo and C_HousingBasicMode.GetSelectedDecorInfo())
             or (C_HousingExpertMode and C_HousingExpertMode.GetSelectedDecorInfo and C_HousingExpertMode.GetSelectedDecorInfo())
-        if info and info.name then
+        if info and (info.name or info.decorGUID) then
+            -- 若官方返回缺 name，则尝试以 GUID 反查一次，仅用于展示，不改变其它流程。
+            if (not info.name) and info.decorGUID and GetDecorInstanceInfoForGUID then
+                local inst = GetDecorInstanceInfoForGUID(info.decorGUID)
+                if inst and inst.name then info.name = inst.name end
+            end
             -- 切换到“选中”态时的标题策略：
             -- 1) 若名称不变，仅“补完”正在进行的淡入（从当前 alpha 继续到 1），不重播；
             -- 2) 若名称改变，则直接换文案，保持当前 alpha，不触发额外淡入/淡出；
@@ -889,6 +923,83 @@ do
             -- 专家模式下：标题常亮，不受悬停影响
             if InExpertMode() then
                 if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha then ADT.DockUI.SetSubPanelHeaderAlpha(1) end
+            end
+
+            -- 选中态下仍需显示“高级信息行”（库存/室内外/染色槽）。
+            -- 隐藏我们自建的交互说明行，只保留 InfoLine。
+            if DisplayFrame then
+                local function kill(f)
+                    if not f then return end
+                    if f.SetScript then f:SetScript("OnUpdate", nil) end
+                    if f.SetAlpha then f:SetAlpha(0) end
+                    if f.Hide then f:Hide() end
+                end
+                kill(DisplayFrame.SubFrame)
+                if DisplayFrame.HintFrames then for _, ch in ipairs(DisplayFrame.HintFrames) do kill(ch) end end
+                -- 计算并写入 InfoLine 文本
+                do
+                    local decorID = info.decorID
+                    local entryInfo = decorID and GetCatalogDecorInfo(decorID)
+                    local stored = 0
+                    if entryInfo then
+                        stored = (entryInfo.quantity or 0) + (entryInfo.remainingRedeemable or 0)
+                    end
+                    if DisplayFrame.InfoLine then
+                        local leftText
+                        do
+                            local indoor = not not info.isAllowedIndoors
+                            local outdoor = not not info.isAllowedOutdoors
+                            local placeText = (indoor and outdoor) and ((L["Indoor & Outdoor"]) or "Indoor & Outdoor")
+                                or (indoor and ((L["Indoor"]) or "Indoor"))
+                                or (outdoor and ((L["Outdoor"]) or "Outdoor"))
+                                or ((L["Indoor"]) or "Indoor")
+                            local stockLabel = (L["Stock"]) or "Stock"
+                            local labelSep = Colorize('separatorMuted', ' | ')
+                            local colon    = Colorize('separatorMuted', ":")
+                            local placeC   = Colorize('labelMuted', placeText)
+                            local stockLbl = Colorize('labelMuted', stockLabel)
+                            local stockVal = (stored and stored > 0)
+                                and Colorize('valueGood', tostring(stored))
+                                or  Colorize('valueBad',  tostring(stored or 0))
+                            leftText = placeC .. labelSep .. stockLbl .. colon .. stockVal
+                        end
+                        local rightText = ""
+                        do
+                            local slots = (info.dyeSlots or {})
+                            local total = #slots
+                            if total and total > 0 then
+                                local used = 0
+                                for i = 1, total do
+                                    local s = slots[i]
+                                    if s and s.dyeColorID then used = used + 1 end
+                                end
+                                local usedKey = (used <= 0) and 'valueNeutral' or ((used < total) and 'valueWarn' or 'valueGood')
+                                local slash  = Colorize('separatorMuted', "/")
+                                rightText = string.format("|A:catalog-palette-icon:16:16|a %s%s%s",
+                                    Colorize(usedKey, tostring(used)),
+                                    slash,
+                                    Colorize('labelMuted', tostring(total))
+                                )
+                            end
+                        end
+                        if DisplayFrame.InfoLine.InstructionText then
+                            DisplayFrame.InfoLine.InstructionText:SetText(leftText)
+                        end
+                        if DisplayFrame.InfoLine.Control then
+                            local ctrl = DisplayFrame.InfoLine.Control
+                            local hasDyeInfo = rightText ~= "" and rightText ~= nil
+                            if ctrl.Text then
+                                ctrl.Text:SetText(hasDyeInfo and rightText or "")
+                                ctrl.Text:SetShown(hasDyeInfo)
+                            end
+                            ctrl:SetShown(hasDyeInfo)
+                        end
+                        if DisplayFrame.InfoLine.Show then DisplayFrame.InfoLine:Show() end
+                        if DisplayFrame.InfoLine.SetAlpha then DisplayFrame.InfoLine:SetAlpha(1) end
+                        if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame.InfoLine) end
+                        if DisplayFrame.RecalculateHeight then DisplayFrame:RecalculateHeight() end
+                    end
+                end
             end
         end
         if not info or not info.decorGUID then return end
@@ -996,9 +1107,9 @@ do
                 -- 如果此时用户发生“选中/切换模式”，立即隐藏以避免叠层；
                 -- 否则正常走淡出。
                 if IsAnyDecorSelected() then
-                    -- 保留当前 Header Alpha：先退出跟随再隐藏组
+                    -- 选中态：与 Header 同步策略——不跟随悬停，但保持 InfoLine 常驻，不做隐藏。
                     if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
-                    if DisplayFrame.InstantHideGroup then DisplayFrame:InstantHideGroup() end
+                    -- 不再调用 InstantHideGroup，避免把选中态的 InfoLine 一并清掉。
                 else
                     if DisplayFrame.FadeOutGroup then DisplayFrame:FadeOutGroup(0.5) end
                 end
@@ -1147,6 +1258,8 @@ do
                         if DisplayFrame.RecalculateHeight then DisplayFrame:RecalculateHeight() end
                     end
                 end
+                -- 悬停刷新结束后，统一由配置驱动各行显隐，避免“被选中态隐藏过的行”持续不回显。
+                if self.UpdateHintVisibility then self:UpdateHintVisibility() end
                 return true
             end
         end
@@ -1171,22 +1284,34 @@ do
         end
     end
 
-    function EL:GetSelectedDecorRecordIDAndName()
-        -- 尝试多源：不同模块的 GetSelectedDecorInfo 名称略有差异
-        local info
-        if C_HousingBasicMode and C_HousingBasicMode.GetSelectedDecorInfo then
-            info = C_HousingBasicMode.GetSelectedDecorInfo()
+function EL:GetSelectedDecorRecordIDAndName()
+    -- 尝试多源：不同模块的 GetSelectedDecorInfo 名称略有差异
+    local info
+    if C_HousingBasicMode and C_HousingBasicMode.GetSelectedDecorInfo then
+        info = C_HousingBasicMode.GetSelectedDecorInfo()
+    end
+    if (not info or not info.decorID) and C_HousingExpertMode and C_HousingExpertMode.GetSelectedDecorInfo then
+        info = C_HousingExpertMode.GetSelectedDecorInfo()
+    end
+    if (not info or not info.decorID) and C_HousingCustomizeMode and C_HousingCustomizeMode.GetSelectedDecorInfo then
+        info = C_HousingCustomizeMode.GetSelectedDecorInfo()
+    end
+    if info then
+        -- 12.0 专家模式常见：decorID/name 可能缺失，但会带 decorGUID。
+        if (not info.decorID or not info.name) and info.decorGUID and GetDecorInstanceInfoForGUID then
+            local inst = GetDecorInstanceInfoForGUID(info.decorGUID)
+            if inst then
+                info.decorID = info.decorID or inst.decorID
+                info.name = info.name or inst.name
+                info.iconTexture = info.iconTexture or inst.iconTexture
+                info.iconAtlas = info.iconAtlas or inst.iconAtlas
+            end
         end
-        if (not info or not info.decorID) and C_HousingExpertMode and C_HousingExpertMode.GetSelectedDecorInfo then
-            info = C_HousingExpertMode.GetSelectedDecorInfo()
-        end
-        if (not info or not info.decorID) and C_HousingCustomizeMode and C_HousingCustomizeMode.GetSelectedDecorInfo then
-            info = C_HousingCustomizeMode.GetSelectedDecorInfo()
-        end
-        if info and info.decorID then
+        if info.decorID then
             return info.decorID, info.name, info.iconTexture or info.iconAtlas
         end
     end
+end
 
     -- StartPlacingByRecordID 提升为顶层函数，避免局部作用域问题
 
@@ -1214,6 +1339,15 @@ do
         if DisplayFrame and DisplayFrame.InstantHideGroup then
             DisplayFrame:InstantHideGroup()
         end
+        -- 下一帧根据当前环境恢复应显示的内容：
+        -- 若已选中 → 走选中态标题与 InfoLine；否则若正在悬停 → 走悬停刷新。
+        C_Timer.After(0, function()
+            if IsAnyDecorSelected() then
+                self:OnSelectedTargetChanged(true)
+            elseif IsHoveringDecor() then
+                self:ProcessHoveredDecor()
+            end
+        end)
     end
 
     function EL:OnModifierStateChanged(key, down)
@@ -1223,9 +1357,7 @@ do
     end
 
     EL.DuplicateKeyOptions = {
-        { name = CTRL_KEY_TEXT, key = "LCTRL" },
-        { name = ALT_KEY_TEXT,  key = "LALT"  },
-        -- 3: Ctrl+D（通过覆盖绑定触发，不走 MODIFIER_STATE_CHANGED）
+        -- Ctrl+D（通过覆盖绑定触发，不走 MODIFIER_STATE_CHANGED）
         { name = (CTRL_KEY_TEXT and (CTRL_KEY_TEXT.."+D")) or "CTRL+D", key = nil },
     }
 

@@ -353,7 +353,13 @@ local function AttachTo(main)
                     -- 保护：避免把不合理的大值（例如异常字体测量）一路放大到接近屏幕宽
                     local parent = (self:GetParent() or UIParent)
                     local viewport = (parent and parent.GetWidth and parent:GetWidth()) or 1600
-                    local capRatio = (Def and Def.SubPanelViewportCapRatio) or 0.8
+                    local capRatio = 0.8
+                    if ADT and ADT.GetHousingCFG then
+                        local C = ADT.GetHousingCFG()
+                        if C and C.Layout and type(C.Layout.subPanelMaxViewportRatio) == 'number' then
+                            capRatio = C.Layout.subPanelMaxViewportRatio
+                        end
+                    end
                     if type(capRatio) ~= 'number' or capRatio <= 0 or capRatio > 1 then capRatio = 0.8 end
                     local hardCap = math.floor(viewport * capRatio)
                     if want > hardCap then want = hardCap end

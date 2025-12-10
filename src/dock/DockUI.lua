@@ -67,8 +67,6 @@ local Def = {
     LeftPanelPadTop = 14,
     LeftPanelPadBottom = 14,
 
-    -- SubPanel 宽度测量的屏幕硬上限占比（防止极端文本拉爆面板）
-    SubPanelViewportCapRatio = 0.8,
 
     -- ================= Header/顶部区域可调参数（统一权威） =================
     HeaderHeight = 68,                 -- Header 高度
@@ -1204,12 +1202,8 @@ do
             ADT.DebugPrint("[SettingsPanel] Entry OnEnter dbKey="..tostring(self.dbKey)
                 .." over="..tostring(self:IsMouseOver()))
         end
-        -- 先清除其它条目的文本高亮，避免残留
-        if MainFrame and MainFrame.ModuleTab and MainFrame.ModuleTab.ScrollView and MainFrame.ModuleTab.ScrollView.CallObjectMethod then
-            MainFrame.ModuleTab.ScrollView:CallObjectMethod("Entry", "HideTextHighlight")
-        end
-        -- 仅为当前条目显示“包文本”的高亮
-        if self.UpdateTextHighlight then self:UpdateTextHighlight(true) end
+        -- KISS：统一使用“单例高亮容器”贴在按钮上（不再测量字符串宽度）
+        if MainFrame and MainFrame.HighlightEntry then MainFrame:HighlightEntry(self) end
         self:UpdateVisual()
         if not self.isChangelogButton then
             MainFrame:ShowFeaturePreview(self.data, self.parentDBKey)
@@ -1217,7 +1211,7 @@ do
     end
 
     function EntryButtonMixin:OnLeave()
-        if self.UpdateTextHighlight then self:UpdateTextHighlight(false) end
+        if MainFrame and MainFrame.HighlightEntry then MainFrame:HighlightEntry(nil) end
         self:UpdateVisual()
     end
 
@@ -1348,45 +1342,10 @@ do
         end
     end
 
-    -- ————— 文本区域高亮（单一权威：仅此处实现） —————
-    function EntryButtonMixin:EnsureTextHighlight()
-        if self.TextHighlight and self.TextHighlight.GetObjectType then return self.TextHighlight end
-        local hl = self:CreateTexture(nil, "BACKGROUND")
-        self.TextHighlight = hl
-        if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("housing-basic-container") then
-            hl:SetAtlas("housing-basic-container")
-        else
-            hl:SetColorTexture(1.0, 0.82, 0.0, 0.15)
-        end
-        hl:Hide()
-        return hl
-    end
-
-    function EntryButtonMixin:HideTextHighlight()
-        if self.TextHighlight then self.TextHighlight:Hide() end
-    end
-
-    function EntryButtonMixin:UpdateTextHighlight(show)
-        local hl = self:EnsureTextHighlight()
-        if not show then hl:Hide(); return end
-        local pad = (Def.HighlightTextPadX or 6)
-        local leftInset = (Def.EntryLabelLeftInset or 28)
-        local rightBias = (Def.HighlightRightBias or 0)
-        local minH = (Def.HighlightMinHeight or 18)
-        local fs = self.Label
-        local btnW = tonumber(self:GetWidth()) or 0
-        local maxText = math.max(0, btnW - 2 * (Def.EntryLabelLeftInset or 28))
-        local textW = 0
-        if fs and fs.GetStringWidth then textW = math.ceil(fs:GetStringWidth() or 0) end
-        local visibleW = math.min(textW, maxText)
-        local left = leftInset - pad
-        local width = math.max(1, visibleW + 2 * pad + rightBias)
-        local height = math.max(minH, (self.GetHeight and (self:GetHeight() - 4)) or minH)
-        hl:ClearAllPoints()
-        hl:SetPoint("LEFT", self, "LEFT", left, 0)
-        hl:SetSize(width, height)
-        hl:Show()
-    end
+    -- 旧的“逐字符宽度高亮”实现已废弃，保留空实现以兼容旧调用。
+    function EntryButtonMixin:EnsureTextHighlight() return nil end
+    function EntryButtonMixin:HideTextHighlight() end
+    function EntryButtonMixin:UpdateTextHighlight(_) end
 
     function EntryButtonMixin:UpdateVisual()
         -- 统一色彩策略：高亮不改变文字颜色；仅按可用/不可用切换。
@@ -1442,6 +1401,50 @@ do
         f.OptionToggle.Texture:Hide()
 
         return f
+    end
+end
+
+
+-- 右侧条目悬停高亮（单例，KISS：不再按文本宽度测量）
+do
+    local function EnsureEntryHighlight()
+        if EntryHoverHighlight and EntryHoverHighlight.BG then return EntryHoverHighlight end
+        local f = CreateFrame("Frame", nil, MainFrame)
+        f:Hide()
+        -- 使用与左侧一致的 housing-basic-container 作为容器样式
+        local bg = f:CreateTexture(nil, "BACKGROUND")
+        if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("housing-basic-container") then
+            bg:SetAtlas("housing-basic-container")
+        else
+            bg:SetColorTexture(1.0, 0.82, 0.0, 0.15)
+        end
+        bg:SetAllPoints(f)
+        f.BG = bg
+        EntryHoverHighlight = f
+        return f
+    end
+
+    function MainFrame:HighlightEntry(button)
+        local hl = EnsureEntryHighlight()
+        hl:Hide(); hl:ClearAllPoints()
+        if not button then return end
+        -- 将高亮贴到目标按钮上，并放在其文本下方一层
+        hl:SetParent(button)
+        local strata = button.GetFrameStrata and button:GetFrameStrata() or nil
+        if strata then hl:SetFrameStrata(strata) end
+        local lvl = (button.GetFrameLevel and button:GetFrameLevel()) or 1
+        pcall(hl.SetFrameLevel, hl, math.max(0, lvl - 1))
+
+        local pad = (Def.HighlightTextPadX or 6)
+        local leftInset = (Def.EntryLabelLeftInset or 28) - pad
+        if leftInset < 0 then leftInset = 0 end
+        local rightInset = (Def.HighlightRightInset or 2)
+        hl:SetPoint("LEFT", button, "LEFT", leftInset, 0)
+        hl:SetPoint("RIGHT", button, "RIGHT", -rightInset, 0)
+        local minH = (Def.HighlightMinHeight or 18)
+        local h = math.max(minH, (button.GetHeight and (button:GetHeight() - 4)) or minH)
+        hl:SetHeight(h)
+        hl:Show()
     end
 end
 
@@ -1509,6 +1512,29 @@ local CreateDecorItemEntry
 do
     local DecorItemMixin = {}
 
+    -- 读取 DockDecorList 样式（分类：Clipboard/History），带通用 Common 兜底
+    local function GetDecorListStyle(categoryKey)
+        local cfg = ADT.GetHousingCFG and ADT.GetHousingCFG() or nil
+        local dl  = cfg and cfg.DockDecorList or nil
+        if not dl then
+            return { countRightInset = 6, nameToCountGap = 8, countWidth = 32 }
+        end
+        local common = dl.Common or {}
+        local style
+        if categoryKey == 'Clipboard' then
+            style = dl.Clipboard or {}
+        elseif categoryKey == 'History' then
+            style = dl.Recent or {}
+        else
+            style = {}
+        end
+        return {
+            countRightInset = tonumber(style.countRightInset) or tonumber(common.countRightInset) or 6,
+            nameToCountGap  = tonumber(style.nameToCountGap)  or tonumber(common.nameToCountGap)  or 8,
+            countWidth      = tonumber(style.countWidth)      or tonumber(common.countWidth)      or 32,
+        }
+    end
+
     function DecorItemMixin:SetData(item, categoryInfo)
         self.decorID = item.decorID
         self.categoryInfo = categoryInfo
@@ -1541,6 +1567,24 @@ do
         self.Name:SetText(displayName)
         self.Count:SetText(tostring(available))
         self.available = available
+
+        -- 分类化的锚点与间距：允许在 Housing_Config.lua 独立调节 Clipboard/Recent
+        do
+            local catKey = categoryInfo and categoryInfo.key or nil
+            local sty = GetDecorListStyle(catKey)
+            -- 右侧库存位置与宽度
+            if self.Count and self.Count.ClearAllPoints then
+                self.Count:ClearAllPoints()
+                self.Count:SetPoint("RIGHT", self, "RIGHT", -sty.countRightInset, 0)
+                if self.Count.SetWidth then self.Count:SetWidth(sty.countWidth) end
+            end
+            -- 名称右侧对齐到 Count 左侧，留 nameToCountGap
+            if self.Name and self.Name.ClearAllPoints and self.Icon then
+                self.Name:ClearAllPoints()
+                self.Name:SetPoint("LEFT", self.Icon, "RIGHT", 8, 0)
+                self.Name:SetPoint("RIGHT", self.Count, "LEFT", -sty.nameToCountGap, 0)
+            end
+        end
         
         -- 禁用状态
         self.isDisabled = available <= 0
@@ -1563,7 +1607,13 @@ do
         if self.Name and self.Name.GetStringWidth then
             w = math.ceil(self.Name:GetStringWidth() or 0)
         end
-        return w + 80
+        local catKey = self.categoryInfo and self.categoryInfo.key or nil
+        local sty = GetDecorListStyle(catKey)
+        -- 左侧固定：4(Icon左内) + 28(Icon) + 8(Icon-Name 间距) = 40
+        local leftFixed = 40
+        -- 右侧保留：库存区宽度 + 名称与库存间距 + 右侧内缩
+        local rightFixed = sty.countWidth + sty.nameToCountGap + sty.countRightInset
+        return w + leftFixed + rightFixed
     end
 
     function DecorItemMixin:OnEnter()
@@ -1735,8 +1785,10 @@ do  -- Left Section
 
         if self.CentralSection and self.ModuleTab and self.ModuleTab.ScrollView then
             local CentralSection = self.CentralSection
-            -- 对象宽度直接采用 CentralSection 宽度；内部留白由模板(Label 左28/右28)提供。
-            local newWidth = API.Round(CentralSection:GetWidth())
+            -- 修正：条目左侧统一使用 offsetX = GetRightPadding() 进行缩进，
+            -- 因此条目真实可用宽度应为 CentralSection 宽度减去该缩进，
+            -- 否则右侧库存数字会越出 DeckUI 的右边框。
+            local newWidth = API.Round((CentralSection:GetWidth() or 0) - GetRightPadding())
             if newWidth > 0 then
                 self.centerButtonWidth = newWidth
                 local ScrollView = self.ModuleTab.ScrollView
@@ -2494,12 +2546,26 @@ local function CreateUI()
             end
         end
 
-        -- 至少保证一个合理的最小值
+        -- 至少保证一个合理的最小值（配置驱动）
         local minCenter = 240
+        if ADT and ADT.GetHousingCFG then
+            local C = ADT.GetHousingCFG()
+            if C and C.Layout and type(C.Layout.dockMinCenterWidth) == 'number' then
+                minCenter = math.max(0, math.floor(C.Layout.dockMinCenterWidth))
+            end
+        end
         local wantedCenter = math.max(minCenter, maxNeeded, subNeed)
         -- 视口最大宽度限制（避免超出屏幕）
         local parent = self:GetParent() or UIParent
-        local maxTotal = (parent.GetWidth and parent:GetWidth() or 1600) - Def.ScreenRightMargin - 4
+        local viewport = (parent.GetWidth and parent:GetWidth() or 1600) - Def.ScreenRightMargin - 4
+        local maxTotal = viewport
+        if ADT and ADT.GetHousingCFG then
+            local C = ADT.GetHousingCFG()
+            local r = C and C.Layout and C.Layout.dockMaxTotalWidthRatio
+            if type(r) == 'number' and r > 0 and r <= 1 then
+                maxTotal = math.floor(viewport * r)
+            end
+        end
         -- 无右侧栏：总宽 = 左栏 + 中央需求 + 边距
         local targetTotal = sidew + wantedCenter
         if targetTotal > maxTotal then targetTotal = maxTotal end
@@ -2518,6 +2584,8 @@ local function CreateUI()
         if CentralSection and self.ModuleTab and self.ModuleTab.ScrollView then
             local newWidth = tonumber(CentralSection:GetWidth()) or 0
             newWidth = math.floor(newWidth + 0.5)
+            -- 按左侧统一缩进扣除可用宽度
+            newWidth = newWidth - GetRightPadding()
             if newWidth > 0 then
                 self.centerButtonWidth = newWidth
                 local ScrollView = self.ModuleTab.ScrollView
@@ -2650,13 +2718,16 @@ local function CreateUI()
             if w < 120 then w = 120 end
             return w
         end
-        MainFrame.centerButtonWidth = ComputeCenterWidth()
+        -- 梳理：所有列表项在渲染时都会以 GetRightPadding() 作为左侧缩进，
+        -- 因而条目真实宽度 = 容器宽度 - 该缩进。统一在此处扣除，确保对齐一致。
+        MainFrame.centerButtonWidth = ComputeCenterWidth() - GetRightPadding()
         Def.centerButtonWidth = MainFrame.centerButtonWidth
 
 
         local function EntryButton_Create()
             local obj = CreateSettingsEntry(ScrollView)
             obj:SetSize(MainFrame.centerButtonWidth or Def.centerButtonWidth, Def.ButtonSize)
+            if obj.HideTextHighlight then obj:HideTextHighlight() end
             return obj
         end
 
@@ -2771,8 +2842,9 @@ local function CreateUI()
         local total = tonumber(self:GetWidth()) or 0
         local leftw = tonumber(self.sideSectionWidth) or 0
         local w = tonumber(CentralSection:GetWidth()) or (total - leftw)
-        -- 统一：对象宽度直接采用 CentralSection 宽度，避免重复扣除。
-        local newWidth = API.Round((w or 0))
+        -- 修正：列表项左侧存在统一缩进 offsetX = GetRightPadding()，
+        -- 条目实际可用宽度应扣除该缩进，避免右侧对齐越界。
+        local newWidth = API.Round((w or 0)) - GetRightPadding()
         if newWidth < 120 then newWidth = 120 end
         if newWidth <= 0 then return end
 
