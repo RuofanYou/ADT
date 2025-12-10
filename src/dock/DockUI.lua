@@ -99,6 +99,23 @@ local Def = {
     -- ================= 左侧分类按钮细节 =================
     CategoryButtonLabelOffset = 9,     -- 文本左内边距（与数字角标对称）
     CategoryCountRightInset = 2,       -- 数字角标右内缩
+
+    -- ================= 子面板动效（统一权威配置） =================
+    -- 说明：尽量避免硬编码，所有与 SubPanel 展开/收起的动效参数集中在此，便于后续统一微调。
+    SubPanelFX = {
+        enabled = true,                -- 是否启用子面板开合动效
+        originPoint = "TOP",           -- 缩放原点，使展开/收起从上缘发生
+        showDuration = 0.18,           -- 展开时长（秒）
+        hideDuration = 0.16,           -- 收起时长（秒）
+        smoothingIn = "OUT",           -- 展开缓动：前快后慢
+        smoothingOut = "IN",           -- 收起缓动：前慢后快
+        scaleMin = 0.001,              -- 近似 0 的缩放下限，避免 0 引发奇异值
+        scaleMax = 1.0,                -- 目标缩放
+        fade = true,                   -- 同步透明度渐变
+        fadeFrom = 0.0,                -- 展开起始透明度
+        fadeTo = 1.0,                  -- 展开目标透明度
+        emptyQuietSec = 0.12,          -- 判定“空内容→收起”所需的静默时间，防抖避免模式切换反复收放
+    },
 }
 
 -- 单一权威：右侧内容起始的左内边距，强制与左侧 Category 的外边距一致
@@ -110,6 +127,52 @@ end
 ADT.DockUI = ADT.DockUI or {}
 ADT.DockUI.Def = Def
 ADT.DockUI.GetRightPadding = GetRightPadding
+
+-- 面板显隐：仅控制 DockUI 的“右侧主体 + 左侧列表”，不影响 SubPanel
+-- 目的：当用户关闭“默认开启设置面板”时，仍允许 SubPanel/清单弹窗独立显示。
+do
+    local function SetShownSafe(f, shown)
+        if not f then return end
+        if shown then f:Show() else f:Hide() end
+    end
+
+    -- 单一权威：外部仅调用这一个入口控制 Dock 主体是否可见
+    function ADT.DockUI.SetMainPanelsVisible(shown)
+        local main = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+        if not main then return end
+        local vis = not not shown
+
+        -- 左侧：静态左窗容器（按钮实际挂在 LeftSlideContainer）
+        SetShownSafe(main.LeftSlideContainer, vis)
+        SetShownSafe(main.LeftPanelContainer, vis)
+
+        -- 右侧：Header/背景/中央滚动区/边框
+        SetShownSafe(main.Header, vis)
+        SetShownSafe(main.RightUnifiedBackground, vis)
+        SetShownSafe(main.CenterBackground, vis)
+        if main.ModuleTab then SetShownSafe(main.ModuleTab, vis) end
+        if main.CentralSection then SetShownSafe(main.CentralSection, vis) end
+        if main.BorderFrame then SetShownSafe(main.BorderFrame, vis) end
+
+        -- 注意：SubPanel 由业务控制，保持不变（避免“跟随主体一起被隐藏”）。
+        ADT.DockUI._mainPanelsVisible = vis
+    end
+
+    -- 查询当前 Dock 主体是否可见（独立于容器显示状态）
+    function ADT.DockUI.AreMainPanelsVisible()
+        return not not ADT.DockUI._mainPanelsVisible
+    end
+
+    -- 根据数据库设置应用默认显隐（进入编辑器或用户切换选项时调用）
+    function ADT.DockUI.ApplyPanelsDefaultVisibility()
+        local main = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+        if not main then return end
+        -- EnableDockAutoOpenInEditor 为 false 表示不自动展示 Dock 主体
+        local v = ADT and ADT.GetDBValue and ADT.GetDBValue('EnableDockAutoOpenInEditor')
+        local shouldShowMainPanels = (v ~= false)
+        ADT.DockUI.SetMainPanelsVisible(shouldShowMainPanels)
+    end
+end
 
 -- 提前提供一个“请求子面板自适应高度”的稳定入口（占位包装器）。
 -- 目的：解决 /reload 后 HoverHUD 先于 SubPanel 初始化时，
@@ -283,7 +346,12 @@ do
         end
         -- 子面板
         if m.SubPanel then
-            m.SubPanel:SetShown(not _isolated and m.SubPanel:IsShown())
+            -- 使用统一入口以避免动效抖动
+            if m.SetSubPanelShown then
+                m:SetSubPanelShown(not _isolated and m.SubPanel:IsShown())
+            else
+                m.SubPanel:SetShown(not _isolated and m.SubPanel:IsShown())
+            end
             if m.SubPanel.BorderFrame then m.SubPanel.BorderFrame:EnableMouse(false) end
         end
         -- 统一背景仅为贴图，不吃鼠标；此处不处理
@@ -2797,20 +2865,24 @@ do
         
         if isActive then
             if not wasEditorActive then
-                -- 进入编辑模式：根据设置决定是否自动打开 GUI。
-                local shouldAutoOpen = true
-                if ADT and ADT.GetDBValue then
-                    local v = ADT.GetDBValue('EnableDockAutoOpenInEditor')
-                    -- 仅当显式为 false 时禁用；默认/缺省视为启用
-                    shouldAutoOpen = (v ~= false)
-                end
+                -- 进入编辑模式：无论是否默认开启，都先创建并显示 Dock 容器，
+                -- 再按用户设置隐藏/显示“主体面板”。这样 SubPanel/清单仍可独立工作。
+                MainFrame:ShowUI("editor")
+                -- 若默认开启，则聚焦到“通用”分类；否则仅保持容器存在
+                local v = ADT and ADT.GetDBValue and ADT.GetDBValue('EnableDockAutoOpenInEditor')
+                local shouldAutoOpen = (v ~= false)
                 if shouldAutoOpen then
-                    MainFrame:ShowUI("editor")
                     C_Timer.After(0, function()
                         MainFrame:ShowSettingsCategory('Housing')
                         if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', 'Housing') end
                     end)
                 end
+                -- 应用默认显隐（只影响 Dock 主体，不影响 SubPanel）
+                C_Timer.After(0, function()
+                    if ADT and ADT.DockUI and ADT.DockUI.ApplyPanelsDefaultVisibility then
+                        ADT.DockUI.ApplyPanelsDefaultVisibility()
+                    end
+                end)
             end
             -- 调整层级确保在编辑器之上
             if HouseEditorFrame then

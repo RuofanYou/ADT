@@ -4,7 +4,7 @@ ADT = ADT or {}
 -- Slash：/adt 打开设置面板（自定义 CommandDock 样式）
 SLASH_ADT1 = "/adt"
 
--- 单一权威：切换主面板的逻辑集中在此处，供斜杠命令与快捷键复用
+-- 单一权威：切换 Dock “主体面板”显隐；容器（SettingsPanel）在编辑器内保持常驻
 function ADT.ToggleMainUI()
     local Main = ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel
     if not Main then return end
@@ -12,14 +12,13 @@ function ADT.ToggleMainUI()
         Settings.OpenToCategory(ADT.SettingsCategory)
         return
     end
-    if Main:IsShown() then
-        Main:Hide()
-    else
-        -- 根据是否处于住宅编辑模式，选择更合适的父级与层级
-        -- 统一层级策略：主面板始终使用 FULLSCREEN_DIALOG；左侧栏在 TOOLTIP。
-        -- 避免在编辑器中将主面板抬到 TOOLTIP 与左侧竞争
+
+    local inEditor = C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive()
+
+    -- 确保容器已创建
+    if not Main:IsShown() then
         local parent, strata
-        if HouseEditorFrame and HouseEditorFrame:IsShown() then
+        if inEditor and HouseEditorFrame and HouseEditorFrame:IsShown() then
             parent, strata = HouseEditorFrame, "FULLSCREEN_DIALOG"
         else
             parent, strata = UIParent, "FULLSCREEN_DIALOG"
@@ -28,7 +27,29 @@ function ADT.ToggleMainUI()
         Main:SetParent(parent)
         if Main.SetFrameStrata then Main:SetFrameStrata(strata) end
         Main:SetPoint("CENTER")
-        Main:ShowUI("standalone")
+        Main:ShowUI(inEditor and "editor" or "standalone")
+    end
+
+    -- 主体面板的真实显隐状态由 DockUI 维护
+    local UI = ADT.DockUI
+    local visible = UI and UI.AreMainPanelsVisible and UI.AreMainPanelsVisible()
+
+    if visible then
+        if inEditor and UI and UI.SetMainPanelsVisible then
+            -- 在编辑器内：仅隐藏主体（容器常驻，SubPanel不受影响）
+            UI.SetMainPanelsVisible(false)
+        else
+            -- 非编辑器：直接隐藏整个容器
+            Main:Hide()
+        end
+    else
+        -- 无论默认开关如何，手动打开应当强制显示主体
+        if UI and UI.SetMainPanelsVisible then UI.SetMainPanelsVisible(true) end
+        -- 首次手动打开时，若没有当前分类，则聚焦“通用”
+        if Main.ShowSettingsCategory and not (Main.currentSettingsCategory or Main.currentDecorCategory or Main.currentAboutCategory) then
+            Main:ShowSettingsCategory('Housing')
+            if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', 'Housing') end
+        end
     end
 end
 

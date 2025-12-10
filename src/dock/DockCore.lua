@@ -247,6 +247,12 @@ local function buildModules()
         toggleFunc = function(state)
             if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableDockAutoOpenInEditor', state) end
             if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("[Toggle] %s=%s", 'EnableDockAutoOpenInEditor', tostring(state))) end
+            -- 选项语义修正：仅影响“Dock 主体”默认显隐，不影响 SubPanel/清单。
+            -- 运行时切换时，立刻应用到当前编辑器会话。
+            if ADT and ADT.DockUI and ADT.DockUI.ApplyPanelsDefaultVisibility then
+                ADT.DockUI.ApplyPanelsDefaultVisibility()
+            end
+            -- 若用户是在非编辑器环境下切换，不做额外动作；在编辑器中切换，只调整主体显隐。
         end,
         categoryKeys = { 'Housing' },
         uiOrder = 0,
@@ -429,6 +435,10 @@ local function buildModules()
             -- 通知 Housing 模块刷新右侧提示文本
             if ADT and ADT.Housing and ADT.Housing.OnLocaleChanged then
                 ADT.Housing:OnLocaleChanged()
+            end
+            -- 通知 Favorites 同步标题/下拉文案
+            if ADT and ADT.Favorites and ADT.Favorites.OnLocaleChanged then
+                ADT.Favorites:OnLocaleChanged()
             end
         end,
         categoryKeys = { 'Housing' },

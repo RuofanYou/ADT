@@ -9,6 +9,13 @@ ADT.L = ADT.L or {}
 
 -- 英文语言表（默认）
     ADT.Locales.enUS = {
+    -- Favorites (Housing)
+    ["Favorites"] = "Favorites",
+    ["Show Favorites Only"] = "Show Favorites Only",
+    ["Favorite"] = "Favorite",
+    ["Unfavorite"] = "Unfavorite",
+    ["Added to Favorites"] = "Added to favorites",
+    ["Removed from Favorites"] = "Removed from favorites",
     ["ModuleName Housing_HoverHUD"] = "Decor Hover HUD",
     ["ModuleDescription Housing_HoverHUD"] = "In Decorate Mode:\n\n- Hover the cursor over a decor to display its name and stock.\n\n- Press Ctrl+D to place another instance (default).\n\nThe new object will not inherit the current angles and scales.",
     ["Duplicate"] = "Duplicate",
@@ -78,6 +85,11 @@ ADT.L = ADT.L or {}
     ["SC AutoRotate"] = "Auto Rotate",
     ["SC About"] = "About",
     ["List Is Empty"] = "No results",
+    -- Hover InfoLine（室内/外 + 库存 + 染色）
+    ["Indoor"] = "Indoor",
+    ["Outdoor"] = "Outdoor",
+    ["Indoor & Outdoor"] = "Indoor & Outdoor",
+    ["Stock"] = "Stock",
     ["Category Colon"] = "Category: ",
     
     -- Interaction / Locking
@@ -160,6 +172,13 @@ ADT.L = ADT.L or {}
 
 -- 中文语言表
     ADT.Locales.zhCN = {
+    -- Favorites (Housing)
+    ["Favorites"] = "收藏",
+    ["Show Favorites Only"] = "仅显示收藏",
+    ["Favorite"] = "收藏",
+    ["Unfavorite"] = "取消收藏",
+    ["Added to Favorites"] = "已收藏",
+    ["Removed from Favorites"] = "已取消收藏",
     ["ModuleName Housing_HoverHUD"] = "悬停信息 HUD",
     ["ModuleDescription Housing_HoverHUD"] = "在装饰模式：\n\n- 鼠标悬停装饰以显示其名称与库存数量。\n\n- 按下 Ctrl+D 可快速放置一个相同的装饰（默认）。\n\n新对象不会继承当前角度与缩放。",
     ["Duplicate"] = "重复",
@@ -231,6 +250,11 @@ ADT.L = ADT.L or {}
     ["SC AutoRotate"] = "自动旋转",
     ["SC About"] = "信息",
     ["List Is Empty"] = "暂无结果",
+    -- 悬停“信息行”
+    ["Indoor"] = "室内",
+    ["Outdoor"] = "室外",
+    ["Indoor & Outdoor"] = "室内外",
+    ["Stock"] = "库存",
     ["Category Colon"] = "分类：",
 
     -- About 面板

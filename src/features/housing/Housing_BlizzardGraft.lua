@@ -814,10 +814,29 @@ local function AnchorCustomizePane()
     local paneDecor, paneRoom = GetCustomizePanes()
     if paneDecor and paneDecor:IsShown() then
         AnchorFrameBelowDock(paneDecor, CFG.PlacedList)
+        -- 同步布局宽度：fixedWidth 是“内容区宽度”（不含左右内边距）。
+        if paneDecor.SetFixedWidth and paneDecor.GetWidth then
+            local lp = tonumber(paneDecor.leftPadding) or 0
+            local rp = tonumber(paneDecor.rightPadding) or 0
+            local contentW = math.max(1, (paneDecor:GetWidth() or 0) - lp - rp)
+            if math.abs((paneDecor.fixedWidth or 0) - contentW) > 0.5 then
+                paneDecor:SetFixedWidth(contentW)
+                if paneDecor.UpdateLayout then pcall(paneDecor.UpdateLayout, paneDecor) end
+            end
+        end
         Debug("已贴合 DecorCustomizationsPane 到 SubPanel 下方")
     end
     if paneRoom and paneRoom:IsShown() then
         AnchorFrameBelowDock(paneRoom, CFG.PlacedList)
+        if paneRoom.SetFixedWidth and paneRoom.GetWidth then
+            local lp = tonumber(paneRoom.leftPadding) or 0
+            local rp = tonumber(paneRoom.rightPadding) or 0
+            local contentW = math.max(1, (paneRoom:GetWidth() or 0) - lp - rp)
+            if math.abs((paneRoom.fixedWidth or 0) - contentW) > 0.5 then
+                paneRoom:SetFixedWidth(contentW)
+                if paneRoom.UpdateLayout then pcall(paneRoom.UpdateLayout, paneRoom) end
+            end
+        end
         Debug("已贴合 RoomComponentCustomizationsPane 到 SubPanel 下方")
     end
 end
@@ -878,6 +897,25 @@ local function EnsureCustomizePaneHooks()
             EnsureCustomizePaneHooks(); C_Timer.After(0, AnchorCustomizePane)
         end)
     end
+end
+
+-- 首开不居中根因：SetRoomComponentInfo() 会在 Show 之前立即调用 :Layout()，
+-- 此时 fixedWidth 仍为模板默认值（340）。在其执行后再同步 fixedWidth 并重排一次即可。
+if _G.RoomComponentPaneMixin and not _G.RoomComponentPaneMixin._ADT_FixedWidthHooked then
+    _G.RoomComponentPaneMixin._ADT_FixedWidthHooked = true
+    hooksecurefunc(RoomComponentPaneMixin, "SetRoomComponentInfo", function(self)
+        if not (self and self.SetFixedWidth and self.GetWidth) then return end
+        local function sync()
+            local lp = tonumber(self.leftPadding) or 0
+            local rp = tonumber(self.rightPadding) or 0
+            local contentW = math.max(1, (self:GetWidth() or 0) - lp - rp)
+            if math.abs((self.fixedWidth or 0) - contentW) > 0.5 then
+                self:SetFixedWidth(contentW)
+                if self.UpdateLayout then pcall(self.UpdateLayout, self) end
+            end
+        end
+        sync(); C_Timer.After(0, sync)
+    end)
 end
 
 -- 说明：12.0 后不再强制打开“放置的装饰”清单，
