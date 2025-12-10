@@ -71,6 +71,9 @@ local Def = {
     HeaderHeight = 68,                 -- Header 高度
     HeaderTitleOffsetX = 22,           -- Header 标题 X 偏移
     HeaderTitleOffsetY = -10,          -- Header 标题 Y 偏移（负值为向下）
+    -- 关闭按钮（UIPanelCloseButton）位置（锚到整体右上角，负值向内收）
+    CloseBtnOffsetX = -1,
+    CloseBtnOffsetY = -1,
 
     -- 放置清单按钮（PlacedDecorListButton）在 Header 内的位置/层级
     PlacedListBtnPoint = "LEFT",       -- 锚点（按钮自身）
@@ -80,11 +83,19 @@ local Def = {
     PlacedListBtnRaiseAboveBorder = 1, -- 提升到边框之上的 FrameLevel 偏移（0 表示不提升）
 
     -- ================= 中央滚动区域边距 =================
+    -- 修复：内容靠近底部边框时出现“越界”视觉问题。
+    -- 统一提高底部安全边距，确保列表与背景不会踩到木质边框装饰。
+    -- 注意：保持三个位置（ScrollView/RightBG/CenterBG）一致，作为“单一权威”的配置来源。
+    -- 顶部向内间距：避免内容贴顶（保持原默认 2）
     ScrollViewInsetTop = 2,
-    ScrollViewInsetBottom = 2,
+    ScrollViewInsetBottom = 18,
     RightBGInsetRight = -2,            -- 右侧统一背景右侧 inset
-    RightBGInsetBottom = 2,            -- 右侧统一背景底部 inset
-    CenterBGInsetBottom = 2,           -- 中央区域背景底部 inset
+    RightBGInsetBottom = 18,           -- 右侧统一背景底部 inset（与 ScrollView 保持一致）
+    CenterBGInsetBottom = 18,          -- 中央区域背景底部 inset（与 ScrollView 保持一致）
+
+    -- ================= 列表空状态（Empty State）细节 =================
+    -- 当分类为空时，第一行灰色提示与上方“标题分隔线”之间的额外间距（像素）
+    EmptyStateTopGap = 6,
 
     -- ================= 左侧分类按钮细节 =================
     CategoryButtonLabelOffset = 9,     -- 文本左内边距（与数字角标对称）
@@ -293,7 +304,11 @@ do
     -- 使用标准暴雪关闭按钮（与 housing 边框协调）
     local CloseButton = CreateFrame("Button", nil, BorderFrame, "UIPanelCloseButton")
     MainFrame.CloseButton = CloseButton
-    CloseButton:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 2, 2)
+    -- 锚到边框容器右上角，并向内收缩，避免跑到面板外侧
+    CloseButton:ClearAllPoints()
+    CloseButton:SetPoint("TOPRIGHT", BorderFrame, "TOPRIGHT", Def.CloseBtnOffsetX, Def.CloseBtnOffsetY)
+    -- 防御：确保层级在木框之上，且不会吃掉左侧面板的鼠标
+    CloseButton:SetFrameLevel((BorderFrame:GetFrameLevel() or 0) + 2)
     CloseButton:SetScript("OnClick", function()
         MainFrame:Hide()
         if ADT.UI and ADT.UI.PlaySoundCue then
@@ -1989,8 +2004,8 @@ do  -- Central
         if #list == 0 then
             -- 空列表：用普通 Header 显示一行提示
             n = n + 1
-            local emptyTop = offsetY
-            local emptyBottom = offsetY + Def.ButtonSize
+            local emptyTop = offsetY + (Def.EmptyStateTopGap or 0)
+            local emptyBottom = emptyTop + Def.ButtonSize
             content[n] = {
                 dataIndex = n,
                 templateKey = "Header",
@@ -2441,8 +2456,8 @@ local function CreateUI()
         local ScrollView = API.CreateListView(Tab1)
         MainFrame.ModuleTab.ScrollView = ScrollView
         -- 列表视图顶端 = CentralSection 顶端（亦即 Header 底部）
-        -- 给 2px 的向内间距，避免文字紧贴分隔线。
-        ScrollView:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", 0, - (Def.ScrollViewInsetTop or 2))
+        -- 给一段向内间距（Def.ScrollViewInsetTop），避免文字紧贴分隔线。
+        ScrollView:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", 0, - (Def.ScrollViewInsetTop or 6))
         ScrollView:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", 0, (Def.ScrollViewInsetBottom or 2))
         ScrollView:SetStepSize(Def.ButtonSize * 2)
         ScrollView:OnSizeChanged()
