@@ -1,5 +1,6 @@
 -- Scroll.lua
--- 单一权威：ADT 统一滚动物理引擎（滚轮/滚动条/程序化滚动统一走此模块）
+-- 单一权威：ADT 统一滚动物理引擎
+
 
 local ADDON_NAME, ADT = ...
 ADT = ADT or {}
@@ -7,151 +8,161 @@ ADT = ADT or {}
 ADT.Scroll = ADT.Scroll or {}
 local Scroll = ADT.Scroll
 
--- 设计目标（与 2025 移动端交互一致）：
--- - 目标追踪式平滑滚动（DeltaLerp 到目标），预测性和一致性更强；
--- - 轻量“软钳制”边界：接近边界时采用非线性压缩，减少生硬撞边；
--- - 仅在运动期间启用 OnUpdate，零常驻开销；
--- - 允许宿主自定义步长/超界显示上限；
-
--- 全局默认参数（经验值，兼顾 PC 鼠标滚轮与触控板）
-local DEFAULT = {
-    blendSpeed = 0.20,       -- 稍微提高初速，改善“起步迟滞”感
-    overscroll = 40,         -- 视觉超界上限（px；对不支持超界的宿主被忽略）
-    renderFPS = 45,          -- 轻提节流频率，减少“卡一拍”的错觉
+-- 可调参数（手感收敛到参考实现）
+local TUNING = {
+    blend = 0.15,     -- DeltaLerp 收敛速率（与参考一致）
+    tick = 1/30,      -- 视图更新节流（约 30 FPS 渲染更新）
 }
 
 local function clamp(v, a, b) if v < a then return a elseif v > b then return b else return v end end
 
--- 创建独立驱动帧，避免占用宿主的 OnUpdate 槽位
-local function CreateDriver()
+local function NewDriver()
     local f = CreateFrame('Frame')
     f:Hide()
     return f
 end
 
--- 目标追踪式 Scroller（不使用速度/弹簧；避免“过度弹性”带来的不适）
+-- 统一滚动器（目标位移 + 缓动 / 连续滚动）
 -- adapter 需要实现：
 --   getRange() -> number        最大滚动范围（px，>=0）
 --   getPosition() -> number     当前显示位置（px）
 --   setPosition(pos)            即时设置显示位置（px）
 --   render?()                   可选：节流的内容回收/填充（如虚拟列表 Render）
---   supportsOverscroll -> bool  是否支持视觉超界
-local function CreateScroller(adapter, cfg)
-    local cfg2 = {}
-    for k, v in pairs(DEFAULT) do cfg2[k] = v end
-    if type(cfg) == 'table' then for k, v in pairs(cfg) do if cfg2[k] ~= nil then cfg2[k] = v end end end
-
+local function CreateScroller(adapter)
     local self = {
         a = adapter,
-        c = cfg2,
-        p = 0,                -- 当前显示位置
-        target = 0,           -- 目标位置
-        active = false,
-        driver = CreateDriver(),
-        renderTimer = 0,
-        firstKick = false,    -- 首次滚动时给一点“起步推进”以增强灵敏度
+        x = 0,            -- 当前显示位置（offset）
+        t = 0,            -- 目标位置（scrollTarget）
+        running = false,
+        steady = false,   -- 是否处于连续滚动（用于“按住箭头/摇杆”）
+        speed = 0,        -- 连续滚动速度（px/s）
+        driver = NewDriver(),
+        acc = 0,          -- 渲染节流累积时长
     }
 
-    local function softClamp(pos, range, limit)
-        if not adapter.supportsOverscroll then
-            return clamp(pos, 0, range)
-        end
-        if pos < 0 then
-            -- 负向超界：使用 tanh 压缩到 [-limit, 0]
-            return -limit * math.tanh((-pos) / math.max(1, limit))
-        elseif pos > range then
-            return range + limit * math.tanh((pos - range) / math.max(1, limit))
-        else
-            return pos
+    function self:_apply(pos)
+        local r = math.max(0, self.a.getRange())
+        self.x = clamp(pos, 0, r)
+        self.a.setPosition(self.x)
+    end
+
+    function self:_renderTick(dt)
+        -- 节流 render 调用频率，避免过度重建对象
+        if not self.a.render then return end
+        self.acc = self.acc + dt
+        if self.acc >= TUNING.tick then
+            self.acc = 0
+            self.a.render()
         end
     end
 
-    function self:SetPositionInstant(pos)
-        self.p = pos or 0
+    function self:_onUpdate(_, dt)
+        if dt and dt > 0.05 then dt = 0.05 end
+        if not dt or dt <= 0 then return end
+
         local r = math.max(0, self.a.getRange())
-        self.a.setPosition(softClamp(self.p, r, self.c.overscroll))
+
+        if self.steady then
+            -- 连续滚动：匀速推进，触边后退出 steady
+            local nx = self.x + self.speed * dt
+            if nx <= 0 then nx = 0; self.steady = false
+            elseif nx >= r then nx = r; self.steady = false end
+            self:_apply(nx)
+            self.t = self.x
+            if not self.steady then return self:Stop() end
+            self:_renderTick(dt)
+            return
+        end
+
+        -- 目标缓动：DeltaLerp 收敛到目标
+        self.x = ADT.API.DeltaLerp(self.x, self.t, TUNING.blend, dt)
+        self:_apply(self.x)
+
+        -- 接近目标即吸附并停止
+        local d = self.x - self.t; if d < 0 then d = -d end
+        if d < 0.4 then
+            self.x = clamp(self.t, 0, r)
+            self:_apply(self.x)
+            if self.a.render then self.a.render() end
+            return self:Stop()
+        end
+
+        self:_renderTick(dt)
+    end
+
+    function self:Start()
+        if self.running then return end
+        self.running = true
+        self.driver:Show()
+        self.driver:SetScript('OnUpdate', function(_, dt) self:_onUpdate(_, dt) end)
+    end
+
+    function self:Stop()
+        self.running = false
+        self.steady = false
+        self.driver:SetScript('OnUpdate', nil)
+        self.driver:Hide()
     end
 
     function self:SyncFromHost()
-        self.p = self.a.getPosition()
-        self.target = self.p
+        self.x = self.a.getPosition()
+        self.t = self.x
     end
 
     function self:SyncRange()
         local r = math.max(0, self.a.getRange())
-        local minP = -self.c.overscroll * 2
-        local maxP = r + self.c.overscroll * 2
-        if self.p < minP then self.p = minP end
-        if self.p > maxP then self.p = maxP end
-        if self.target < minP then self.target = minP end
-        if self.target > maxP then self.target = maxP end
+        if self.x > r then self.x = r end
+        if self.t > r then self.t = r end
+        if self.x < 0 then self.x = 0 end
+        if self.t < 0 then self.t = 0 end
+        self:_apply(self.x)
     end
 
-    function self:AddWheelImpulse(deltaPixels)
-        -- 直接修改目标位置（目标追踪），支持快速连击自然叠加
-        local dv = deltaPixels or 0
-        self.target = (self.target or 0) + dv
-        -- 若处于静止状态，给一个起步推进，避免“滚了但画面不动”的迟滞感
-        if not self.active then
-            local diff = self.target - self.p
-            local sign = (diff >= 0) and 1 or -1
-            local kick = math.min(18, math.abs(diff) * 0.5) -- 最高 18px，或差值的一半
-            self.p = self.p + sign * kick
-            self.firstKick = true
+    function self:ScrollTo(value)
+        local r = math.max(0, self.a.getRange())
+        local v = clamp(value or 0, 0, r)
+        if v ~= self.t then
+            self.t = v
+            self.steady = false
+            self:Start()
         end
+    end
+
+    function self:ScrollBy(delta)
+        self:ScrollTo((self.t or 0) + (delta or 0))
+    end
+
+    function self:SnapTo(value)
+        local r = math.max(0, self.a.getRange())
+        self.t = clamp(value or 0, 0, r)
+        self.x = self.t
+        self:_apply(self.x)
+        if self.a.render then self.a.render() end
+        self:Stop()
+    end
+
+    -- 连续滚动（用于“按住箭头/摇杆”）：strength ∈ [-1, 1]
+    function self:SteadyScroll(strength)
+        local s = tonumber(strength) or 0
+        if s > 0.8 then
+            self.speed = 80 + 600 * (s - 0.8)
+        elseif s < -0.8 then
+            self.speed = -80 + 600 * (s + 0.8)
+        else
+            self.speed = 100 * s
+        end
+        if self.speed > -4 and self.speed < 4 then
+            return self:StopSteadyScroll()
+        end
+        self.steady = true
         self:Start()
     end
 
-    function self:Start()
-        if self.active then return end
-        self.active = true
-        self.driver:Show()
-        self.driver:SetScript('OnUpdate', function(_, dt)
-            dt = math.min(dt or 0, 0.033)
-            if dt <= 0 then return end
-            local r = math.max(0, self.a.getRange())
-
-            -- DeltaLerp 到目标（时间无关手感）
-            local blend = self.c.blendSpeed or 0.15
-            if ADT and ADT.API and ADT.API.DeltaLerp then
-                -- 首帧已做 kick，这里正常趋近
-                self.p = ADT.API.DeltaLerp(self.p, self.target, blend, dt)
-            else
-                -- 兜底线性插值（不应该触发）
-                local t = math.min(1, blend * dt * 60)
-                self.p = (1 - t) * self.p + t * self.target
-            end
-
-            -- 呈现（软钳制）
-            self.a.setPosition(softClamp(self.p, r, self.c.overscroll))
-
-            -- 节流调用 render（如虚拟化回收）
-            if self.a.render then
-                self.renderTimer = self.renderTimer + dt
-                local interval = 1 / math.max(1, self.c.renderFPS or 30)
-                if self.renderTimer >= interval then
-                    self.renderTimer = 0
-                    self.a.render()
-                end
-            end
-
-            -- 结束条件：接近目标
-            local diff = self.p - self.target
-            if diff < 0 then diff = -diff end
-            if diff < 0.4 then
-                -- 最终吸附
-                self.p = self.target
-                self.a.setPosition(softClamp(self.p, r, self.c.overscroll))
-                if self.a.render then self.a.render() end
-                self:Stop()
-            end
-        end)
-    end
-
-    function self:Stop()
-        self.active = false
-        self.driver:SetScript('OnUpdate', nil)
-        self.driver:Hide()
+    function self:StopSteadyScroll()
+        if self.steady then
+            self.steady = false
+            self:Stop()
+        end
     end
 
     return self
@@ -164,23 +175,23 @@ function Scroll.AttachListView(view)
     local adapter = {
         getRange = function() return math.max(0, view._range or 0) end,
         getPosition = function() return view._offset or 0 end,
-        setPosition = function(p)
-            view:SetOffset(p or 0)
-        end,
+        setPosition = function(p) view:SetOffset(p or 0) end,
         render = function() view:Render() end,
-        supportsOverscroll = true,
     }
-    local scroller = CreateScroller(adapter, nil)
+    local scroller = CreateScroller(adapter)
     view._adtScroller = scroller
 
-    -- 统一鼠标滚轮 → 速度脉冲
+    -- 统一鼠标滚轮 → 目标滚动
     view:EnableMouseWheel(true)
     view:SetScript('OnMouseWheel', function(self, delta)
         if not delta or delta == 0 then return end
-        -- 与旧实现保持相对尺度：step 越大，单位冲量越大
+        -- 到边界时阻断无效滚动（与参考一致）
+        if (delta > 0 and scroller.t <= 0) or (delta < 0 and scroller.t >= (view._range or 0)) then
+            return
+        end
         local step = self._step or 30
         if IsShiftKeyDown and IsShiftKeyDown() then step = step * 2 end
-        scroller:AddWheelImpulse(-delta * step)
+        scroller:ScrollBy(-delta * step)
     end)
 
     -- 隐藏时停止
@@ -216,18 +227,21 @@ function Scroll.AttachScrollFrame(scrollFrame)
             local v = clamp(p or 0, 0, r)
             if scrollFrame.SetVerticalScroll then scrollFrame:SetVerticalScroll(v) end
         end,
-        supportsOverscroll = false,
     }
-    local scroller = CreateScroller(adapter, { overscroll = 0 })
+    local scroller = CreateScroller(adapter)
     scrollFrame._adtScroller = scroller
 
     -- 统一鼠标滚轮
     scrollFrame:EnableMouseWheel(true)
     scrollFrame:SetScript('OnMouseWheel', function(self, delta)
         if not delta or delta == 0 then return end
+        local r = 0; if scrollFrame.GetVerticalScrollRange then r = scrollFrame:GetVerticalScrollRange() or 0 end
+        if (delta > 0 and scroller.t <= 0) or (delta < 0 and scroller.t >= r) then
+            return
+        end
         local step = 32
         if IsShiftKeyDown and IsShiftKeyDown() then step = step * 2 end
-        scroller:AddWheelImpulse(-delta * step)
+        scroller:ScrollBy(-delta * step)
     end)
 
     -- 内容变更后外部可调用以校正范围

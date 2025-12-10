@@ -1,6 +1,8 @@
 <Ui xsi:schemaLocation="http://www.blizzard.com/wow/ui/..\FrameXML\UI.xsd">
     <Script file="DockCore.lua"/>
     <Script file="DockList.lua"/>
+    <!-- 左侧面板剥离为独立脚本，需在 DockUI 之前加载 -->
+    <Script file="LeftPanel.lua"/>
 
     <Frame name="ADTSettingsPanelLayoutTemplate" hidden="true" virtual="true">
         <Size x="128" y="128"/>

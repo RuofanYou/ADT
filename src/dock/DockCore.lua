@@ -41,10 +41,6 @@ function API.Lerp(a, b, t)
     return (1 - t) * a + t * b
 end
 
-function API.DeltaLerp(a, b, amount, dt)
-    return API.Lerp(a, b, API.Saturate((amount or 0.15) * (dt or 0) * 60))
-end
-
 -- 纹理锐化控制
 function API.DisableSharpening(obj)
     if not obj then return end
@@ -310,6 +306,7 @@ local function buildModules()
         categoryKeys = { 'Housing' },
         uiOrder = 5,
     }
+
 
     -- 启用 T 重置默认属性
     local moduleResetT = {

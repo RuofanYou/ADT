@@ -34,12 +34,18 @@ local CFG = {
     },
     -- 每一“行”说明（HouseEditorInstructionTemplate）的视觉参数
     Row = {
-        minHeight = 8,   -- 行最小高度（默认 45 过高）
+        -- 行高与间距需要兼顾多语言与字号缩放，否则会造成键帽文本挤压/堆叠。
+        minHeight = 22,   -- 行最小高度：与 24px 键帽高度协调
         hSpacing  = 8,    -- 左右两列之间的间距（默认 10）
-        vSpacing  = -10,    -- 不同行之间的垂直间距（容器级）
+        vSpacing  = 2,    -- 不同行之间的垂直间距（容器级）
         vPadEach  = 1,    -- 每行上下额外内边距（topPadding/bottomPadding）
-        leftPad   = 6,    -- 行左内边距
-        rightPad  = 6,    -- 行右内边距（按键气泡与行右侧距离）
+        -- 左侧与 SubPanel.Content 对齐：默认采用 DockUI 的统一左右留白（GetRightPadding），
+        -- 以便与 Header.Divider 左/右缩进保持一致；若需更贴边，可改为 0。
+        leftPad   = nil,       -- nil 表示使用 DockUI 统一留白；设为数字则显式覆盖
+        textLeftNudge = 0,     -- 仅信息文字的额外 X 偏移（单位像素，正值→向右，负值→向左）
+        textYOffset   = 0,     -- 仅信息文字的额外 Y 偏移（单位像素，正值→向上，负值→向下）
+        -- 右侧仍与 DockUI 的统一右内边距一致
+        rightPad  = 6,
     },
     -- 右侧“按键气泡”
     Control = {
@@ -47,6 +53,9 @@ local CFG = {
         bgHeight    = 22,  -- 背景九宫格的高度（默认 40）
         textPad     = 22,  -- 气泡左右总留白，原逻辑约 26
         minScale    = 0.70, -- 进一步收缩按钮文本的下限
+        -- 视觉右侧微调：按键气泡的九宫格右端存在外延/光晕，看起来会更靠边；
+        -- 为了让“视觉上的右侧留白”与左侧文本留白一致，这里额外收回 4px。
+        rightEdgeBias = 12,
     },
     -- 字体缩放
     Typography = {
@@ -64,6 +73,16 @@ local function GetDock()
     local dock = CommandDock and CommandDock.SettingsPanel
     if not dock or not dock.Header then return nil end
     return dock
+end
+
+-- 统一右侧内边距：优先读取 DockUI 的单一权威；无则回退到 CFG 的默认
+local function GetUnifiedRightPad()
+    local pad
+    if ADT and ADT.DockUI and ADT.DockUI.GetRightPadding then
+        local ok, v = pcall(ADT.DockUI.GetRightPadding)
+        if ok and type(v) == 'number' then pad = v end
+    end
+    return tonumber(pad) or (CFG.Row.rightPad or 6)
 end
 
 --
@@ -313,13 +332,17 @@ end
 local _ADT_AlignControl
 local _ADT_AnchorRowColumns
 local function _ADT_SetRowFixedWidth(row)
-    if not row or not row.SetFixedWidth then return end
+    if not row then return end
     local dock = GetDock()
     local sub = dock and (dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()))
     local content = sub and sub.Content
     local w = content and content:GetWidth()
     if w and w > 0 then
-        row:SetFixedWidth(w)
+        if row.SetFixedWidth then
+            row:SetFixedWidth(w)
+        elseif row.SetWidth then
+            row:SetWidth(w)
+        end
     end
 end
 
@@ -330,12 +353,25 @@ local function _ADT_ApplyTypographyToRow(row)
     row.spacing = CFG.Row.hSpacing
     row.topPadding = CFG.Row.vPadEach
     row.bottomPadding = CFG.Row.vPadEach
+    -- 关键：行在 VerticalLayout 容器中的水平对齐方式改为“贴左”，
+    -- 避免模板默认的 center 导致整行相对内容区水平居中，从而看起来没有左对齐弹窗。
+    row.align = "left"
     -- 关键：让整行占满父容器宽度（VerticalLayoutFrame 会据此把行宽设为可用宽度）
     row.expand = true
-    row.leftPadding  = CFG.Row.leftPad or 0
-    row.rightPadding = CFG.Row.rightPad or 0
+    -- 改为右向左布局：让“按键气泡”天然贴右并受 rightPadding 约束，从而形成与左侧一致的右留白
+    row.childLayoutDirection = "rightToLeft"
+    -- 左右边距统一：与 DockUI.GetRightPadding 保持一致，保证与 Header Divider 左/右缩进相同
+    local uniPad = GetUnifiedRightPad()
+    -- 左边距允许用 CFG.Row.leftPad 显式覆盖（单一权威）；未设置则与右侧统一留白保持一致
+    row.leftPadding  = (CFG.Row.leftPad ~= nil) and CFG.Row.leftPad or uniPad
+    row.rightPadding = uniPad
+    -- 行宽固定为 SubPanel.Content 宽度，确保 RIGHT 锚点等价于“内容区右缘”
+    _ADT_SetRowFixedWidth(row)
+
     local fs = row.InstructionText
     if fs then
+        -- 右向左布局下，将文本放在第二列，靠左展开
+        fs.layoutIndex = 2
         _ADT_ScaleFont(fs, CFG.Typography.instructionScale)
         if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
         if fs.SetJustifyH then fs:SetJustifyH("LEFT") end
@@ -347,6 +383,8 @@ local function _ADT_ApplyTypographyToRow(row)
     end
     -- 控件高度与背景高度
     if row.Control then
+        -- 右向左布局下，按键气泡放在第一列，靠右
+        if row.Control then row.Control.layoutIndex = 1 end
         _ADT_AlignControl(row)
     end
     -- 统一锚点：左列贴左、右列贴右
@@ -385,6 +423,18 @@ end
 -- 注意：仍以本文件的 CFG 为唯一权威，避免出现两套尺寸计算。
 ADT.ApplyHousingInstructionStyle = function(target)
     if not target then return end
+    -- 容器级：也同步容器的行间距，确保 ADT 自建的 VerticalLayout 容器
+    -- 与官方 Instructions 使用同一 spacing（单一权威）。
+    pcall(function()
+        if target.spacing ~= nil then
+            target.spacing = CFG.Row.vSpacing
+        end
+        -- 对布局容器，优先走 Layout/MarkDirty，保证立刻生效；
+        if target.MarkDirty then target:MarkDirty() end
+        if target.Layout then target:Layout() end
+        if target.UpdateLayout then target:UpdateLayout() end
+    end)
+
     -- 行：直接应用；容器：对其所有后代应用
     local function applyDeep(frame)
         if not frame then return end
@@ -407,6 +457,10 @@ function _ADT_FitControlText(row)
     if not contentW then return end
 
     local spacing = row.spacing or CFG.Row.hSpacing or 10
+    -- 统一权威：左右内边距都使用 row.leftPadding/rightPadding（由 _ADT_ApplyTypographyToRow 设置）
+    -- 若行上未设置，则回退到 DockUI 的统一右边距。
+    local rightPad = (row.rightPadding ~= nil) and row.rightPadding or GetUnifiedRightPad()
+    local rightBias = CFG.Control.rightEdgeBias or 0
     -- 使用文本实际宽度（不裁剪）来评估右侧可用空间
     -- 注意：使用“实际显示宽度”而非 Unbounded 宽度。
     -- Unbounded 会按完整字符串长度估算，远大于可分配宽度，
@@ -414,12 +468,18 @@ function _ADT_FitControlText(row)
     -- 导致键帽文本被 _ADT_FitControlText 过度缩小。
     local leftW = 0
     if row.InstructionText then
-        leftW = (row.InstructionText.GetWidth and row.InstructionText:GetWidth())
-              or (row.InstructionText.GetStringWidth and row.InstructionText:GetStringWidth())
-              or 0
-        leftW = math.ceil(leftW)
+        -- 优先读取“实际显示宽度”；若尚未排版（初次 /reload 可能为 0），
+        -- 则退化为字符串自然宽度，避免把右侧可用空间误算得过大导致键帽溢出。
+        leftW = (row.InstructionText.GetWidth and row.InstructionText:GetWidth()) or 0
+        if not leftW or leftW <= 2 then
+            leftW = (row.InstructionText.GetStringWidth and row.InstructionText:GetStringWidth()) or 0
+        end
+        leftW = math.ceil(leftW or 0)
     end
-    local maxRight = math.max(20, contentW - (CFG.Row.leftPad or 6) - leftW - spacing - (CFG.Row.rightPad or 6))
+    -- 可用宽度 = 内容区宽度 - 左内边距 - 左列已占宽 - 列间距 - 统一右边距
+    -- 左边距同样走单一权威：以行的 leftPadding 为准
+    local leftPad = (row.leftPadding ~= nil) and row.leftPadding or GetUnifiedRightPad()
+    local maxRight = math.max(20, contentW - leftPad - leftW - spacing - rightPad - rightBias)
     local text = row.Control.Text
     if not (text and text:IsShown()) then return end
 
@@ -430,8 +490,14 @@ function _ADT_FitControlText(row)
     if need <= maxRight then
         -- 已经适配，无需再缩放
         row._ADT_lastScale = 1.0
-        if row.Control.Background then row.Control.Background:SetWidth(need) end
-        row.Control:SetWidth(need); row.Control:SetHeight(CFG.Control.height)
+        local finalW = math.min(need, maxRight)
+        if row.Control.Background then row.Control.Background:SetWidth(finalW) end
+        row.Control:SetWidth(finalW); row.Control:SetHeight(CFG.Control.height)
+        -- 始终把文本锚到背景 RIGHT，保证靠右生长
+        local half = math.floor((pad or 0) * 0.5 + 0.5)
+        text:ClearAllPoints()
+        text:SetPoint("RIGHT", row.Control.Background, "RIGHT", -half, 0)
+        if text.SetJustifyH then text:SetJustifyH("RIGHT") end
         return
     end
 
@@ -445,14 +511,24 @@ function _ADT_FitControlText(row)
         local newSize = math.max(CFG.Typography.minFontSize, math.floor(size * targetScale + 0.5))
         text:SetFont(path, newSize, flags)
         local newW = math.ceil(text:GetStringWidth() or 0) + pad
-        if row.Control.Background then row.Control.Background:SetWidth(newW) end
-        row.Control:SetWidth(newW); row.Control:SetHeight(CFG.Control.height)
+        local finalW = math.min(newW, maxRight)
+        if row.Control.Background then row.Control.Background:SetWidth(finalW) end
+        row.Control:SetWidth(finalW); row.Control:SetHeight(CFG.Control.height)
+        local half = math.floor((pad or 0) * 0.5 + 0.5)
+        text:ClearAllPoints()
+        text:SetPoint("RIGHT", row.Control.Background, "RIGHT", -half, 0)
+        if text.SetJustifyH then text:SetJustifyH("RIGHT") end
         row._ADT_lastScale = targetScale
     else
         -- 仍需同步背景宽度，避免因先前缩放造成错位
         local w = math.ceil(text:GetStringWidth() or 0) + pad
-        if row.Control.Background then row.Control.Background:SetWidth(w) end
-        row.Control:SetWidth(w); row.Control:SetHeight(CFG.Control.height)
+        local finalW = math.min(w, maxRight)
+        if row.Control.Background then row.Control.Background:SetWidth(finalW) end
+        row.Control:SetWidth(finalW); row.Control:SetHeight(CFG.Control.height)
+        local half = math.floor((pad or 0) * 0.5 + 0.5)
+        text:ClearAllPoints()
+        text:SetPoint("RIGHT", row.Control.Background, "RIGHT", -half, 0)
+        if text.SetJustifyH then text:SetJustifyH("RIGHT") end
     end
 end
 
@@ -464,35 +540,61 @@ function _ADT_AlignControl(row)
     ctrl:SetHeight(CFG.Row.minHeight)
     ctrl.align = "center"
     if row.InstructionText then row.InstructionText.align = "center" end
+
+    -- 位置交由 HorizontalLayoutFrame 布局，不再手动 SetPoint；仅调整背景尺寸
     local bg = ctrl.Background
     if bg then
         bg:SetHeight(CFG.Control.bgHeight)
         bg:ClearAllPoints()
-        -- 与 Control 垂直居中对齐，避免上下偏移
-        bg:SetPoint("CENTER", ctrl, "CENTER", 0, 0)
+        bg:SetPoint("RIGHT", ctrl, "RIGHT", 0, 0)
     end
-    -- 键帽容器右对齐到行右边缘
-    ctrl:ClearAllPoints()
-    ctrl:SetPoint("RIGHT", row, "RIGHT", - (CFG.Row.rightPad or 6), 0)
-    -- 文本仍锚在背景中心，无需额外处理
+    if ctrl.SetClampedToScreen then ctrl:SetClampedToScreen(true) end
 end
 
 -- 左文左对齐 + 右键帽右对齐：文本占据“左边缘 → 键帽左边缘”的剩余宽度
 function _ADT_AnchorRowColumns(row)
+    -- 目标：保证左列信息文字“真正贴左”，并与右侧按键气泡保持固定间距。
+    -- 背景：切换为 rightToLeft 子布局后，HorizontalLayout 会按“未约束文本宽度”的自然宽度
+    -- 放置左列文本，可能把文本起点推到父容器之外（表现为左列跑到面板外）。
+    -- 做法：让左列脱离 HorizontalLayout 的水平定位，用锚点限定左右边界。
     if not row then return end
-    local fs = row.InstructionText
-    local ctrl = row.Control
-    local spacing = row.spacing or CFG.Row.hSpacing or 8
-    if fs and fs.ClearAllPoints and fs.SetPoint then
-        fs:ClearAllPoints()
-        fs:SetPoint("LEFT", row, "LEFT", CFG.Row.leftPad or 6, 0)
-        if ctrl and ctrl.IsShown and ctrl:IsShown() then
-            fs:SetPoint("RIGHT", ctrl, "LEFT", -spacing, 0)
+    local fs, ctrl = row.InstructionText, row.Control
+    if not fs then return end
+
+    -- 左列统一左对齐/垂直居中
+    if fs.SetJustifyH then fs:SetJustifyH("LEFT") end
+    if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
+
+    -- 行级权威：左内边距与列间距
+    local leftPad = (row.leftPadding ~= nil) and row.leftPadding or GetUnifiedRightPad()
+    local spacing = (row.spacing ~= nil) and row.spacing or (CFG.Row.hSpacing or 8)
+    local xNudge  = CFG.Row.textLeftNudge or 0
+    local yNudge  = CFG.Row.textYOffset or 0
+
+    -- 锚点解耦（仅信息文字）：
+    -- - 使用“行自身(row)”作为参照，确保与文本相同的有效缩放，避免跨层级缩放差异带来的坐标偏移；
+    -- - 左锚点：row 左缘 + 行左内边距；
+    -- - 右锚点：若有键帽则吸到键帽左侧，否则用 row 右缘 - 行右内边距；
+    -- - 不再显式 SetWidth(0)，由左右锚点推导宽度，避免首帧 0 宽导致的挤压。
+    fs:ClearAllPoints(); fs.ignoreInLayout = true
+    do
+        local leftAnchor  = row
+        local rightAnchor = row
+        local rightPad = (row.rightPadding ~= nil) and row.rightPadding or GetUnifiedRightPad()
+
+        fs:SetPoint("LEFT",  leftAnchor,  "LEFT",  leftPad + xNudge, yNudge)
+        if ctrl and ctrl:IsShown() and (ctrl:GetWidth() or 0) > 0 then
+            fs:SetPoint("RIGHT", ctrl, "LEFT", -spacing, yNudge)
         else
-            fs:SetPoint("RIGHT", row, "RIGHT", - (CFG.Row.rightPad or 6), 0)
+            fs:SetPoint("RIGHT", rightAnchor, "RIGHT", -rightPad, yNudge)
         end
-        if fs.SetJustifyH then fs:SetJustifyH("LEFT") end
+        -- 不设置 SetWidth；让系统根据左右锚点确定宽度。
     end
+
+    -- 单行展示，过长自动截断（不换行）。注意此处宽度已由左右锚点保证为“行内剩余宽度”，
+    -- 不需要再用 SetWidth 干预，避免被 HorizontalLayout 尚未完成时序影响。
+    if fs.SetWordWrap then fs:SetWordWrap(false) end
+    if fs.SetMaxLines then fs:SetMaxLines(1) end
 end
 
 local function _ADT_RestoreTypography(instr)
@@ -535,88 +637,24 @@ local function GetPlacedDecorListFrame()
     return list
 end
 
-local function AnchorPlacedList()
+local function AnchorPlacedList() return end
+local function EnsurePlacedListHooks() return end
+
+-- 说明：12.0 后不再强制打开“放置的装饰”清单，
+-- 但文件中仍有延迟调用点引用 ShowPlacedListIfExpertActive。
+-- 为避免 C_Timer.After 传入 nil 回调导致报错，这里提供温和实现：
+-- 仅在清单已由官方逻辑显示时进行一次锚点处理，不改变其显示状态。
+local function ShowPlacedListIfExpertActive()
     local list = GetPlacedDecorListFrame()
     if not list then return end
-    local dock = GetDock()
-    local sub = dock and (dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()))
-    if not sub then return end
-
-    -- 锚到我们 SubPanel 的下方，左右对齐，形成“相切衔接”
-    list:ClearAllPoints()
-    list:SetPoint("TOPLEFT",  sub, "BOTTOMLEFT",  0, -6)
-    list:SetPoint("TOPRIGHT", sub, "BOTTOMRIGHT", 0, -6)
-    list:SetClampedToScreen(true)
-
-    Debug("[PlacedList] Anchor -> below SubPanel, w="..tostring(sub:GetWidth()))
-
-    -- 禁止玩家拖动：去掉 DragBar 功能并锁定 movable
-    pcall(function()
-        if list.DragBar then
-            list.DragBar:Hide()
-            list.DragBar:EnableMouse(false)
-            if list.DragBar.SetOnDragStartCallback then
-                list.DragBar:SetOnDragStartCallback(function() return false end)
-            end
-            if list.DragBar.SetOnDragStopCallback then
-                list.DragBar:SetOnDragStopCallback(function() return false end)
-            end
-            list.DragBar:SetScript("OnDragStart", nil)
-            list.DragBar:SetScript("OnDragStop", nil)
-        end
-        if list.SetMovable then list:SetMovable(false) end
-        -- 一些模板还会在自身注册拖拽，这里兜底移除
-        if list.RegisterForDrag then list:RegisterForDrag() end
-        list:SetScript("OnDragStart", nil)
-        list:SetScript("OnDragStop", nil)
-    end)
-
-    -- 禁用关闭按钮：隐藏并去掉点击响应（仍可通过原生“清单按钮”开/关）
-    if list.CloseButton then
-        list.CloseButton:Hide()
-        if list.CloseButton.Disable then list.CloseButton:Disable() end
-        list.CloseButton:EnableMouse(false)
-        list.CloseButton:SetScript("OnClick", nil)
+    if not IsHouseEditorShown() then return end
+    if list.IsShown and list:IsShown() then
+        -- 仅在已显示时尝试贴合定位；若 AnchorPlacedList 仍为占位实现，则无副作用。
+        AnchorPlacedList()
     end
-
-    list._ADT_anchored = true
-end
-
-local function EnsurePlacedListHooks()
-    local list = GetPlacedDecorListFrame()
-    if not list or list._ADT_hooksInstalled then return end
-
-    -- 在面板显示/尺寸变化时保持贴合
-    list:HookScript("OnShow", function() Debug("[PlacedList] OnShow"); AnchorPlacedList() end)
-    list:HookScript("OnSizeChanged", function() AnchorPlacedList() end)
-    local dock = GetDock()
-    local sub = dock and (dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()))
-    if sub and sub.HookScript then
-        sub:HookScript("OnSizeChanged", function() if list:IsShown() then AnchorPlacedList() end end)
-    end
-    list._ADT_hooksInstalled = true
 end
 
 -- 判断是否处于“专家编辑模式”
-local function IsExpertModeActive()
-    local hf = _G.HouseEditorFrame
-    if not hf then return false end
-    local active = GetActiveModeFrame()
-    if active and hf.ExpertDecorModeFrame and active == hf.ExpertDecorModeFrame then
-        return true
-    end
-    return hf.ExpertDecorModeFrame and hf.ExpertDecorModeFrame:IsShown() or false
-end
-
--- 若当前为专家模式，则强制显示清单并贴合
-local function ShowPlacedListIfExpertActive()
-    if not IsExpertModeActive() then Debug("[PlacedList] Not expert mode; skip show"); return end
-    local list = GetPlacedDecorListFrame()
-    if not list then return end
-    if not list:IsShown() then Debug("[PlacedList] Auto-Show"); list:Show() else Debug("[PlacedList] Already shown") end
-    AnchorPlacedList()
-end
-
 -- 绑定到前向声明的同名局部变量，而不是重新声明新的 local
 function IsHouseEditorShown()
     if _G.HouseEditorFrame_IsShown then
@@ -755,14 +793,17 @@ local function AdoptInstructionsIntoDock()
         pcall(ADT.Housing.ReparentHoverHUD, ADT.Housing, parent)
     end
 
-    -- 保持与 HouseEditor 同样的像素感：忽略父缩放并以 1.0 绘制
-    if instr.SetIgnoreParentScale then instr:SetIgnoreParentScale(true) end
-    if instr.SetScale then instr:SetScale(1.0) end
+    -- 改为跟随父容器缩放，避免与 Dock 子面板产生坐标系不一致导致右侧越界
+    if instr.SetIgnoreParentScale then instr:SetIgnoreParentScale(false) end
     instr:Show()
     -- 尺寸变化：仅排队重新计算高度，避免递归
     if instr.HookScript then
         instr:HookScript("OnSizeChanged", function()
-            if AdoptState and AdoptState.instr then _ADT_QueueResize() end
+            if AdoptState and AdoptState.instr then
+                -- 尝试将容器（如 HoverHUD 的 VerticalLayout）也拉伸至内容区宽度，避免初始宽度偏小导致右侧错位
+                for _, ch in ipairs({instr:GetChildren()}) do _ADT_SetRowFixedWidth(ch) end
+                _ADT_QueueResize()
+            end
         end)
         instr:HookScript("OnShow", function()
             if AdoptState and AdoptState.instr then _ADT_ApplyTypography(AdoptState.instr); _ADT_QueueResize() end
@@ -772,6 +813,10 @@ local function AdoptInstructionsIntoDock()
     -- 初次排队计算；说明内容在不同模式会异步刷新，多给一帧稳定时间
     _ADT_ApplyTypography(instr)
     _ADT_QueueResize()
+    -- 触发一次判空自动隐藏（如果说明被我们全部隐藏，或 HoverHUD 也不可见）
+    if ADT and ADT.DockUI and ADT.DockUI.EvaluateSubPanelAutoHide then
+        C_Timer.After(0.06, ADT.DockUI.EvaluateSubPanelAutoHide)
+    end
     -- 针对登录后立刻切到“专家模式”时偶发未缩放：
     -- 某些行会在后续一两帧由暴雪代码异步刷新（UpdateAllVisuals/UpdateLayout），
     -- 我们这里做一次短暂的“后抖动重应用”，确保样式最终一致。
@@ -834,8 +879,6 @@ local function TrySetupHooks()
             ShowBudgetInHeader();
             C_Timer.After(0, AdoptInstructionsIntoDock)
             C_Timer.After(0.1, AdoptInstructionsIntoDock)
-            C_Timer.After(0, EnsurePlacedListHooks)
-            C_Timer.After(0.05, AnchorPlacedList)
             C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end)
         hooksecurefunc(HouseEditorFrameMixin, "OnHide", function()
@@ -843,18 +886,10 @@ local function TrySetupHooks()
         end)
         hooksecurefunc(HouseEditorFrameMixin, "OnActiveModeChanged", function()
             C_Timer.After(0, AdoptInstructionsIntoDock)
-            C_Timer.After(0, EnsurePlacedListHooks)
-            C_Timer.After(0.05, AnchorPlacedList)
             C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end)
         -- 专家模式 Frame 本体 OnShow：这是最稳的时点，直接确保展示与贴合
-        if _G.HouseEditorExpertDecorModeMixin then
-            hooksecurefunc(HouseEditorExpertDecorModeMixin, "OnShow", function(self)
-                local list = self and self.PlacedDecorList
-                if list then list:Show() end
-                EnsurePlacedListHooks(); AnchorPlacedList()
-            end)
-        end
+        -- 不再 hook 专家模式以强制打开清单（保持官方原样）
         -- 进入专家模式时自动显示官方“放置的装饰”清单（并在 OnShow 时贴合到 Dock.SubPanel 下缘）
         -- 对行控件进行二次清理：若设置了 _ADTForceHideControl 或检测到“选择装饰”文本，则强制隐藏
         if _G.HouseEditorInstructionMixin then
@@ -910,8 +945,9 @@ local function TrySetupHooks()
                 _ADT_ApplyTypography(self); _ADT_QueueResize()
             end)
             hooksecurefunc(HouseEditorInstructionsContainerMixin, "UpdateLayout", function(self)
-                -- UpdateLayout 完成后，右侧键帽宽度可能变化，再走一次贴合
+                -- UpdateLayout 完成后，右侧键帽宽度可能变化；对全树再次套用统一样式，确保孙级（HoverHUD）也一致。
                 if self then
+                    _ADT_ApplyTypography(self)
                     for _, ch in ipairs({self:GetChildren()}) do _ADT_SetRowFixedWidth(ch); _ADT_AlignControl(ch); _ADT_AnchorRowColumns(ch); _ADT_FitControlText(ch) end
                 end
                 _ADT_QueueResize()
@@ -939,7 +975,7 @@ if EventRegistry and EventRegistry.RegisterCallback then
                 EL._adoptTicker = C_Timer.NewTicker(0.25, function(t)
                     attempts = attempts + 1
                     if not IsHouseEditorShown() then t:Cancel(); EL._adoptTicker=nil; return end
-                    AdoptInstructionsIntoDock(); EnsurePlacedListHooks(); AnchorPlacedList(); ShowPlacedListIfExpertActive()
+                    AdoptInstructionsIntoDock()
                     if AdoptState.instr then t:Cancel(); EL._adoptTicker=nil; Debug("轮询采纳成功") return end
                     if attempts >= 20 then t:Cancel(); EL._adoptTicker=nil; Debug("轮询超时，未能采纳 Instructions") end
                 end)
@@ -961,8 +997,6 @@ EL:RegisterEvent("PLAYER_LOGIN")
 EL:SetScript("OnEvent", function(_, event, arg1)
     if event == "HOUSE_EDITOR_MODE_CHANGED" then
         C_Timer.After(0, AdoptInstructionsIntoDock)
-        C_Timer.After(0, EnsurePlacedListHooks)
-        C_Timer.After(0.05, AnchorPlacedList)
         C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         C_Timer.After(0.05, _ADT_QueueResize)
         C_Timer.After(0.15, _ADT_QueueResize)
@@ -974,13 +1008,13 @@ EL:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "ADDON_LOADED" and (arg1 == "Blizzard_HouseEditor" or arg1 == ADDON_NAME) then
         TrySetupHooks()
         if IsHouseEditorShown() then
-            ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0, EnsurePlacedListHooks); C_Timer.After(0.05, AnchorPlacedList); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+            ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end
     elseif event == "PLAYER_LOGIN" then
         TrySetupHooks()
         C_Timer.After(0.5, function()
             if IsHouseEditorShown() then
-                ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0, EnsurePlacedListHooks); C_Timer.After(0.05, AnchorPlacedList); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+                ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
             end
         end)
     end
@@ -990,6 +1024,6 @@ end)
 C_Timer.After(1.0, function()
     TrySetupHooks()
     if IsHouseEditorShown() then
-        ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0, EnsurePlacedListHooks); C_Timer.After(0.05, AnchorPlacedList); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+        ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
     end
 end)

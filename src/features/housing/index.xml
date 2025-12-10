@@ -11,15 +11,22 @@
     <Script file="Housing_BlizzardGraft.lua"/>
 
     <!-- 指示条模板（使用 ADT_ 前缀避免冲突） -->
-    <Frame name="ADT_HouseEditorInstructionTemplate" virtual="true">
+    <!-- 关键：继承 HorizontalLayoutFrame，让行具备 Layout 能力，与官方行同语义 -->
+    <Frame name="ADT_HouseEditorInstructionTemplate" inherits="HorizontalLayoutFrame" virtual="true">
         <KeyValues>
             <KeyValue key="minimumHeight" value="45" type="number"/>
             <KeyValue key="spacing" value="10" type="number"/>
+            <KeyValue key="align" value="center" type="string"/>
         </KeyValues>
         <Size x="45" y="45"/>
         <Layers>
             <Layer level="ARTWORK">
-                <FontString parentKey="InstructionText" inherits="GameFontHighlight" justifyH="RIGHT" wordwrap="false">
+                <!-- 与官方 HouseEditorInstructionTemplate 保持一致的基准字体（再由样式缩放） -->
+                <FontString parentKey="InstructionText" inherits="GameFontHighlightLarge" justifyH="RIGHT" wordwrap="false">
+                    <KeyValues>
+                        <KeyValue key="expand" value="true" type="boolean"/>
+                        <KeyValue key="layoutIndex" value="1" type="number"/>
+                    </KeyValues>
                     <Size x="0" y="0"/>
                     <Anchors>
                         <Anchor point="RIGHT" x="-55"/>
@@ -35,6 +42,9 @@
         </Layers>
         <Frames>
             <Frame parentKey="Control">
+                <KeyValues>
+                    <KeyValue key="layoutIndex" value="2" type="number"/>
+                </KeyValues>
                 <Size x="45" y="45"/>
                 <Anchors>
                     <Anchor point="RIGHT" x="0"/>
@@ -42,7 +52,8 @@
                 <Layers>
                     <Layer level="BACKGROUND">
                         <Texture parentKey="Background" useAtlasSize="false" atlas="housing-hotkey-icon-key-9slice" texelSnappingBias="0.0" snapToPixelGrid="false" hidden="true">
-                            <Size x="54" y="30"/>
+                            <!-- 与官方模板一致的默认高度（我们会在运行时用 CFG 覆盖） -->
+                            <Size x="54" y="40"/>
                             <Anchors>
                                 <Anchor point="RIGHT" x="0" y="0"/>
                             </Anchors>
@@ -55,7 +66,8 @@
                                 <Anchor point="RIGHT" x="0" y="0"/>
                             </Anchors>
                         </Texture>
-                        <FontString parentKey="Text" inherits="GameFontHighlight" hidden="true">
+                        <!-- 与官方模板一致的“键帽文本”基准字体（Number16Font） -->
+                        <FontString parentKey="Text" inherits="Number16Font" hidden="true">
                             <Size x="0" y="0"/>
                             <Anchors>
                                 <Anchor point="CENTER" relativeKey="$parent.Background"/>

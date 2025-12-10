@@ -206,7 +206,7 @@ function ListViewMixin:OnMouseWheel(delta)
     if scroller then
         local step = self._step or 30
         if IsShiftKeyDown and IsShiftKeyDown() then step = step * 2 end
-        scroller:AddWheelImpulse(-delta * step)
+        scroller:ScrollBy(-delta * step)
     else
         -- 未附加时退化为立即滚动
         self:ScrollBy(-(delta or 0) * (self._step or 30))

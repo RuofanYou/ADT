@@ -17,7 +17,8 @@ local DisableSharpening = API.DisableSharpening
 
 -- 临时应急：将左侧分类栏改为独立弹窗（禁用滑出动效），定位与右侧面板同级，确保点击优先级。
 -- 复原时将此常量改回 false 即可。
-local USE_STATIC_LEFT_PANEL = true
+-- 关闭强制静态左窗（统一交由 LeftPanel.lua 构建并管理层级/命中）。
+local USE_STATIC_LEFT_PANEL = (ADT.DockLeft and ADT.DockLeft.IsStatic and ADT.DockLeft.IsStatic()) or false
 
 local Def = {
     BackgroundFile = "Interface/AddOns/AdvancedDecorationTools/Art/CommandDock/CommonFrameWithHeader.tga", -- [NEW] HD Background
@@ -61,8 +62,8 @@ local Def = {
     HighlightRightBias = -2,
     -- 右侧停靠相关：与屏幕右缘留白
     ScreenRightMargin = 0,
-    -- 为了与左窗九宫格背景的右侧 +4px 外延对齐，这里默认取 -4 让视觉上“刚好相切不相交”。
-    StaticRightAttachOffset = -4,
+    -- 静态左窗与右侧面板左边框的对齐微调：0 表示严格相切，无重叠
+    StaticRightAttachOffset = 0,
     LeftPanelPadTop = 14,
     LeftPanelPadBottom = 14,
 }
@@ -81,46 +82,7 @@ ADT.DockUI.GetRightPadding = GetRightPadding
 -- 说明：不再使用按语种的固定值；改为测量当前语言下所有分类标题的像素宽度，
 --       再加上控件自身的左右留白，得到最小充分宽度。
 local function ComputeSideSectionWidth()
-    local labelOffset = 9                -- 与 CategoryButton 的 labelOffset 保持一致
-    local meterParent = MainFrame or UIParent
-    -- 复用隐藏量尺，避免频繁创建对象
-    if not meterParent._ADT_TextMeter then
-        local m = meterParent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        m:Hide()
-        meterParent._ADT_TextMeter = m
-    end
-    local M = meterParent._ADT_TextMeter
-
-    local function textWidth(text)
-        M:SetText(text or "")
-        local w = math.ceil(M:GetStringWidth() or 0)
-        M:SetText("")
-        return w
-    end
-
-    local maxLabel = 0
-    -- 直接用数据源的分类名称测量，避免按钮本身宽度限制导致的“被截断宽度”。
-    if CommandDock and CommandDock.GetSortedModules then
-        local list = CommandDock:GetSortedModules() or {}
-        for _, cat in ipairs(list) do
-            maxLabel = math.max(maxLabel, textWidth(cat.categoryName))
-        end
-    end
-    -- 兜底：如果数据源不可用，再尝试已创建的按钮标签
-    if maxLabel == 0 and MainFrame and MainFrame.primaryCategoryPool and MainFrame.primaryCategoryPool.EnumerateActive then
-        for _, btn in MainFrame.primaryCategoryPool:EnumerateActive() do
-            if btn and btn.Label and btn.Label.GetText then
-                maxLabel = math.max(maxLabel, textWidth(btn.Label:GetText() or ""))
-            end
-        end
-    end
-
-    -- 计算按钮与侧栏总宽度：仅按文本宽度与左右留白；
-    -- 需求变更：取消一切“右侧计数”预留，保证左右视觉对称。
-    local buttonWidth = maxLabel + 2*labelOffset
-    local sideWidth = buttonWidth + 2*Def.WidgetGap
-    -- 返回整数像素，避免锯齿
-    return API.Round(sideWidth)
+    return (ADT.DockLeft and ADT.DockLeft.ComputeSideSectionWidth and ADT.DockLeft.ComputeSideSectionWidth()) or 180
 end
 
 -- 导出侧栏宽度计算（单一权威）
@@ -192,6 +154,11 @@ do
             ADT.DebugPrint(string.format("[DockStack] %02d %s strata=%s lvl=%d mouse=%d", i, tostring(name), tostring(s), l, m))
         end
     end
+    -- 便捷命令：/adtdockstack 打印鼠标命中栈
+    SLASH_ADT_DOCKSTACK1 = "/adtdockstack"
+    SlashCmdList["ADT_DOCKSTACK"] = function()
+        if ADT and ADT.DockUI and ADT.DockUI.Stack then ADT.DockUI.Stack() end
+    end
 end
 
 local MainFrame = CreateFrame("Frame", nil, UIParent, "ADTSettingsPanelLayoutTemplate")
@@ -209,11 +176,13 @@ do
     BorderFrame:SetAllPoints(MainFrame)
     BorderFrame:SetFrameLevel(MainFrame:GetFrameLevel() + 100) -- 确保边框在最上层
     MainFrame.BorderFrame = BorderFrame
+    BorderFrame:EnableMouse(false) -- 仅视觉，不拦截鼠标
     
     -- 使用 housing-wood-frame Atlas 九宫格边框
     local border = BorderFrame:CreateTexture(nil, "OVERLAY")
-    border:SetPoint("TOPLEFT", BorderFrame, "TOPLEFT", -4, 4)
-    border:SetPoint("BOTTOMRIGHT", BorderFrame, "BOTTOMRIGHT", 4, -4)
+    -- 让右侧边框严格贴合自身容器，避免“向左溢出”覆盖左窗
+    border:SetPoint("TOPLEFT", BorderFrame, "TOPLEFT", 0, 0)
+    border:SetPoint("BOTTOMRIGHT", BorderFrame, "BOTTOMRIGHT", 0, 0)
     border:SetAtlas("housing-wood-frame")
     border:SetTextureSliceMargins(16, 16, 16, 16)
     border:SetTextureSliceMode(Enum.UITextureSliceMode.Stretched)
@@ -235,6 +204,7 @@ local CategoryHighlight
 local ActiveCategoryInfo = {}
 
 -- 动态收敛左侧分类容器高度
+--[[ 已迁移至 LeftPanel.lua
 function MainFrame:UpdateLeftSectionHeight()
     local LeftSection = self.LeftSection
     if not LeftSection then return end
@@ -246,7 +216,7 @@ function MainFrame:UpdateLeftSectionHeight()
     local catH = Def.CategoryHeight or Def.ButtonSize or 28
     local height = math.max(catH, topPad + n * catH + topPad)
     LeftSection:SetHeight(height)
-end
+end]]
 
 -- 启用“上下布局 + 顶部标签”
 local USE_TOP_TABS = false
@@ -643,6 +613,7 @@ do
 end
 
 
+--[[ LeftPanel/SearchBox：已迁移到 src/dock/LeftPanel.lua
 local CreateSearchBox
 do
     local StringTrim = API.StringTrim
@@ -686,9 +657,10 @@ do
 
         return f
     end
-end
+end]]
 
 
+--[[ LeftPanel/CategoryButton：已迁移到 src/dock/LeftPanel.lua
 local CreateCategoryButton
 do
     local CategoryButtonMixin = {}
@@ -827,7 +799,7 @@ do
 
         return f
     end
-end
+end]]
 
 
 local OptionToggleMixin = {}
@@ -1281,6 +1253,7 @@ end
 -- 子面板的实现已迁移至 src/dock/SubPanel.lua
 
 
+--[[ LeftPanel/SelectionHighlight：已迁移到 src/dock/LeftPanel.lua
 local CreateSelectionHighlight
 do
     local SelectionHighlightMixin = {}
@@ -1333,39 +1306,11 @@ do
 
         return f
     end
-end
+end]]
 
 
 do  -- Left Section
-    function MainFrame:HighlightButton(button)
-        if not CategoryHighlight then return end
-        CategoryHighlight:Hide()
-        CategoryHighlight:ClearAllPoints()
-        if button then
-            if USE_STATIC_LEFT_PANEL and button.Label and button.Label.GetStringWidth then
-                local padX = tonumber(Def.HighlightTextPadX) or 6
-                local strW = button.Label:GetStringWidth() or 0
-                -- 以文本中心为基准，左右各 padX：真正的几何对称
-                local w = math.ceil(strW) + 2*padX
-                local cx = math.floor(strW * 0.5 + 0.5)
-                CategoryHighlight:ClearAllPoints()
-                CategoryHighlight:SetPoint("CENTER", button.Label, "LEFT", cx, 0)
-                CategoryHighlight:SetWidth(w)
-            else
-                local labelOffset = tonumber(button.labelOffset) or 9
-                local textPad = tonumber(Def.HighlightTextPaddingLeft) or 10
-                local insetLeft = math.max(0, labelOffset - textPad)
-                local insetRight = tonumber(Def.HighlightRightInset) or 2
-                CategoryHighlight:SetPoint("LEFT", button, "LEFT", insetLeft, 0)
-                CategoryHighlight:SetPoint("RIGHT", button, "RIGHT", -insetRight, 0)
-            end
-            CategoryHighlight:SetParent(button)
-            local minH = tonumber(Def.HighlightMinHeight) or 18
-            local h = math.max(minH, (Def.CategoryHeight or Def.ButtonSize or 28) - 2)
-            CategoryHighlight:SetHeight(h)
-            CategoryHighlight:FadeIn()
-        end
-    end
+    -- 高亮逻辑由 LeftPanel 注入到 MainFrame；此处不再实现
 
     -- 运行时根据语言调整左侧栏宽度，并联动更新相关控件尺寸
     function MainFrame:_ApplySideWidth(sideWidth)
@@ -1750,13 +1695,13 @@ do  -- Central
 
         self.firstModuleData = cat.modules[1]
         self.ModuleTab.ScrollView:SetContent(content, false)
-        if USE_STATIC_LEFT_PANEL and self.UpdateStaticLeftPlacement then C_Timer.After(0, function() self:UpdateStaticLeftPlacement() end) end
+        if (ADT.DockLeft and ADT.DockLeft.IsStatic and ADT.DockLeft.IsStatic()) and self.UpdateStaticLeftPlacement then C_Timer.After(0, function() self:UpdateStaticLeftPlacement() end) end
         if ADT and ADT.DebugPrint then ADT.DebugPrint("[SettingsPanel] ShowSettingsCategory("..tostring(categoryKey)..") items="..tostring(#content)) end
         if self.firstModuleData then
             self:ShowFeaturePreview(self.firstModuleData)
         end
         if self.UpdateAutoWidth then self:UpdateAutoWidth() end
-        if USE_STATIC_LEFT_PANEL and self.UpdateStaticLeftPlacement then C_Timer.After(0, function() self:UpdateStaticLeftPlacement() end) end
+        if (ADT.DockLeft and ADT.DockLeft.IsStatic and ADT.DockLeft.IsStatic()) and self.UpdateStaticLeftPlacement then C_Timer.After(0, function() self:UpdateStaticLeftPlacement() end) end
     end
 
     function MainFrame:RefreshCategoryList()
@@ -1767,11 +1712,15 @@ do  -- Central
             categoryButton:SetCategory(categoryInfo.key, categoryInfo.categoryName, categoryInfo.anyNewFeature)
             categoryButton:SetPoint("TOPLEFT", self.LeftSlideContainer, self.primaryCategoryPool.offsetX, self.primaryCategoryPool.leftListFromY - (index - 1) * (Def.CategoryHeight or Def.ButtonSize))
             -- 根据需求取消临时板/最近放置的数量角标显示，避免不必要的数据遍历
+            if ADT and ADT.DebugPrint and ADT.IsDebugEnabled and ADT.IsDebugEnabled() then
+                local lx, ly = categoryButton:GetLeft(), categoryButton:GetTop()
+                ADT.DebugPrint(string.format("[DockLeft] acquire #%d key=%s x=%.1f y=%.1f", index, tostring(categoryInfo.key), lx or -1, ly or -1))
+            end
         end
         -- 动态收敛左侧容器高度：根据分类数量计算
         self:UpdateLeftSectionHeight()
         -- 静态模式下，同步一次弹窗高度与位置
-        if USE_STATIC_LEFT_PANEL and self.UpdateStaticLeftPlacement then self:UpdateStaticLeftPlacement() end
+        if (ADT.DockLeft and ADT.DockLeft.IsStatic and ADT.DockLeft.IsStatic()) and self.UpdateStaticLeftPlacement then self:UpdateStaticLeftPlacement() end
         -- 保持现有宽度；语言切换时由 RefreshLanguageLayout(true) 统一处理动画与宽度
     end
 
@@ -2023,8 +1972,12 @@ local function CreateUI()
     
     -- 禁止玩家拖动移动（固定右侧停靠）
     MainFrame:SetMovable(false)
-    MainFrame:EnableMouse(true)
-    MainFrame:RegisterForDrag() -- 清空注册
+    -- 修复：主框体不吃鼠标，避免其“透明区域”向左越界拦截 LeftPanel 点击。
+    -- 世界交互的屏蔽改由局部 MouseBlocker 负责（仅覆盖右侧可见区域）。
+    MainFrame:EnableMouse(false)
+    if MainFrame.SetPropagateMouseClicks then MainFrame:SetPropagateMouseClicks(false) end
+    if MainFrame.SetPropagateMouseMotion then MainFrame:SetPropagateMouseMotion(false) end
+    MainFrame:RegisterForDrag() -- 清空注册（保持无拖拽）
     MainFrame:SetScript("OnDragStart", nil)
     MainFrame:SetScript("OnDragStop", nil)
     MainFrame:SetClampedToScreen(true)
@@ -2034,8 +1987,8 @@ local function CreateUI()
         local headerHeight = 68
         local Header = CreateFrame("Frame", nil, MainFrame)
         MainFrame.Header = Header
-        -- Header 仅覆盖右侧区域（不延伸到左侧分类区）
-        Header:SetPoint("TOPLEFT", MainFrame, "TOPLEFT", sideSectionWidth, 0)
+        -- Header 仅覆盖右侧区域（不延伸到左侧分类区），并且左边始终贴合 LeftSection 的右缘
+        Header:SetPoint("TOPLEFT", MainFrame.LeftSection or MainFrame, MainFrame.LeftSection and "TOPRIGHT" or "TOPLEFT", 0, 0)
         Header:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
         Header:SetHeight(headerHeight)
 
@@ -2065,6 +2018,21 @@ local function CreateUI()
             MainFrame.RightSection:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
             MainFrame.RightSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
             MainFrame.RightSection:SetWidth(0)
+        end
+
+        -- 仅覆盖右侧区域的鼠标阻挡层（不延伸到 LeftPanel 区域）。
+        if not MainFrame.MouseBlocker then
+            local b = CreateFrame("Frame", nil, MainFrame)
+            MainFrame.MouseBlocker = b
+            b:EnableMouse(true)
+            b:EnableMouseMotion(true)
+            b:EnableMouseWheel(true)
+            b:ClearAllPoints()
+            -- 左边界从 LeftSection 右侧开始，不会覆盖左侧分类或外部 LeftPanel。
+            b:SetPoint("TOPLEFT", MainFrame.LeftSection or Header, MainFrame.LeftSection and "TOPRIGHT" or "TOPLEFT", 0, 0)
+            b:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
+            b:SetFrameStrata(MainFrame:GetFrameStrata())
+            b:SetFrameLevel((MainFrame:GetFrameLevel() or 0) + 1)
         end
     end
 
@@ -2150,6 +2118,28 @@ local function CreateUI()
         if targetTotal > maxTotal then targetTotal = maxTotal end
         self:SetWidth(targetTotal)
         self.sideSectionWidth = sidew
+
+        -- 同步中央区域内各条目实际宽度
+        -- 之前仅改变了 MainFrame 的总宽，而 ScrollView 内的对象仍保留创建时的旧宽，
+        -- 会导致 Label 的锚点虽到右侧，但父按钮过窄，从而出现“启用 C...”之类的省略号。
+        -- 这里在调整完总宽后，按 CentralSection 的最新可用宽度批量更新各模板对象尺寸。
+        local CentralSection = self.CentralSection
+        if CentralSection and self.ModuleTab and self.ModuleTab.ScrollView then
+            local newWidth = tonumber(CentralSection:GetWidth()) or 0
+            newWidth = math.floor(newWidth - margin + 0.5)
+            if newWidth > 0 then
+                self.centerButtonWidth = newWidth
+                local ScrollView = self.ModuleTab.ScrollView
+                if ScrollView.CallObjectMethod then
+                    ScrollView:CallObjectMethod("Entry", "SetWidth", newWidth)
+                    ScrollView:CallObjectMethod("Header", "SetWidth", newWidth)
+                    ScrollView:CallObjectMethod("DecorItem", "SetWidth", newWidth)
+                end
+                -- 触发一次强制重渲染，确保可见对象立即使用新宽度
+                if ScrollView.OnSizeChanged then ScrollView:OnSizeChanged(true) end
+            end
+        end
+
         -- 更新锚点确保紧贴右缘
         self:ApplyDockPlacement()
     end
@@ -2160,6 +2150,12 @@ local function CreateUI()
     MainFrame.FrameContainer:EnableMouseMotion(false)
     MainFrame.FrameContainer:EnableMouseWheel(true)
     MainFrame.FrameContainer:SetScript("OnMouseWheel", function(self, delta) end)
+    -- 模板中带的 TabButtonContainer 默认可交互；我们未使用，显式关闭避免遮挡左窗
+    if MainFrame.TabButtonContainer then
+        MainFrame.TabButtonContainer:Hide()
+        MainFrame.TabButtonContainer:EnableMouse(false)
+        MainFrame.TabButtonContainer:EnableMouseMotion(false)
+    end
 
 
 
@@ -2186,14 +2182,19 @@ local function CreateUI()
     CentralSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
 
 
-    -- LeftSection：恢复左侧分类 + 右侧内容的左右布局
+    -- LeftSection：改为调用 LeftPanel 模块统一构建
     do
+        local DockLeft = ADT.DockLeft
+        if DockLeft and DockLeft.Build then
+            DockLeft.Build(MainFrame, sideSectionWidth)
+        end
+        --[=[ 原内联实现已迁移到 src/dock/LeftPanel.lua，以下为旧代码（被注释，避免功能受影响）
         -- 暂时隐藏搜索功能，保留代码方便以后恢复
         --[[
         SearchBox = CreateSearchBox(Tab1)
         SearchBox:SetPoint("TOPLEFT", LeftSection, "TOPLEFT", Def.WidgetGap, -Def.WidgetGap)
         SearchBox:SetWidth(sideSectionWidth - 2 * Def.WidgetGap)
-        --]]
+        --]=]
 
 
         -- 隐藏搜索框后，分类列表从顶部开始
@@ -2438,42 +2439,8 @@ local function CreateUI()
             end
         end
 
-        -- 点击代理：在极端情况下（上层框体抢占）用顶层透明按钮代点
-        local function EnsureProxy(btn)
-            if not btn then return end
-            if btn._proxy and btn._proxy.GetParent and btn._proxy:GetParent() == UIParent then return btn._proxy end
-            local p = CreateFrame("Button", nil, UIParent)
-            p:SetAllPoints(btn)
-            p:SetFrameStrata("TOOLTIP")
-            p:SetFrameLevel( max( (LeftSlide and LeftSlide:GetFrameLevel() or 0) + 3000, 5000) )
-            p:SetToplevel(true)
-            p:EnableMouse(true)
-            p:EnableMouseMotion(true)
-            p:SetScript("OnEnter", function() if btn.OnEnter then btn:OnEnter() end end)
-            p:SetScript("OnLeave", function() if btn.OnLeave then btn:OnLeave() end end)
-            p:SetScript("OnClick", function()
-                if ADT and ADT.DebugPrint then ADT.DebugPrint("[DockLeft] ProxyClick key="..tostring(btn.categoryKey)) end
-                if btn.Click then btn:Click() elseif btn.OnClick then btn:OnClick() end
-            end)
-            -- 几乎透明的命中面
-            local cover = p:CreateTexture(nil, "BACKGROUND")
-            cover:SetAllPoints(true)
-            cover:SetColorTexture(0,0,0,0.01)
-            p._cover = cover
-            btn._proxy = p
-            return p
-        end
-
-        local function UpdateProxiesVisible(show)
-            if not MainFrame or not MainFrame.primaryCategoryPool then return end
-            for _, b in MainFrame.primaryCategoryPool:EnumerateActive() do
-                if not b._proxy then EnsureProxy(b) end
-                if b._proxy then
-                    b._proxy:ClearAllPoints(); b._proxy:SetAllPoints(b)
-                    b._proxy:SetShown(show and b:IsShown())
-                end
-            end
-        end
+        -- 移除历史上的“顶层代理按钮”逻辑：统一依赖真实按钮自身命中，避免产生匿名顶层可点击框体。
+        local function UpdateProxiesVisible(show) end
 
         if not USE_STATIC_LEFT_PANEL then
         LeftSlide:HookScript("OnUpdate", function(_, elapsed)
@@ -2533,6 +2500,7 @@ local function CreateUI()
         end)
         end -- not USE_STATIC_LEFT_PANEL
 
+        --[=[ 下面这段旧的左侧按钮与高亮构建逻辑已迁移至 LeftPanel.lua
         local function Category_Create()
             local obj = CreateCategoryButton(LeftSlide)
             obj:SetSize(categoryButtonWidth, Def.CategoryHeight or Def.ButtonSize)
@@ -2566,9 +2534,13 @@ local function CreateUI()
         MainFrame.primaryCategoryPool.leftListFromY = -leftListFromY
         MainFrame.primaryCategoryPool.offsetX = Def.WidgetGap
         
-    CategoryHighlight = CreateSelectionHighlight(LeftSlide)
-    if CategoryHighlight and CategoryHighlight.EnableMouse then CategoryHighlight:EnableMouse(false) end
-    CategoryHighlight:SetSize(categoryButtonWidth, Def.CategoryHeight or Def.ButtonSize)
+    if type(CreateSelectionHighlight) == "function" then
+        CategoryHighlight = CreateSelectionHighlight(LeftSlide)
+        if CategoryHighlight and CategoryHighlight.EnableMouse then CategoryHighlight:EnableMouse(false) end
+        if CategoryHighlight and CategoryHighlight.SetSize then
+            CategoryHighlight:SetSize(categoryButtonWidth, Def.CategoryHeight or Def.ButtonSize)
+        end
+    end
 
         -- 重设主木质边框范围：仅包裹右侧区域（含 Header）
         if MainFrame.BorderFrame then
@@ -2591,7 +2563,19 @@ local function CreateUI()
             frame:SetPoint("TOPLEFT", LeftSlide, "TOPLEFT", -4, 4)
             frame:SetPoint("BOTTOMRIGHT", LeftSlide, "BOTTOMRIGHT", 4, -4)
         end
+        --]=]
     end
+
+    -- 右侧木质边框范围（仅包裹右侧区域，避免覆盖左窗）
+    do
+        local bf = MainFrame.BorderFrame
+        if bf and MainFrame.Header then
+            bf:ClearAllPoints()
+            bf:SetPoint("TOPLEFT", MainFrame.Header, "TOPLEFT", 0, 0)
+            bf:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
+        end
+    end
+
     -- 右侧整栏已移除；下面创建中央区域与其背景
     do  -- CentralSection（设置列表所在区域）
         -- 右侧统一背景：从 Header 左缘一路覆盖到面板右下，保证 Header 区域下方也有底纹
@@ -2754,7 +2738,7 @@ local function CreateUI()
             end
         end
         if MainFrame.UpdateAutoWidth then MainFrame:UpdateAutoWidth() end
-        if USE_STATIC_LEFT_PANEL and MainFrame.UpdateStaticLeftPlacement then C_Timer.After(0, function() if MainFrame:IsShown() then MainFrame:UpdateStaticLeftPlacement() end end) end
+        if (ADT.DockLeft and ADT.DockLeft.IsStatic and ADT.DockLeft.IsStatic()) and MainFrame.UpdateStaticLeftPlacement then C_Timer.After(0, function() if MainFrame:IsShown() then MainFrame:UpdateStaticLeftPlacement() end end) end
     end)
 
     -- 单一 OnSizeChanged：当窗口缩放时，仅调整右侧内容宽度

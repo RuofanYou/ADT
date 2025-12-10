@@ -228,64 +228,75 @@ do
     function DisplayFrameMixin:UpdateVisuals() end
     function DisplayFrameMixin:UpdateControl() end
 
-    -- 统一样式访问
+    -- 统一样式访问（单一权威）：一律从 Housing_BlizzardGraft.lua 暴露的 ADT.HousingInstrCFG 读取
     local function GetCFG()
-        return (ADT and ADT.HousingInstrCFG) or {
-            Row={minHeight=22,hSpacing=8,vSpacing=2,vPadEach=1},
-            Typography={instructionScale=0.78,controlScaleBase=0.78,minFontSize=9},
-            Control={height=24,bgHeight=22,textPad=22,minScale=0.70},
-        }
+        return ADT and ADT.HousingInstrCFG
     end
 
-    local function ScaleFont(fs, scale, minSize)
-        if not (fs and fs.GetFont and fs.SetFont) then return end
-        local path, size, flags = fs:GetFont()
-        if not size or size <= 0 then return end
-        local newSize = math.max(minSize or 9, math.floor(size * scale + 0.5))
-        if newSize ~= size then fs:SetFont(path, newSize, flags) end
-        if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
+    -- 计算并设置顶层 DisplayFrame 的高度，使其完整包裹自建的子行
+    function DisplayFrameMixin:RecalculateHeight()
+        local CFG = GetCFG(); if not CFG or not CFG.Row then return end
+        if not self.InstructionText then
+            -- 作为容器：按“可见子行数量”计算整体高度
+            local rowH = CFG.Row.minHeight
+            local gap  = math.abs(CFG.Row.vSpacing or 0)
+            local n = 0
+            local function vshown(f) return f and f.IsShown and f:IsShown() end
+            if self.SubFrame and vshown(self.SubFrame) then n = n + 1 end
+            if self.HintFrames then
+                for _, f in ipairs(self.HintFrames) do if vshown(f) then n = n + 1 end end
+            end
+            if n == 0 then n = 1 end
+            local total = n * rowH + (n - 1) * gap
+            self:SetHeight(total)
+            if ADT and ADT.DockUI and ADT.DockUI.RequestSubPanelAutoResize then
+                ADT.DockUI.RequestSubPanelAutoResize()
+            end
+            local parent = self:GetParent()
+            if parent and parent.UpdateLayout then pcall(parent.UpdateLayout, parent) end
+            return
+        end
+        -- 行：按统一行高与间距估算高度
+        local rowH = CFG.Row.minHeight
+        local gap = math.abs(CFG.Row.vSpacing or 0)
+        local total = rowH
+        local function vshown(f) return f and f.IsShown and f:IsShown() end
+        if self.SubFrame and vshown(self.SubFrame) then total = total + rowH + gap end
+        if self.HintFrames then
+            for _, f in ipairs(self.HintFrames) do
+                if vshown(f) then total = total + rowH + gap end
+            end
+        end
+        total = total - gap
+        if total < rowH then total = rowH end
+        self:SetHeight(total)
+        local parent = self:GetParent()
+        if parent and parent.UpdateLayout then pcall(parent.UpdateLayout, parent) end
+        if ADT and ADT.DockUI and ADT.DockUI.RequestSubPanelAutoResize then
+            ADT.DockUI.RequestSubPanelAutoResize()
+        end
     end
 
     function DisplayFrameMixin:SetHotkey(instruction, bindingText)
-        self.InstructionText:SetText(instruction)
-
-        self.Control.Text:SetText(bindingText)
-        self.Control.Text:Show()
-        self.Control.Background:Show()
-        self.Control.Icon:Hide()
-
-        -- 统一样式：字号、行高、键帽大小
-        local CFG = GetCFG()
-        ScaleFont(self.InstructionText, CFG.Typography.instructionScale, CFG.Typography.minFontSize)
-        ScaleFont(self.Control.Text, CFG.Typography.controlScaleBase, CFG.Typography.minFontSize)
-
-        -- 统一行高与对齐
-        self.minimumHeight = CFG.Row.minHeight
-        self.spacing = CFG.Row.hSpacing
-        self.topPadding = CFG.Row.vPadEach
-        self.bottomPadding = CFG.Row.vPadEach
-        self.align = "center"
-        if self.Control then self.Control:SetHeight(CFG.Row.minHeight) end
-
-        -- 计算键帽宽度（按留白 textPad），并让左侧文本右对齐到键帽左侧
-        local textWidth = math.ceil(self.Control.Text:GetWrappedWidth()) + (CFG.Control.textPad or 22)
-        if self.Control.Background then
-            self.Control.Background:SetHeight(CFG.Control.bgHeight or 22)
-            self.Control.Background:SetWidth(textWidth)
-            self.Control.Background:ClearAllPoints()
-            self.Control.Background:SetPoint("CENTER", self.Control, "CENTER", 0, 0)
-        end
-        self.Control:SetWidth(textWidth)
-        self.Control:SetHeight(CFG.Row.minHeight)
-        -- 锚点交由 BlizzardGraft 的统一样式处理（左文左对齐/右键帽右对齐）
-        if ADT and ADT.ApplyHousingInstructionStyle then
-            ADT.ApplyHousingInstructionStyle(self)
-        end
+        -- 文本内容
+        if self.InstructionText then self.InstructionText:SetText(instruction) end
+        if self.Control and self.Control.Text then self.Control.Text:SetText(bindingText) end
+        -- 仅控制“显示哪种形态”：使用键帽文本，不用鼠标图标
+        if self.Control and self.Control.Text then self.Control.Text:Show() end
+        if self.Control and self.Control.Background then self.Control.Background:Show() end
+        if self.Control and self.Control.Icon then self.Control.Icon:Hide() end
+        -- 样式（字号/行高/间距/键帽宽度）全部交给唯一权威 ADT.ApplyHousingInstructionStyle 处理，避免二次缩放
+        if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(self) end
     end
 
     function DisplayFrameMixin:OnLoad()
         self.alpha = 0
         self:SetAlpha(0)
+
+        -- 改为跟随父容器缩放，保证与 Dock 子面板同一坐标系，避免右侧键帽越界
+        pcall(function()
+            if self.SetIgnoreParentScale then self:SetIgnoreParentScale(false) end
+        end)
 
         -- 需求：顶部这一行仅显示“装饰名(+库存)”，不显示任何鼠标类图标/键帽
         if self.Control and self.Control.Icon then self.Control.Icon:Hide() end
@@ -298,6 +309,18 @@ do
         self.InstructionText:SetText("")
         -- 字体交由 Housing_BlizzardGraft 的统一样式驱动，不在本地强制覆盖
         if self.InstructionText.SetJustifyV then self.InstructionText:SetJustifyV("MIDDLE") end
+        -- 容器（VerticalLayoutFrame）不设置左右内边距，避免与行级 leftPadding/rightPadding 叠加。
+        -- 仅维持行间距，其他都交给 BlizzardGraft 的样式在“行级”生效（单一权威）。
+        local parent = self:GetParent()
+        if parent then
+            parent.leftPadding = 0
+            parent.rightPadding = 0
+            local cfg = ADT and ADT.HousingInstrCFG
+            parent.spacing = (cfg and cfg.Row and cfg.Row.vSpacing) or 0
+            if parent.MarkDirty then parent:MarkDirty() end
+            if parent.Layout then pcall(parent.Layout, parent) end
+            if parent.UpdateLayout then pcall(parent.UpdateLayout, parent) end
+        end
     end
 
     local function FadeIn_OnUpdate(self, elapsed)
@@ -400,20 +423,80 @@ local function Blizzard_HouseEditor_OnLoaded()
     container.UnselectedInstructions = {}
 
     if not DisplayFrame then
-        DisplayFrame = CreateFrame("Frame", nil, container, "ADT_HouseEditorInstructionTemplate")
-        -- 让 DisplayFrame 横向占满 Instructions 容器，可随 Dock 宽度自适应
-        DisplayFrame:ClearAllPoints()
-        DisplayFrame:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
-        DisplayFrame:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, 0)
-        Mixin(DisplayFrame, DisplayFrameMixin)
-        DisplayFrame:OnLoad()
+        -- 改为“垂直布局容器”，其子项为若干条与暴雪一致的行模板。
+        -- 这样所有行的行间距/左右对齐完全由 VerticalLayout + 统一样式驱动，杜绝初始与二次刷新不一致。
+        -- 重要：避免将 DisplayFrame 直接挂在 Instructions 容器下，否则其缺少
+        -- HouseEditorInstructionMixin:UpdateVisuals/UpdateControl 等方法，
+        -- 会在容器的 CallOnChildrenThenUpdateLayout 中被调用而报错。
+        -- 初始挂到 HouseEditorFrame（编辑器级父容器），稍后由 Graft 调用
+        -- ADT.Housing:ReparentHoverHUD() 迁移到 Dock 下方面板。
+        DisplayFrame = CreateFrame("Frame", nil, HouseEditorFrame, "VerticalLayoutFrame")
+        -- 容器不设左右内边距（避免与行级 left/rightPadding 叠加），仅设置行间距。
+        do
+            local cfg = ADT and ADT.HousingInstrCFG
+            DisplayFrame.leftPadding = 0
+            DisplayFrame.rightPadding = 0
+            DisplayFrame.spacing = (cfg and cfg.Row and cfg.Row.vSpacing) or 0
+        end
+        DisplayFrame.expand = true
+        -- 组级淡入/淡出控制（对子项统一 Alpha），避免仅子行褪色导致快捷键常驻可见
+        DisplayFrame._alpha = 0
+        function DisplayFrame:SetGroupAlpha(a)
+            a = tonumber(a) or 0
+            if a < 0 then a = 0 elseif a > 1 then a = 1 end
+            if self.SubFrame and self.SubFrame.SetAlpha then self.SubFrame:SetAlpha(a) end
+            if self.HintFrames then
+                for _, f in ipairs(self.HintFrames) do
+                    if f and f.SetAlpha then f:SetAlpha(a) end
+                end
+            end
+        end
+        DisplayFrame:SetGroupAlpha(0)
+        local function GroupFadeIn_OnUpdate(self, elapsed)
+            self._alpha = (self._alpha or 0) + 5 * elapsed
+            if self._alpha >= 1 then
+                self._alpha = 1
+                self:SetScript("OnUpdate", nil)
+            end
+            self:SetGroupAlpha(self._alpha)
+            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha
+               and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
+                ADT.DockUI.SetSubPanelHeaderAlpha(self._alpha)
+            end
+        end
+        local function GroupFadeOut_OnUpdate(self, elapsed)
+            self._alpha = (self._alpha or 1) - 2 * elapsed
+            if self._alpha <= 0 then
+                self._alpha = 0
+                self:SetScript("OnUpdate", nil)
+            end
+            self:SetGroupAlpha(self._alpha)
+            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha
+               and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
+                ADT.DockUI.SetSubPanelHeaderAlpha(self._alpha)
+            end
+        end
+        function DisplayFrame:FadeInGroup()
+            if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow and ADT.DockUI.SetSubPanelHeaderAlpha then
+                ADT.DockUI.SetHeaderAlphaFollow(true)
+                ADT.DockUI.SetSubPanelHeaderAlpha(0)
+            end
+            self:SetScript("OnUpdate", GroupFadeIn_OnUpdate)
+        end
+        function DisplayFrame:FadeOutGroup(delay)
+            if delay then self._alpha = 2 end
+            self:SetScript("OnUpdate", GroupFadeOut_OnUpdate)
+        end
+        -- 跟随父容器缩放（Dock 子面板）；之前强制忽略父缩放会导致与内容区像素系不一致，
+        -- 右侧键帽相对“弹窗内部右缘”的对齐出现偏差
+        pcall(function()
+            if DisplayFrame.SetIgnoreParentScale then DisplayFrame:SetIgnoreParentScale(false) end
+        end)
 
         local SubFrame = CreateFrame("Frame", nil, DisplayFrame, "ADT_HouseEditorInstructionTemplate")
         DisplayFrame.SubFrame = SubFrame
-        SubFrame:ClearAllPoints()
-        SubFrame:SetPoint("TOPLEFT",  DisplayFrame, "BOTTOMLEFT",  0, 0)
-        SubFrame:SetPoint("TOPRIGHT", DisplayFrame, "BOTTOMRIGHT", 0, 0)
         Mixin(SubFrame, DisplayFrameMixin)
+        SubFrame:OnLoad()
         -- 默认显示 CTRL+D，兼容旧版通过 ADT.GetDuplicateKeyName() 返回文本
         SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or "CTRL+D")
         if SubFrame.LockStatusText then SubFrame.LockStatusText:Hide() end
@@ -423,10 +506,7 @@ local function Blizzard_HouseEditor_OnLoaded()
         local CTRL = CTRL_KEY_TEXT or "CTRL"
         local function addHint(prev, label, key)
             local line = CreateFrame("Frame", nil, DisplayFrame, "ADT_HouseEditorInstructionTemplate")
-            local CFG = (ADT and ADT.HousingInstrCFG and ADT.HousingInstrCFG.Row) or { vSpacing = 2 }
-            line:ClearAllPoints()
-            line:SetPoint("TOPLEFT",  prev, "BOTTOMLEFT",  0, - (CFG.vSpacing or 2))
-            line:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", 0, - (CFG.vSpacing or 2))
+            -- 不再手动 SetPoint，交由 VerticalLayoutFrame 根据 spacing 自动排布
             Mixin(line, DisplayFrameMixin)
             line:SetHotkey(label, key)
             if line.LockStatusText then line.LockStatusText:Hide() end
@@ -450,38 +530,25 @@ local function Blizzard_HouseEditor_OnLoaded()
 
         -- 将所有“键帽”统一宽度，避免左侧文字参差不齐
         function DisplayFrame:NormalizeKeycapWidth()
-            local frames = { self.SubFrame }
-            for _, f in ipairs(self.HintFrames or {}) do table.insert(frames, f) end
-            local maxTextWidth = 0
-            for _, f in ipairs(frames) do
-                if f and f.Control and f.Control.Text then
-                    local w = (f.Control.Text:GetWrappedWidth() or 0)
-                    if w > maxTextWidth then maxTextWidth = w end
-                end
-            end
-            local keycapWidth = maxTextWidth + 20
-            for _, f in ipairs(frames) do
-                if f and f.Control and f.Control.Background then
-                    f.Control.Background:SetWidth(keycapWidth)
-                    f.Control:SetWidth(keycapWidth)
-                    -- 文本锚点/对齐由统一样式负责
-                end
-            end
-            if ADT and ADT.ApplyHousingInstructionStyle then
-                ADT.ApplyHousingInstructionStyle(self)
-            end
+            -- 废弃“自定义统一键帽宽度”的实现，改为完全依赖 ADT.ApplyHousingInstructionStyle
+            -- 根据内容宽度与行内文本自动收缩键帽（单一权威）。
+            if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(self) end
+            if self.RecalculateHeight then self:RecalculateHeight() end
         end
 
+        -- 统一样式：延后由 ADT.ApplyHousingInstructionStyle 应用（加载顺序可能晚于本文件）
+        if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame) end
         DisplayFrame:NormalizeKeycapWidth()
-        -- 统一把 BlizzardGraft 的“行样式”应用到我们自建的行，保证字号/间距一致
-        if ADT and ADT.ApplyHousingInstructionStyle then
-            ADT.ApplyHousingInstructionStyle(DisplayFrame)
-        end
+        if DisplayFrame.RecalculateHeight then DisplayFrame:RecalculateHeight() end
+        -- 关键：在子行全部创建完之后，再次统一设为透明，避免初始常驻
+        if DisplayFrame.SetGroupAlpha then DisplayFrame:SetGroupAlpha(0) end
     end
 
-    container.UnselectedInstructions = { DisplayFrame }
+    -- 不再把 DisplayFrame 塞进 Instructions 的 Unselected 列表，
+    -- 等到被重挂到 Dock 时再按需告知（见 ReparentHoverHUD）。
+    -- container.UnselectedInstructions = { DisplayFrame }
 
-    if IsDecorSelected() then
+        if IsDecorSelected() then
         DisplayFrame:Hide()
     end
 end
@@ -494,13 +561,44 @@ function EL:ReparentHoverHUD(newParent)
     if cur == newParent then return end
     DisplayFrame:ClearAllPoints()
     DisplayFrame:SetParent(newParent)
+    -- 明确锚到容器顶部左右，保证初始宽度正确；高度由 RecalculateHeight 驱动
+    DisplayFrame:ClearAllPoints()
     DisplayFrame:SetPoint("TOPLEFT",  newParent, "TOPLEFT",  0, 0)
     DisplayFrame:SetPoint("TOPRIGHT", newParent, "TOPRIGHT", 0, 0)
+    DisplayFrame.expand = true
+    -- 再次同步容器行距（容器左右内边距保持 0，避免与“行级内边距”叠加）
+    do
+        local cfg = ADT and ADT.HousingInstrCFG
+        DisplayFrame.leftPadding = 0
+        DisplayFrame.rightPadding = 0
+        DisplayFrame.spacing = (cfg and cfg.Row and cfg.Row.vSpacing) or 0
+        if DisplayFrame.MarkDirty then DisplayFrame:MarkDirty() end
+        if DisplayFrame.Layout then pcall(DisplayFrame.Layout, DisplayFrame) end
+        if DisplayFrame.UpdateLayout then pcall(DisplayFrame.UpdateLayout, DisplayFrame) end
+    end
+    -- 与官方行保持同样的缩放策略（忽略父缩放）
+    pcall(function()
+        if DisplayFrame.SetIgnoreParentScale then DisplayFrame:SetIgnoreParentScale(false) end
+        for _, ch in ipairs({DisplayFrame:GetChildren()}) do
+            if ch.SetIgnoreParentScale then ch:SetIgnoreParentScale(false) end
+        end
+    end)
+    -- 告诉 Instructions 容器：本帧即为“未选中状态”的唯一说明行（单一权威）
+    pcall(function()
+        if type(newParent.UnselectedInstructions) ~= 'table' then newParent.UnselectedInstructions = {} end
+        wipe(newParent.UnselectedInstructions)
+        table.insert(newParent.UnselectedInstructions, DisplayFrame)
+        if newParent.UpdateAllVisuals then newParent:UpdateAllVisuals() end
+        if newParent.UpdateLayout then newParent:UpdateLayout() end
+    end)
     if DisplayFrame.NormalizeKeycapWidth then DisplayFrame:NormalizeKeycapWidth() end
     if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame) end
     DisplayFrame:Show()
+    -- 初次重挂后保持隐藏状态，等待真正的悬停再淡入
+    if DisplayFrame.SetGroupAlpha then DisplayFrame:SetGroupAlpha(0) end
     -- 重新应用一次显隐与标题联动
     if self.UpdateHintVisibility then self:UpdateHintVisibility() end
+    if DisplayFrame.RecalculateHeight then DisplayFrame:RecalculateHeight() end
 end
 
 --
@@ -696,7 +794,9 @@ do
                 self.decorInstanceInfo = nil
             end
             if DisplayFrame then
-                DisplayFrame:FadeOut(0.5)
+                local df = DisplayFrame.SubFrame or DisplayFrame
+                if df.FadeOut then df:FadeOut(0.5) end
+                if DisplayFrame.FadeOutGroup then DisplayFrame:FadeOutGroup(0.5) end
             end
         end
     end
@@ -726,15 +826,40 @@ do
                 end
                 self.decorInstanceInfo = info
                 if DisplayFrame then
-                    DisplayFrame:SetDecorInfo(info)
-                    DisplayFrame:FadeIn()
+                    -- 显示“重复”等快捷键行（不修改其左侧文本）
+                    local df = DisplayFrame.SubFrame or DisplayFrame
+                    if df.FadeIn then df:FadeIn() end
+                    if DisplayFrame.FadeInGroup then DisplayFrame:FadeInGroup() end
+                    -- 更新右侧标题与库存数量（仅数据更新，不篡改 SubFrame 的 InstructionText）
+                    if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then
+                        local name = info.name or ""
+                        -- 若该装饰被保护，标题前加锁图标（与旧实现保持一致）
+                        if EL and EL.Protection and EL.Protection.IsProtected and info.decorGUID then
+                            local isProt = EL.Protection:IsProtected(info.decorGUID, info.decorID)
+                            if isProt then name = "|A:BonusChest-Lock:16:16|a " .. name end
+                        end
+                        ADT.DockUI.SetSubPanelHeaderText(name)
+                    end
+                    -- 更新库存数字到 SubFrame 的 ItemCountText
+                    local decorID = info.decorID
+                    local entryInfo = decorID and GetCatalogDecorInfo(decorID)
+                    local stored = 0
+                    if entryInfo then
+                        stored = (entryInfo.quantity or 0) + (entryInfo.remainingRedeemable or 0)
+                    end
+                    if DisplayFrame.SubFrame and DisplayFrame.SubFrame.ItemCountText then
+                        DisplayFrame.SubFrame.ItemCountText:SetText(stored)
+                        DisplayFrame.SubFrame.ItemCountText:SetShown(stored > 0)
+                    end
                 end
                 return true
             end
         end
         self:UnregisterEvent("MODIFIER_STATE_CHANGED")
         if DisplayFrame then
-            DisplayFrame:FadeOut(0.5)
+            local df = DisplayFrame.SubFrame or DisplayFrame
+            if df.FadeOut then df:FadeOut(0.5) end
+            if DisplayFrame.FadeOutGroup then DisplayFrame:FadeOutGroup(0.5) end
         end
     end
 
@@ -910,6 +1035,10 @@ do
                 frame:SetPoint("TOPRIGHT", prevVisible, "BOTTOMRIGHT", 0, 0)
                 prevVisible = frame
             end
+        end
+        -- 可见性变化后，重算顶层行高度，避免被 Instructions 容器裁剪
+        if DisplayFrame and DisplayFrame.RecalculateHeight then
+            DisplayFrame:RecalculateHeight()
         end
     end
 end
