@@ -83,15 +83,14 @@ local Def = {
     PlacedListBtnRaiseAboveBorder = 1, -- 提升到边框之上的 FrameLevel 偏移（0 表示不提升）
 
     -- ================= 中央滚动区域边距 =================
-    -- 修复：内容靠近底部边框时出现“越界”视觉问题。
-    -- 统一提高底部安全边距，确保列表与背景不会踩到木质边框装饰。
-    -- 注意：保持三个位置（ScrollView/RightBG/CenterBG）一致，作为“单一权威”的配置来源。
-    -- 顶部向内间距：避免内容贴顶（保持原默认 2）
+    -- 修复说明：内容区与背景的语义要分离。
+    --  - ScrollViewInsetBottom：只给“内容”留出安全边距，避免项目压住底部装饰。
+    --  - RightBGInsetBottom/CenterBGInsetBottom：背景应当铺满至边框内缘，取 0 贴边。
     ScrollViewInsetTop = 2,
     ScrollViewInsetBottom = 18,
     RightBGInsetRight = -2,            -- 右侧统一背景右侧 inset
-    RightBGInsetBottom = 18,           -- 右侧统一背景底部 inset（与 ScrollView 保持一致）
-    CenterBGInsetBottom = 18,          -- 中央区域背景底部 inset（与 ScrollView 保持一致）
+    RightBGInsetBottom = 0,            -- 背景贴边，避免出现可见空隙
+    CenterBGInsetBottom = 0,           -- 背景贴边，避免出现可见空隙
 
     -- ================= 列表空状态（Empty State）细节 =================
     -- 当分类为空时，第一行灰色提示与上方“标题分隔线”之间的额外间距（像素）
@@ -370,6 +369,10 @@ do
             OrigPoint = { p = p, rel = rel, rp = rp, x = x, y = y }
         end
 
+        -- 在重挂期间临时透明，避免出现“飞过去”的观感
+        local prevAlpha = (btn.GetAlpha and btn:GetAlpha()) or 1
+        if btn.SetAlpha then btn:SetAlpha(0) end
+
         btn:SetParent(MainFrame.Header)
         btn:ClearAllPoints()
         -- 位置：贴 Header 左缘，参数化可调
@@ -385,8 +388,8 @@ do
         if raise ~= 0 and MainFrame.BorderFrame and MainFrame.BorderFrame.GetFrameLevel then
             btn:SetFrameLevel((MainFrame.BorderFrame:GetFrameLevel() or (btn:GetFrameLevel() or 0)) + raise)
         end
-        -- 防御：确保完全不透明可见
-        if btn.SetAlpha then btn:SetAlpha(1) end
+        -- 恢复透明度
+        if btn.SetAlpha then btn:SetAlpha(prevAlpha) end
         if btn.EnableMouse then btn:EnableMouse(true) end
         btn:Show()
         Attached = true
@@ -407,15 +410,15 @@ do
     EL:RegisterEvent("PLAYER_LOGIN")
     EL:SetScript("OnEvent", function(_, event, arg1)
         if event == "ADDON_LOADED" then
-            -- 暴雪 HouseEditor 加载后尝试一次
-            if arg1 == "Blizzard_HouseEditor" then C_Timer.After(0, AttachIntoHeader) end
+            -- 暴雪 HouseEditor 加载后立即采纳，避免首次显示时的跳动
+            if arg1 == "Blizzard_HouseEditor" then AttachIntoHeader() end
         elseif event == "PLAYER_LOGIN" then
-            C_Timer.After(0.2, AttachIntoHeader)
+            AttachIntoHeader()
         elseif event == "HOUSE_EDITOR_MODE_CHANGED" then
             -- 进入编辑器 → 附着；退出 → 复原
             if C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive() then
                 if _IsExpertMode() then
-                    C_Timer.After(0, AttachIntoHeader)
+                    AttachIntoHeader()
                 else
                     if Attached then RestoreToOriginal() end
                 end
@@ -2758,12 +2761,20 @@ do
         
         if isActive then
             if not wasEditorActive then
-                -- 进入编辑模式：自动打开 GUI，且强制回到“通用”分类（用户可自行再切换）。
-                MainFrame:ShowUI("editor")
-                C_Timer.After(0, function()
-                    MainFrame:ShowSettingsCategory('Housing')
-                    if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', 'Housing') end
-                end)
+                -- 进入编辑模式：根据设置决定是否自动打开 GUI。
+                local shouldAutoOpen = true
+                if ADT and ADT.GetDBValue then
+                    local v = ADT.GetDBValue('EnableDockAutoOpenInEditor')
+                    -- 仅当显式为 false 时禁用；默认/缺省视为启用
+                    shouldAutoOpen = (v ~= false)
+                end
+                if shouldAutoOpen then
+                    MainFrame:ShowUI("editor")
+                    C_Timer.After(0, function()
+                        MainFrame:ShowSettingsCategory('Housing')
+                        if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', 'Housing') end
+                    end)
+                end
             end
             -- 调整层级确保在编辑器之上
             if HouseEditorFrame then

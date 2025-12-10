@@ -365,6 +365,13 @@ local function _ADT_ApplyTypography(instr)
         if not frame then return end
         _ADT_ApplyTypographyToRow(frame)
         _ADT_FitControlText(frame)
+        -- 关键：对子元素（行/模板）应用排版后，立即触发布局计算，
+        -- 以便 VerticalLayout 能拿到正确高度进行堆叠，避免“看不见/高度为0”。
+        pcall(function()
+            if frame.MarkDirty then frame:MarkDirty() end
+            if frame.Layout then frame:Layout() end
+            if frame.UpdateLayout then frame:UpdateLayout() end
+        end)
         for _, ch in ipairs({frame:GetChildren()}) do
             applyDeep(ch)
         end
@@ -404,12 +411,16 @@ end
 
 -- 将右侧“按键文本气泡”根据实际可用宽度进一步收缩，避免超出子面板宽度
 function _ADT_FitControlText(row)
-    if not (row and row.Control and row.Control.Text and AdoptState and AdoptState.instr) then return end
-    local instr = AdoptState.instr
+    -- 说明：原实现依赖 AdoptState.instr 存在来触发“键帽收缩/贴右”。
+    -- 但 HoverHUD 在被 Reparent 到 Dock.SubPanel 期间可能先一步创建并请求样式，
+    -- 此时 AdoptState.instr 还未就绪，导致本函数短路返回，从而出现“悬停行键帽不贴右/未缩放”的现象。
+    -- 修复：仅要求行本身与控件存在，统一以 Dock.SubPanel.Content 的宽度作为可用宽度来源，
+    -- 与暴雪说明行保持完全一致的度量口径；不再把 AdoptState.instr 作为前置条件。
+    if not (row and row.Control and row.Control.Text) then return end
     local sub = GetDock() and (GetDock().SubPanel or (GetDock().EnsureSubPanel and GetDock():EnsureSubPanel()))
     local content = sub and sub.Content
     local contentW = content and content:GetWidth()
-    if not contentW then return end
+    if not contentW or contentW <= 0 then return end
 
     local spacing = row.spacing or CFG.Row.hSpacing or 10
     -- 统一权威：左右内边距都使用 row.leftPadding/rightPadding（由 _ADT_ApplyTypographyToRow 设置）
@@ -910,8 +921,21 @@ local function AdoptInstructionsIntoDock()
     _ADT_ApplyTypography(instr)
     _ADT_QueueResize()
     -- 触发一次判空自动隐藏（如果说明被我们全部隐藏，或 HoverHUD 也不可见）
-    if ADT and ADT.DockUI and ADT.DockUI.EvaluateSubPanelAutoHide then
-        C_Timer.After(0.06, ADT.DockUI.EvaluateSubPanelAutoHide)
+    -- 显隐权威回归暴雪 Instructions：OnShow/OnHide → 我们的 SubPanel 同步淡入/淡出
+    if not instr._ADT_SubPanelVisibilityHooked then
+        instr._ADT_SubPanelVisibilityHooked = true
+        instr:HookScript("OnShow", function()
+            if ADT and ADT.DockUI and ADT.DockUI.FadeInSubPanel then ADT.DockUI.FadeInSubPanel() end
+        end)
+        instr:HookScript("OnHide", function()
+            if ADT and ADT.DockUI and ADT.DockUI.FadeOutSubPanel then ADT.DockUI.FadeOutSubPanel(0.5) end
+        end)
+    end
+    -- 初始状态同步（避免 /reload 首帧残留或空壳）
+    if instr:IsShown() then
+        if ADT and ADT.DockUI and ADT.DockUI.FadeInSubPanel then ADT.DockUI.FadeInSubPanel() end
+    else
+        if ADT and ADT.DockUI and ADT.DockUI.InstantHideSubPanel then ADT.DockUI.InstantHideSubPanel() end
     end
     -- 针对登录后立刻切到“专家模式”时偶发未缩放：
     -- 某些行会在后续一两帧由暴雪代码异步刷新（UpdateAllVisuals/UpdateLayout），
@@ -972,6 +996,8 @@ local function TrySetupHooks()
     -- 钩住显示/隐藏与模式切换
     pcall(function()
         hooksecurefunc(HouseEditorFrameMixin, "OnShow", function()
+            -- 优先采纳按钮以避免出现“飞过去”的观感
+            pcall(function() if ADT and ADT.DockUI and ADT.DockUI.AttachPlacedListButton then ADT.DockUI.AttachPlacedListButton() end end)
             ShowBudgetInHeader();
             C_Timer.After(0, AdoptInstructionsIntoDock)
             C_Timer.After(0.1, AdoptInstructionsIntoDock)
@@ -981,6 +1007,7 @@ local function TrySetupHooks()
             RestoreHeaderTitle(); RestoreInstructions();
         end)
         hooksecurefunc(HouseEditorFrameMixin, "OnActiveModeChanged", function()
+            pcall(function() if ADT and ADT.DockUI and ADT.DockUI.AttachPlacedListButton then ADT.DockUI.AttachPlacedListButton() end end)
             C_Timer.After(0, AdoptInstructionsIntoDock)
             C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end)

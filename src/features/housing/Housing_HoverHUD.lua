@@ -465,6 +465,10 @@ local function Blizzard_HouseEditor_OnLoaded()
                and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
                 ADT.DockUI.SetSubPanelHeaderAlpha(self._alpha)
             end
+            -- 悬停淡入过程中，内容“从不可见变为可见”，需要驱动 SubPanel 重新测量高度
+            if ADT and ADT.DockUI and ADT.DockUI.RequestSubPanelAutoResize then
+                ADT.DockUI.RequestSubPanelAutoResize()
+            end
         end
         local function GroupFadeOut_OnUpdate(self, elapsed)
             self._alpha = (self._alpha or 1) - 2 * elapsed
@@ -476,6 +480,10 @@ local function Blizzard_HouseEditor_OnLoaded()
             if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha
                and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
                 ADT.DockUI.SetSubPanelHeaderAlpha(self._alpha)
+            end
+            -- 淡出也触发一次，以便在完全隐藏后收缩子面板高度
+            if ADT and ADT.DockUI and ADT.DockUI.RequestSubPanelAutoResize then
+                ADT.DockUI.RequestSubPanelAutoResize()
             end
         end
         function DisplayFrame:FadeInGroup()
@@ -584,11 +592,33 @@ function EL:ReparentHoverHUD(newParent)
     if cur == newParent then return end
     DisplayFrame:ClearAllPoints()
     DisplayFrame:SetParent(newParent)
-    -- 明确锚到容器顶部左右，保证初始宽度正确；高度由 RecalculateHeight 驱动
+    -- 明确锚到“Header 下方”，避免被标题遮挡；高度由 RecalculateHeight 驱动
     DisplayFrame:ClearAllPoints()
-    DisplayFrame:SetPoint("TOPLEFT",  newParent, "TOPLEFT",  0, 0)
-    DisplayFrame:SetPoint("TOPRIGHT", newParent, "TOPRIGHT", 0, 0)
+    local headerGap = 0
+    local header
+    pcall(function()
+        local dock = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+        local sub  = dock and (dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()))
+        header = sub and sub.Header
+    end)
+    do
+        local cfg = ADT and ADT.HousingInstrCFG
+        headerGap = (cfg and cfg.Layout and tonumber(cfg.Layout.headerToInstrGap)) or 8
+    end
+    if header then
+        DisplayFrame:SetPoint("TOPLEFT",  header, "BOTTOMLEFT",  0, -headerGap)
+        DisplayFrame:SetPoint("TOPRIGHT", header, "BOTTOMRIGHT", 0, -headerGap)
+    else
+        DisplayFrame:SetPoint("TOPLEFT",  newParent, "TOPLEFT",  0, -30)
+        DisplayFrame:SetPoint("TOPRIGHT", newParent, "TOPRIGHT", 0, -30)
+    end
     DisplayFrame.expand = true
+    -- 提升层级：确保悬停提示绘制在官方 Instructions 之上（不被遮挡）
+    pcall(function()
+        local strata = newParent:GetFrameStrata() or "DIALOG"
+        DisplayFrame:SetFrameStrata(strata)
+        DisplayFrame:SetFrameLevel((newParent:GetFrameLevel() or 1) + 20)
+    end)
     -- 再次同步容器行距（容器左右内边距保持 0，避免与“行级内边距”叠加）
     do
         local cfg = ADT and ADT.HousingInstrCFG
@@ -715,18 +745,19 @@ do
         local info = (C_HousingBasicMode and C_HousingBasicMode.GetSelectedDecorInfo and C_HousingBasicMode.GetSelectedDecorInfo())
             or (C_HousingExpertMode and C_HousingExpertMode.GetSelectedDecorInfo and C_HousingExpertMode.GetSelectedDecorInfo())
         if info and info.name then
-            -- 智能：若标题已在显示同一名称且 alpha>0.6，则不再次淡入，避免“闪一下”
+            -- 切换到“选中”态时的标题策略：
+            -- 1) 若名称不变，仅“补完”正在进行的淡入（从当前 alpha 继续到 1），不重播；
+            -- 2) 若名称改变，则直接换文案，保持当前 alpha，不触发额外淡入/淡出；
             local headerText = ADT and ADT.DockUI and ADT.DockUI.GetSubPanelHeaderText and ADT.DockUI.GetSubPanelHeaderText()
             local headerAlpha = ADT and ADT.DockUI and ADT.DockUI.GetSubPanelHeaderAlpha and ADT.DockUI.GetSubPanelHeaderAlpha()
-            local sameShowing = (headerText == info.name) and (tonumber(headerAlpha) or 0) > 0.6
-            if sameShowing then
-                if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
-                if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha then ADT.DockUI.SetSubPanelHeaderAlpha(1) end
-            else
-                -- 正常流程：设置文本并淡入
-                if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
+            local sameName = (headerText == info.name)
+            if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
+            if not sameName then
                 if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then ADT.DockUI.SetSubPanelHeaderText(info.name) end
-                if ADT and ADT.DockUI and ADT.DockUI.FadeInHeader then ADT.DockUI.FadeInHeader() end
+            else
+                if (tonumber(headerAlpha) or 0) < 1 then
+                    if ADT and ADT.DockUI and ADT.DockUI.FinishHeaderFadeIn then ADT.DockUI.FinishHeaderFadeIn() end
+                end
             end
         end
         if not info or not info.decorGUID then return end
@@ -834,6 +865,8 @@ do
                 -- 如果此时用户发生“选中/切换模式”，立即隐藏以避免叠层；
                 -- 否则正常走淡出。
                 if IsDecorSelected() then
+                    -- 保留当前 Header Alpha：先退出跟随再隐藏组
+                    if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
                     if DisplayFrame.InstantHideGroup then DisplayFrame:InstantHideGroup() end
                 else
                     local df = DisplayFrame.SubFrame or DisplayFrame
@@ -859,9 +892,16 @@ do
         if IsHoveringDecor() then
             local info = GetHoveredDecorInfo()
             if info then
-                -- 再次确保：一旦有有效悬停对象，Header 进入“跟随悬停”模式
-                if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then
-                    ADT.DockUI.SetHeaderAlphaFollow(true)
+                -- 智能跟随：
+                -- 若标题文本与当前悬停名称一致且已完全可见，则不再切回“跟随”，
+                -- 以避免重复将 Header alpha 拉回 0 造成二次淡入；否则进入跟随模式。
+                do
+                    local curText = ADT and ADT.DockUI and ADT.DockUI.GetSubPanelHeaderText and ADT.DockUI.GetSubPanelHeaderText()
+                    local curAlpha = ADT and ADT.DockUI and ADT.DockUI.GetSubPanelHeaderAlpha and ADT.DockUI.GetSubPanelHeaderAlpha() or 0
+                    local shouldFollow = not (curText == (info.name or "") and (tonumber(curAlpha) or 0) >= 0.99)
+                    if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then
+                        ADT.DockUI.SetHeaderAlphaFollow(shouldFollow)
+                    end
                 end
                 -- 仅在使用“修饰键触发”模式时监听（Ctrl/Alt 直接松开触发）。
                 if self.dupeEnabled and self.dupeKey then
@@ -873,6 +913,10 @@ do
                     local df = DisplayFrame.SubFrame or DisplayFrame
                     if df.FadeIn then df:FadeIn() end
                     if DisplayFrame.FadeInGroup then DisplayFrame:FadeInGroup() end
+                    -- 悬停新增可见内容后，立即请求 SubPanel 自适应一次（随后还会在淡入过程中多次触发）
+                    if ADT and ADT.DockUI and ADT.DockUI.RequestSubPanelAutoResize then
+                        ADT.DockUI.RequestSubPanelAutoResize()
+                    end
                     -- 更新右侧标题与库存数量（仅数据更新，不篡改 SubFrame 的 InstructionText）
                     if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then
                         local name = info.name or ""
@@ -1072,20 +1116,37 @@ do
             end
         end
         
-        -- 动态重新定位：只显示启用的帧，并链式排列（无空隙）
-        local prevVisible = DisplayFrame -- 第一个可见帧锚定到 DisplayFrame
+        -- 按“可见行”链式锚点（与旧实现一致），避免部分环境下 VerticalLayout 首帧不排版
+        -- 注意：仍由统一样式器控制左右留白/键帽宽度，此处只负责垂直堆叠。
+        local CFG = ADT and ADT.HousingInstrCFG
+        local ygap = (CFG and CFG.Row and tonumber(CFG.Row.vSpacing)) or 0
+        local prevVisible = DisplayFrame
         for i, frame in ipairs(allFrames) do
             local visible = visibilityConfig[i]
             frame:SetShown(visible)
+            frame.ignoreInLayout = true  -- 交由我们手工锚点
+            frame:ClearAllPoints()
             if visible then
-                frame:ClearAllPoints()
-                frame:SetPoint("TOPRIGHT", prevVisible, "BOTTOMRIGHT", 0, 0)
+                -- 关键修复：上一版只锚到 TOPRIGHT，行本身没有固定宽度时（例如父容器宽度尚未
+                -- 完成布局，GetWidth 返回 0），row 的 LEFT 会贴近 RIGHT，导致左侧文本看上去
+                -- “靠着键帽挤在一起”。这里同步锚 TOPLEFT 到上一行的 BOTTOMLEFT，保证行宽由
+                -- 父容器左右边界确定，即刻拥有稳定宽度，随后再由样式器计算左列与键帽的边界。
+                frame:SetPoint("TOPRIGHT", prevVisible, "BOTTOMRIGHT", 0, -ygap)
+                frame:SetPoint("TOPLEFT",  prevVisible, "BOTTOMLEFT",  0, -ygap)
+                -- 同帧补一把：若样式器已加载，立即按“单一权威”应用一次，确保键帽贴右。
+                if ADT and ADT.ApplyHousingInstructionStyle then
+                    ADT.ApplyHousingInstructionStyle(frame)
+                end
                 prevVisible = frame
             end
         end
-        -- 可见性变化后，重算顶层行高度，避免被 Instructions 容器裁剪
-        if DisplayFrame and DisplayFrame.RecalculateHeight then
-            DisplayFrame:RecalculateHeight()
+
+        -- 触发布局与统一样式应用，确保宽度、左右留白与键帽收缩即时生效
+        if ADT and ADT.ApplyHousingInstructionStyle then
+            ADT.ApplyHousingInstructionStyle(DisplayFrame)
+        end
+        if DisplayFrame then
+            if DisplayFrame.RecalculateHeight then DisplayFrame:RecalculateHeight() end
         end
     end
 end

@@ -58,7 +58,7 @@ local CFG = {
         anchorLeftCompensation  = 6,   -- 清单锚到 SubPanel 时，LEFT 方向的 +像素偏移
         anchorRightCompensation = -6,  -- 清单锚到 SubPanel 时，RIGHT 方向的 -像素偏移
         -- 清单顶部与 SubPanel 底部之间的垂直间距（像素，正值=向下留白）
-        verticalGap = 8,
+        verticalGap = 6,
     },
 }
 
