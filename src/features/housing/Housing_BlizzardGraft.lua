@@ -747,12 +747,28 @@ local function EnsurePlacedListHooks()
     end
     LockInteractions()
 
-    -- 首次显示时与尺寸变动时都重新校准一次
+    -- 动态自适应：显示期间开启一个轻量轮询（~5Hz），
+    -- 防止暴雪内部在我们校准之后再次改变尺寸导致越界。
+    local function StartWatcher()
+        if list._ADT_resizerTicker then return end
+        list._ADT_resizerTicker = C_Timer.NewTicker(0.2, function()
+            if not list:IsShown() then return end
+            AnchorPlacedList()
+        end)
+    end
+    local function StopWatcher()
+        if list._ADT_resizerTicker then list._ADT_resizerTicker:Cancel(); list._ADT_resizerTicker = nil end
+    end
+
+    -- 首次显示：立即校准 + 启动 watcher
     list:HookScript("OnShow", function()
         LockInteractions()
         C_Timer.After(0, AnchorPlacedList)
+        C_Timer.After(0.05, AnchorPlacedList)
+        StartWatcher()
     end)
     list:HookScript("OnSizeChanged", function() C_Timer.After(0, AnchorPlacedList) end)
+    list:HookScript("OnHide", function() StopWatcher() end)
 
     -- 主面板/子面板大小变化时也刷新一次（多源冗余保证）
     local dock = GetDock()

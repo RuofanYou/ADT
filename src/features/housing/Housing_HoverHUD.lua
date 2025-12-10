@@ -231,6 +231,8 @@ StaticPopupDialogs["ADT_CONFIRM_EDIT_PROTECTED"] = {
         end
     end,
     
+    -- 说明：此处的 OnAlt 是暴雪 StaticPopup 的“第三按钮回调”（button3），
+
     OnAlt = function(self, data)
         -- 用户选择"解除保护"
         if data and data.decorGUID then
@@ -1040,11 +1042,11 @@ do
             local expertMode = Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.ExpertDecor
 
             -- 选择一个可用的“备用模式”以完成往返切换
-            local altMode
+            local otherMode
             if currentMode == basicMode then
-                altMode = expertMode
+                otherMode = expertMode
             else
-                altMode = basicMode
+                otherMode = basicMode
             end
 
             local function modeIsAvailable(mode)
@@ -1054,8 +1056,8 @@ do
             end
 
             C_Timer.After(0, function()
-                if altMode and modeIsAvailable(altMode) then
-                    pcall(function() C_HouseEditor.ActivateHouseEditorMode(altMode) end)
+                if otherMode and modeIsAvailable(otherMode) then
+                    pcall(function() C_HouseEditor.ActivateHouseEditorMode(otherMode) end)
                     C_Timer.After(0, function()
                         pcall(function()
                             if currentMode then C_HouseEditor.ActivateHouseEditorMode(currentMode) end
@@ -1154,7 +1156,7 @@ do
                         ADT.DockUI.SetHeaderAlphaFollow(shouldFollow)
                     end
                 end
-                -- 仅在使用“修饰键触发”模式时监听（Ctrl/Alt 直接松开触发）。
+                -- 仅在使用“修饰键触发”模式时监听（历史兼容说明）。
                 if self.dupeEnabled and self.dupeKey then
                     self:RegisterEvent("MODIFIER_STATE_CHANGED")
                 end
@@ -1356,8 +1358,9 @@ end
         end
     end
 
+    -- 重复热键选项（结构保留）：当前实现仅采用 Ctrl+D 覆盖绑定；
+    -- 不再监听修饰键变化，避免“Alt 键”相关歧义。
     EL.DuplicateKeyOptions = {
-        -- Ctrl+D（通过覆盖绑定触发，不走 MODIFIER_STATE_CHANGED）
         { name = (CTRL_KEY_TEXT and (CTRL_KEY_TEXT.."+D")) or "CTRL+D", key = nil },
     }
 
@@ -1374,13 +1377,11 @@ end
         end
         self.highlightEnabled = highlightEnabled
 
-        if type(dupeKeyIndex) ~= "number" or not self.DuplicateKeyOptions[dupeKeyIndex] then
-            dupeKeyIndex = 3
-        end
-
-        self.currentDupeKeyName = self.DuplicateKeyOptions[dupeKeyIndex].name
-        -- 仅当选择 Ctrl/Alt 时设置 dupeKey；选择 Ctrl+D 时为 nil（不监听修饰键变化）。
-        self.dupeKey = self.DuplicateKeyOptions[dupeKeyIndex].key
+        -- 展示文本遵循 ADT.GetDuplicateKeyName（历史兼容），行为固定为 Ctrl+D
+        self.currentDupeKeyName = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName())
+            or ((CTRL_KEY_TEXT and (CTRL_KEY_TEXT.."+D")) or "CTRL+D")
+        -- 不监听修饰键（避免 Alt 歧义）；由覆盖绑定触发。
+        self.dupeKey = nil
 
         if DisplayFrame and DisplayFrame.SubFrame then
             DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", ADT.GetDuplicateKeyName())

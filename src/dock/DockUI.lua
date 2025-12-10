@@ -420,10 +420,10 @@ end
 --
 ADT.DockUI = ADT.DockUI or {}
 do
-    -- 最小化策略：不再“重挂暴雪按钮”，而是永久隐藏官方按钮，
-    -- 在 Header 内创建一个自有的代理按钮，点击后仅调用官方清单的 Show/Hide。
-    -- 这样既无首帧跳动，也避免多路径时序。
-    local ProxyBtn -- Header 内的代理按钮
+    -- 回归“只搬运官方按钮”的实现：不创建代理、不屏蔽官方逻辑。
+    local OrigParent, OrigStrata
+    local OrigPoint -- {p, rel, rp, x, y}
+    local Attached = false
 
     local function GetPlacedListButton()
         local hf = _G.HouseEditorFrame
@@ -432,103 +432,70 @@ do
         return btn, expert
     end
 
-    local function RestoreToOriginal()
-        local btn = GetPlacedListButton()
-        if not btn then return end
-        if OrigParent then btn:SetParent(OrigParent) end
-        btn:ClearAllPoints()
-        if OrigPoint and type(OrigPoint) == 'table' then
-            local p, rel, rp, x, y = OrigPoint.p, OrigPoint.rel, OrigPoint.rp, OrigPoint.x, OrigPoint.y
-            if not rel then
-                -- 尝试回退到默认锚点：RIGHT 锚到父级 DecorCount 左侧（见 Referrence/Blizzard_HouseEditorExpertDecorMode.xml）
-                local _, expert = GetPlacedListButton()
-                rel = expert and expert.DecorCount or OrigParent
-                p, rp, x, y = "RIGHT", "LEFT", -20, 0
-            end
-            btn:SetPoint(p or "CENTER", rel, rp or p, tonumber(x) or 0, tonumber(y) or 0)
-        end
-        btn:SetFrameStrata("MEDIUM")
-        Attached = false
-    end
-
     local function _IsExpertMode()
         local HEM = C_HouseEditor and C_HouseEditor.GetActiveHouseEditorMode and C_HouseEditor.GetActiveHouseEditorMode()
         return HEM == (Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.ExpertDecor)
     end
 
-    local function HideOfficialButton()
-        local btn = GetPlacedListButton()
-        if not btn then return end
-        btn:Hide()
-        btn:EnableMouse(false)
-        -- 阻止后续任何 Show
-        if not btn._ADT_HideHooked then
-            btn._ADT_HideHooked = true
-            hooksecurefunc(btn, "Show", function(self) self:Hide() end)
+    local function SaveOriginal(btn)
+        if OrigParent then return end
+        OrigParent = btn:GetParent()
+        OrigStrata = btn:GetFrameStrata()
+        if btn:GetNumPoints() > 0 then
+            local p, rel, rp, x, y = btn:GetPoint(1)
+            OrigPoint = { p = p, rel = rel, rp = rp, x = x, y = y }
         end
     end
 
-    local function EnsureProxyButton()
-        if ProxyBtn and ProxyBtn:GetParent() == MainFrame.Header then return ProxyBtn end
-        if not (MainFrame and MainFrame.Header) then return nil end
-        local b = CreateFrame("Button", nil, MainFrame.Header)
-        b:SetSize(36, 36)
-        b:SetPoint(Def.PlacedListBtnPoint or "LEFT", MainFrame.Header, Def.PlacedListBtnRelPoint or (Def.PlacedListBtnPoint or "LEFT"), Def.PlacedListBtnOffsetX or 10, Def.PlacedListBtnOffsetY or 0)
-        -- 图标（与官方一致）
-        local icon = b:CreateTexture(nil, "ARTWORK")
-        icon:SetAllPoints(true)
-        icon:SetAtlas("decor-placement-list-default")
-        b.Icon = icon
-        local hover = b:CreateTexture(nil, "OVERLAY")
-        hover:SetAllPoints(true)
-        hover:SetAtlas("decor-placement-list-active")
-        hover:SetAlpha(0)
-        b.Hover = hover
-        b:SetScript("OnEnter", function(self) self.Hover:SetAlpha(0.6) end)
-        b:SetScript("OnLeave", function(self) self.Hover:SetAlpha(0) end)
-        b:SetScript("OnClick", function()
-            local _, expert = GetPlacedListButton()
-            local list = expert and expert.PlacedDecorList
-            if not list then return end
-            if list:IsShown() then list:Hide() else list:Show() end
-        end)
-        local strata = MainFrame:GetFrameStrata() or "FULLSCREEN_DIALOG"
-        b:SetFrameStrata(strata)
-        if MainFrame.BorderFrame then b:SetFrameLevel(MainFrame.BorderFrame:GetFrameLevel() + 2) end
-        ProxyBtn = b
-        return b
+    local function RestoreToOriginal()
+        local btn = GetPlacedListButton()
+        if not (btn and OrigParent) then return end
+        btn:ClearAllPoints()
+        btn:SetParent(OrigParent)
+        if OrigPoint then
+            btn:SetPoint(OrigPoint.p or "CENTER", OrigPoint.rel or OrigParent, OrigPoint.rp or OrigPoint.p, tonumber(OrigPoint.x) or 0, tonumber(OrigPoint.y) or 0)
+        end
+        if OrigStrata then btn:SetFrameStrata(OrigStrata) end
+        Attached = false
     end
 
     local function AttachIntoHeader()
-        HideOfficialButton()
-        EnsureProxyButton()
+        if not (MainFrame and MainFrame.Header) then return end
+        local btn = GetPlacedListButton()
+        if not btn then return end
+        SaveOriginal(btn)
+        btn:ClearAllPoints()
+        btn:SetParent(MainFrame.Header)
+        btn:SetPoint(Def.PlacedListBtnPoint or "LEFT", MainFrame.Header, Def.PlacedListBtnRelPoint or (Def.PlacedListBtnPoint or "LEFT"), Def.PlacedListBtnOffsetX or 40, Def.PlacedListBtnOffsetY or 0)
+        -- 提升层级避免被边框覆盖
+        local strata = MainFrame:GetFrameStrata() or "FULLSCREEN_DIALOG"
+        btn:SetFrameStrata(strata)
+        if MainFrame.BorderFrame and Def.PlacedListBtnRaiseAboveBorder and Def.PlacedListBtnRaiseAboveBorder > 0 then
+            btn:SetFrameLevel((MainFrame.BorderFrame:GetFrameLevel() or 0) + Def.PlacedListBtnRaiseAboveBorder)
+        end
+        btn:Show()
+        Attached = true
     end
 
-    -- 对外：保留同名入口，内部改为“隐藏官方 + 创建代理”
+    -- 对外：只做“附着/恢复”，不更改官方逻辑
     function ADT.DockUI.AttachPlacedListButton() AttachIntoHeader() end
-    function ADT.DockUI.RestorePlacedListButton() end -- 统一由官方 UI 管理，无需恢复
+    function ADT.DockUI.RestorePlacedListButton() RestoreToOriginal() end
 
-    -- 事件驱动：进入家宅编辑器时附着；离开时恢复
+    -- 事件驱动：进入家宅编辑器时附着；退出时恢复
     local EL = CreateFrame("Frame")
     EL:RegisterEvent("HOUSE_EDITOR_MODE_CHANGED")
     EL:RegisterEvent("ADDON_LOADED")
     EL:RegisterEvent("PLAYER_LOGIN")
     EL:SetScript("OnEvent", function(_, event, arg1)
-        if event == "ADDON_LOADED" then
-            -- 暴雪 HouseEditor 加载后立即采纳，避免首次显示时的跳动
-            if arg1 == "Blizzard_HouseEditor" then AttachIntoHeader() end
+        if event == "ADDON_LOADED" and arg1 == "Blizzard_HouseEditor" then
+            AttachIntoHeader()
         elseif event == "PLAYER_LOGIN" then
             AttachIntoHeader()
         elseif event == "HOUSE_EDITOR_MODE_CHANGED" then
-            -- 进入编辑器 → 附着；退出 → 复原
-            if C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive() then
-                if _IsExpertMode() then
-                    AttachIntoHeader()
-                else
-                    if Attached then RestoreToOriginal() end
-                end
+            if C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive() and _IsExpertMode() then
+                AttachIntoHeader()
             else
-                if Attached then RestoreToOriginal() end
+                RestoreToOriginal()
             end
         end
     end)
@@ -1403,48 +1370,65 @@ do
         return f
     end
 end
-
-
--- 右侧条目悬停高亮（单例，KISS：不再按文本宽度测量）
+-- 右侧/左侧通用：悬停容器（housing-basic-container）的单一权威实现
+ADT.DockUI = ADT.DockUI or {}
 do
-    local function EnsureEntryHighlight()
-        if EntryHoverHighlight and EntryHoverHighlight.BG then return EntryHoverHighlight end
+    local hoverByKind = {}
+    local function createHover()
         local f = CreateFrame("Frame", nil, MainFrame)
         f:Hide()
-        -- 使用与左侧一致的 housing-basic-container 作为容器样式
+        f:EnableMouse(false)
+        f:EnableMouseMotion(false)
         local bg = f:CreateTexture(nil, "BACKGROUND")
         if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("housing-basic-container") then
             bg:SetAtlas("housing-basic-container")
         else
             bg:SetColorTexture(1.0, 0.82, 0.0, 0.15)
         end
-        bg:SetAllPoints(f)
+        bg:SetAllPoints(true)
         f.BG = bg
-        EntryHoverHighlight = f
         return f
     end
 
-    function MainFrame:HighlightEntry(button)
-        local hl = EnsureEntryHighlight()
+    function ADT.DockUI.GetHoverContainer(kind)
+        kind = kind or "entry"
+        if not hoverByKind[kind] then
+            hoverByKind[kind] = createHover()
+        end
+        return hoverByKind[kind]
+    end
+
+    -- 将单例 Hover 贴到按钮；opts 可选：insetLeft, insetRight, insetTop, insetBottom, kind
+    function ADT.DockUI.AttachHoverToButton(button, opts)
+        local hl = ADT.DockUI.GetHoverContainer((opts and opts.kind) or "entry")
         hl:Hide(); hl:ClearAllPoints()
         if not button then return end
-        -- 将高亮贴到目标按钮上，并放在其文本下方一层
         hl:SetParent(button)
         local strata = button.GetFrameStrata and button:GetFrameStrata() or nil
         if strata then hl:SetFrameStrata(strata) end
+        -- 放到与按钮同层级，确保不被中央背景/遮罩压住（避免“只在个别条目出现”的层级问题）
         local lvl = (button.GetFrameLevel and button:GetFrameLevel()) or 1
-        pcall(hl.SetFrameLevel, hl, math.max(0, lvl - 1))
+        pcall(hl.SetFrameLevel, hl, lvl)
 
-        local pad = (Def.HighlightTextPadX or 6)
-        local leftInset = (Def.EntryLabelLeftInset or 28) - pad
-        if leftInset < 0 then leftInset = 0 end
-        local rightInset = (Def.HighlightRightInset or 2)
-        hl:SetPoint("LEFT", button, "LEFT", leftInset, 0)
-        hl:SetPoint("RIGHT", button, "RIGHT", -rightInset, 0)
-        local minH = (Def.HighlightMinHeight or 18)
-        local h = math.max(minH, (button.GetHeight and (button:GetHeight() - 4)) or minH)
-        hl:SetHeight(h)
+        local il = (opts and tonumber(opts.insetLeft)) or 0
+        local ir = (opts and tonumber(opts.insetRight)) or 0
+        local it = (opts and tonumber(opts.insetTop)) or 1
+        local ib = (opts and tonumber(opts.insetBottom)) or 1
+        hl:SetPoint("TOPLEFT", button, "TOPLEFT", il, -it)
+        hl:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -ir, ib)
         hl:Show()
+    end
+end
+
+-- 右侧条目悬停高亮（KISS：复用 DockUI.AttachHoverToButton）
+do
+    function MainFrame:HighlightEntry(button)
+        if not button then
+            local hl = ADT.DockUI and ADT.DockUI.GetHoverContainer and ADT.DockUI.GetHoverContainer("entry")
+            if hl then hl:Hide() end
+            return
+        end
+        ADT.DockUI.AttachHoverToButton(button, { kind = "entry", insetTop = 1, insetBottom = 1 })
     end
 end
 

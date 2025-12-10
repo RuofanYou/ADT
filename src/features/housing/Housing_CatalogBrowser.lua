@@ -7,7 +7,9 @@ local L = ADT and ADT.L or {}
 local C_HousingDecor = C_HousingDecor
 local GetAllPlacedDecor = C_HousingDecor.GetAllPlacedDecor
 local GetDecorInstanceInfoForGUID = C_HousingDecor.GetDecorInstanceInfoForGUID
-local SetPlacedDecorEntryHovered = C_HousingDecor.SetPlacedDecorEntryHovered
+-- 12.0：以下 API 属于受保护动作，第三方插件调用会触发“被禁止的UI动作”。
+-- 这里不再直接引用，改为在 UI 内部做被动展示（仅提示，不驱动游戏态）。
+-- local SetPlacedDecorEntryHovered = C_HousingDecor.SetPlacedDecorEntryHovered
 local IsHouseEditorActive = C_HouseEditor.IsHouseEditorActive
 local GetActiveHouseEditorMode = C_HouseEditor.GetActiveHouseEditorMode
 local GetCatalogEntryInfoByRecordID = C_HousingCatalog.GetCatalogEntryInfoByRecordID
@@ -69,15 +71,10 @@ end
 -- 依据 recordID 查找任意一个已放置实例的 GUID（优先使用已缓存数据；必要时刷新一次缓存）
 -- 高亮指定装饰物
 function DecorBrowser:HighlightDecor(guid)
-    -- 先取消之前的高亮
-    if lastHoveredGUID and lastHoveredGUID ~= guid then
-        pcall(function()
-            SetPlacedDecorEntryHovered(lastHoveredGUID, false)
-        end)
-    end
-    
-    if guid then
-        pcall(function() SetPlacedDecorEntryHovered(guid, true) end)
+    -- KISS + 遵循API限制：不再尝试调用受保护的高亮API。
+    -- 仅记录“当前意向高亮”的 guid，以便后续在我们自己的 UI 上做提示。
+    -- 这样不会影响暴雪原生的“已放置清单/世界高亮”交互，也不会触发受保护动作。
+    if guid and type(guid) == "string" then
         lastHoveredGUID = guid
     else
         lastHoveredGUID = nil
@@ -86,7 +83,8 @@ end
 
 -- 清除高亮
 function DecorBrowser:ClearHighlight()
-    self:HighlightDecor(nil)
+    -- 清空我们内部的“意向高亮”状态即可。
+    lastHoveredGUID = nil
 end
 
 -- 搜索过滤

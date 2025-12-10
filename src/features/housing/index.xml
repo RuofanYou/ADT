@@ -8,8 +8,8 @@
     <Script file="Housing_AutoRotate.lua"/>
     <Script file="Housing_Recent.lua"/>
     <Script file="Housing_VisitAssistant.lua"/>
-    <!-- 移除历史弹窗（已整合到 Dock 分类 History） -->
-    <Script file="Housing_CatalogBrowser.lua"/>
+    <!-- 自建“装饰物浏览器”弹窗已下线：仅搬运官方清单按钮与面板尺寸，
+         遵循单一权威与 KISS，不再额外创建窗口。 -->
     <Script file="Housing_AdvancedTools.lua"/>
     <Script file="Housing_ClipboardCore.lua"/>
     <!-- 移除临时板弹窗（已整合到 Dock 分类 Clipboard） -->
