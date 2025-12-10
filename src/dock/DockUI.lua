@@ -1111,11 +1111,17 @@ do
         tooltip:SetOwner(self, "ANCHOR_RIGHT")
         tooltip:SetText(SETTINGS, 1, 1, 1, 1)
         tooltip:Show()
+
+        if MainFrame and MainFrame.HighlightButton then
+            local entry = self:GetParent()
+            if entry then MainFrame:HighlightButton(entry) end
+        end
     end
 
     function OptionToggleMixin:OnLeave()
         self:ResetVisual()
         GameTooltip:Hide()
+        -- 不主动清除条目高亮，交由 Entry 的 OnLeave 负责，避免出现“移入右侧按钮高亮消失”的闪烁
     end
 
     function OptionToggleMixin:OnClick(button)
@@ -1169,8 +1175,7 @@ do
             ADT.DebugPrint("[SettingsPanel] Entry OnEnter dbKey="..tostring(self.dbKey)
                 .." over="..tostring(self:IsMouseOver()))
         end
-        -- KISS：统一使用“单例高亮容器”贴在按钮上（不再测量字符串宽度）
-        if MainFrame and MainFrame.HighlightEntry then MainFrame:HighlightEntry(self) end
+        if MainFrame and MainFrame.HighlightButton then MainFrame:HighlightButton(self) end
         self:UpdateVisual()
         if not self.isChangelogButton then
             MainFrame:ShowFeaturePreview(self.data, self.parentDBKey)
@@ -1178,7 +1183,7 @@ do
     end
 
     function EntryButtonMixin:OnLeave()
-        if MainFrame and MainFrame.HighlightEntry then MainFrame:HighlightEntry(nil) end
+        if MainFrame and MainFrame.HighlightButton then MainFrame:HighlightButton(nil) end
         self:UpdateVisual()
     end
 
@@ -1371,64 +1376,84 @@ do
     end
 end
 -- 右侧/左侧通用：悬停容器（housing-basic-container）的单一权威实现
+-- 统一“高亮容器”实现：单实例 Frame，父到目标按钮，贴 housing-basic-container，带淡入
 ADT.DockUI = ADT.DockUI or {}
 do
-    local hoverByKind = {}
-    local function createHover()
-        local f = CreateFrame("Frame", nil, MainFrame)
+    local HL
+    local function DockHLParams()
+        local cfg = ADT and ADT.GetHousingCFG and ADT.GetHousingCFG()
+        local d = (cfg and cfg.DockHighlight) or {}
+        return {
+            r = tonumber(d.color and d.color.r) or 0.96,
+            g = tonumber(d.color and d.color.g) or 0.84,
+            b = tonumber(d.color and d.color.b) or 0.32,
+            a = tonumber(d.color and d.color.a) or 0.15,
+            il = tonumber(d.insetLeft) or 0,
+            ir = tonumber(d.insetRight) or 0,
+            it = tonumber(d.insetTop) or 1,
+            ib = tonumber(d.insetBottom) or 1,
+            fadeEnabled = (d.fade and d.fade.enabled) ~= false,
+            fadeInDuration = tonumber(d.fade and d.fade.inDuration) or 0.15,
+        }
+    end
+    local function EnsureHL()
+        if HL then return HL end
+        local f = CreateFrame("Frame", nil, MainFrame, "ADTSettingsAnimSelectionTemplate")
         f:Hide()
-        f:EnableMouse(false)
-        f:EnableMouseMotion(false)
-        local bg = f:CreateTexture(nil, "BACKGROUND")
-        if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("housing-basic-container") then
-            bg:SetAtlas("housing-basic-container")
-        else
-            bg:SetColorTexture(1.0, 0.82, 0.0, 0.15)
+        -- 采用模板自带三段贴片，颜色来自配置表
+        local P = DockHLParams()
+        if f.Left then f.Left:SetColorTexture(P.r, P.g, P.b, P.a) end
+        if f.Center then f.Center:SetColorTexture(P.r, P.g, P.b, P.a) end
+        if f.Right then f.Right:SetColorTexture(P.r, P.g, P.b, P.a) end
+        f.BG = f.Center
+        function f:SyncPieces()
+            local h = math.max(1, tonumber(self:GetHeight()) or 28)
+            if self.Left and self.Left.SetHeight then self.Left:SetHeight(h) end
+            if self.Right and self.Right.SetHeight then self.Right:SetHeight(h) end
+            -- Center 由 Left/Right 的锚点决定高度，无需单独设置
         end
-        bg:SetAllPoints(true)
-        f.BG = bg
-        return f
+        f:SetScript("OnSizeChanged", function(self) self:SyncPieces() end)
+        -- 简单淡入
+        f:SetAlpha(0)
+        f._fadeTicker = nil
+        function f:FadeIn()
+            if self._fadeTicker then self._fadeTicker:Cancel() end
+            local P = DockHLParams()
+            if not P.fadeEnabled or (P.fadeInDuration or 0) <= 0 then
+                self:SetAlpha(1); self:Show(); return
+            end
+            local step = 0.016
+            local steps = math.max(1, math.floor(P.fadeInDuration / step + 0.5))
+            local a = 0
+            self:SetAlpha(0); self:Show()
+            self._fadeTicker = C_Timer.NewTicker(step, function()
+                a = a + (1/steps)
+                if a >= 1 then a = 1; if self._fadeTicker then self._fadeTicker:Cancel(); self._fadeTicker = nil end end
+                self:SetAlpha(a)
+            end, steps)
+        end
+        function f:InstantHide()
+            if self._fadeTicker then self._fadeTicker:Cancel(); self._fadeTicker = nil end
+            self:SetAlpha(0); self:Hide(); self:ClearAllPoints()
+        end
+        HL = f
+        return HL
     end
 
-    function ADT.DockUI.GetHoverContainer(kind)
-        kind = kind or "entry"
-        if not hoverByKind[kind] then
-            hoverByKind[kind] = createHover()
-        end
-        return hoverByKind[kind]
-    end
-
-    -- 将单例 Hover 贴到按钮；opts 可选：insetLeft, insetRight, insetTop, insetBottom, kind
-    function ADT.DockUI.AttachHoverToButton(button, opts)
-        local hl = ADT.DockUI.GetHoverContainer((opts and opts.kind) or "entry")
-        hl:Hide(); hl:ClearAllPoints()
+    -- 供 LeftPanel 与右侧条目统一调用
+    function MainFrame:HighlightButton(button)
+        local hl = EnsureHL()
+        hl:InstantHide()
         if not button then return end
+        -- 父到按钮，覆盖整条区域
         hl:SetParent(button)
-        local strata = button.GetFrameStrata and button:GetFrameStrata() or nil
-        if strata then hl:SetFrameStrata(strata) end
-        -- 放到与按钮同层级，确保不被中央背景/遮罩压住（避免“只在个别条目出现”的层级问题）
-        local lvl = (button.GetFrameLevel and button:GetFrameLevel()) or 1
-        pcall(hl.SetFrameLevel, hl, lvl)
-
-        local il = (opts and tonumber(opts.insetLeft)) or 0
-        local ir = (opts and tonumber(opts.insetRight)) or 0
-        local it = (opts and tonumber(opts.insetTop)) or 1
-        local ib = (opts and tonumber(opts.insetBottom)) or 1
-        hl:SetPoint("TOPLEFT", button, "TOPLEFT", il, -it)
-        hl:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -ir, ib)
-        hl:Show()
-    end
-end
-
--- 右侧条目悬停高亮（KISS：复用 DockUI.AttachHoverToButton）
-do
-    function MainFrame:HighlightEntry(button)
-        if not button then
-            local hl = ADT.DockUI and ADT.DockUI.GetHoverContainer and ADT.DockUI.GetHoverContainer("entry")
-            if hl then hl:Hide() end
-            return
-        end
-        ADT.DockUI.AttachHoverToButton(button, { kind = "entry", insetTop = 1, insetBottom = 1 })
+        hl:SetFrameStrata(button:GetFrameStrata() or "FULLSCREEN_DIALOG")
+        pcall(hl.SetFrameLevel, hl, math.max(1, (button:GetFrameLevel() or 1)))
+        local P = DockHLParams()
+        hl:SetPoint("TOPLEFT", button, "TOPLEFT", P.il, -P.it)
+        hl:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -P.ir, P.ib)
+        if hl.SyncPieces then hl:SyncPieces() end
+        hl:FadeIn()
     end
 end
 

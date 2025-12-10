@@ -1131,9 +1131,9 @@ local function AdoptInstructionsIntoDock()
 
     local sub = dock:EnsureSubPanel()
     dock:SetSubPanelShown(true)
-    -- 需求变更：右侧 Header 不再显示固定“操作说明”，改由 HoverHUD 动态写入“悬停装饰名称”。
-    -- 这里初始化为空字符串，交由 HoverHUD 在悬停时更新。
-    if sub and sub.Header then sub.Header:SetText("") end
+    -- KISS：不再在此处清空 Header 文本。
+    -- 标题的唯一权威由 HoverHUD 悬停/选中逻辑写入与维持；
+    -- 这里仅负责采纳官方 Instructions 到 SubPanel，不改 Header 内容。
 
     -- 优先方案：直接重挂，但不再把容器“贴到底”。
     -- 改动说明：

@@ -24,7 +24,6 @@ local DEFAULTS = {
     EnableResetAll = true,
     -- 是否启用 L 锁定/解锁 悬停装饰
     EnableLock = true,
-    -- 1: Ctrl, 2: Alt, 3: Ctrl+D（默认，释放 Alt）
     DuplicateKey = 3,
     -- 记住控制中心上次选中的分类（'Housing'/'Clipboard'/'History'/...）
     LastCategoryKey = nil,
@@ -109,7 +108,8 @@ local function GetDB()
     _G.ADT_DB = CopyDefaults(_G.ADT_DB, DEFAULTS)
     -- 一次性迁移
     MigrateIfNeeded(_G.ADT_DB)
-    -- 历史兼容：旧版本默认是 Alt（2），改为 Ctrl+D（3）
+    -- 历史兼容：旧版本默认是 Alt（2），改为 Ctrl+D（3）。
+    -- 仅作迁移用途；HoverHUD 不再使用 Alt 触发。
     if _G.ADT_DB and _G.ADT_DB.DuplicateKey == 2 then
         _G.ADT_DB.DuplicateKey = 3
     end
@@ -268,14 +268,11 @@ end
 
 -- 获取当前重复热键名
 function ADT.GetDuplicateKeyName()
-    -- 为兼容旧字段名，仍保留此函数，但返回用于 UI 显示的“按键文本”。
+    -- 为兼容旧字段名，仍保留此函数，但仅返回用于 UI 显示的“按键文本”。
+    -- 注意：索引 1/2 为历史兼容值，不影响 HoverHUD 的行为（固定为 Ctrl+D 覆盖绑定）。
     local index = ADT.GetDBValue("DuplicateKey") or 3
     if index == 3 then
         return (CTRL_KEY_TEXT and (CTRL_KEY_TEXT.."+D")) or "CTRL+D"
-    elseif index == 1 then
-        return CTRL_KEY_TEXT or "CTRL"
-    else
-        return ALT_KEY_TEXT or "ALT"
     end
 end
 

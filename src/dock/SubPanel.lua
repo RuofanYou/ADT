@@ -231,12 +231,18 @@ local function AttachTo(main)
             end
 
             local function EvaluateAutoHide()
-                -- 仅当“没有有效正文 + 标题也无意义”时隐藏，并把高度压到 0 以消除与下方清单之间的空隙。
+                -- KISS：显示/隐藏的唯一权威在这里裁决。
+                -- 规则：只在“正文为空 且 标题无意义”时隐藏；否则必须显示。
                 local noBody = not AnyNonHeaderVisible(sub.Content, sub.Header)
                 local noHeader = not HeaderHasMeaningfulText(sub.Header)
                 if noBody and noHeader then
                     sub:SetHeight(0)
                     sub:Hide()
+                else
+                    if not sub:IsShown() then
+                        sub:Show()
+                        -- 显示后交由 OnShow 钩子触发一次自适应与再次判空
+                    end
                 end
             end
 
@@ -262,7 +268,9 @@ local function AttachTo(main)
 
             -- 提供给外部的统一触发入口：以方法形式挂到 sub 本体，避免全局重复实现。
             sub._ADT_RequestAutoResize = function()
-                if sub and sub.IsShown and sub:IsShown() then RequestAutoResize() end
+                -- 移除“必须已可见才能自适应”的限制，
+                -- 以便在被误隐藏后也能通过内容变化自动恢复显示。
+                RequestAutoResize()
             end
 
             -- 宽度需求上报：返回“在不换行前提下正文所需的中心区域宽度”。

@@ -133,6 +133,46 @@ local CFG = {
             -- 示例：countRightInset = 6, nameToCountGap = 10
         },
     },
+    -- 轴悬停提示（AxisHoverHint）视觉与行为（配置驱动，单一权威）
+    AxisHint = {
+        -- 字体像素大小
+        fontPx = 16,
+        -- 光标相对偏移（屏幕空间，像素）
+        cursorOffsetX = 12,
+        cursorOffsetY = 16,
+        -- 颜色（ARGB）
+        colors = {
+            X = "FFFF5A5A", -- 红
+            Y = "FF2ECC71", -- 绿
+            Z = "FF3498DB", -- 蓝
+            Fallback = "FFFFFFFF",
+        },
+        -- 透明度（0~1）
+        alpha = 1.0,
+        -- 分层：在编辑器内置 UI 之上渲染
+        strata = "TOOLTIP",
+        -- 淡入/出节奏（继承通用 Fading，可单独覆盖）
+        fadeInInstant = true,
+        fadeInRate  = 10,
+        fadeOutRate = 4,
+        -- 哪些子模式显示提示：Rotate/Translate
+        submodes = { Rotate = true, Translate = true },
+    },
+    -- Dock 选项条目/左侧分类 悬停高亮（三段贴片）参数：配置驱动，单一权威
+    DockHighlight = {
+        -- 三段贴片颜色（RGBA，0~1）
+        color = { r = 0.96, g = 0.84, b = 0.32, a = 0.15 },
+        -- 覆盖按钮的内收边距（像素；正数向内收）
+        insetLeft   = 0,
+        insetRight  = 0,
+        insetTop    = -0,
+        insetBottom = -0,
+        -- 淡入控制：enabled=false 时立即显示
+        fade = {
+            enabled   = true,
+            inDuration = 0.15,   -- 秒
+        },
+    },
 }
 
 -- 导出为全局唯一权威

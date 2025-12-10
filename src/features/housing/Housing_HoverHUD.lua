@@ -12,18 +12,12 @@ local GetActiveHouseEditorMode = C_HouseEditor.GetActiveHouseEditorMode
 local IsHouseEditorActive = C_HouseEditor.IsHouseEditorActive
 local GetCatalogEntryInfoByRecordID = C_HousingCatalog.GetCatalogEntryInfoByRecordID
 -- 注意：专家/基础模式有不同的 IsDecorSelected，这里统一封装为单一权威
+-- 更稳健且更简单：不依赖“当前模式”，两边都查；任一为真即认为“处于选中”。
+-- 这样可以抵御事件/模式切换时序抖动导致的误判（KISS）。
 local function IsAnyDecorSelected()
-    local mode = GetActiveHouseEditorMode and GetActiveHouseEditorMode()
-    if mode == (Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.ExpertDecor) then
-        if C_HousingExpertMode and C_HousingExpertMode.IsDecorSelected then
-            return not not C_HousingExpertMode.IsDecorSelected()
-        end
-    else
-        if C_HousingBasicMode and C_HousingBasicMode.IsDecorSelected then
-            return not not C_HousingBasicMode.IsDecorSelected()
-        end
-    end
-    return false
+    local selExpert = C_HousingExpertMode and C_HousingExpertMode.IsDecorSelected and C_HousingExpertMode.IsDecorSelected()
+    local selBasic  = C_HousingBasicMode  and C_HousingBasicMode.IsDecorSelected  and C_HousingBasicMode.IsDecorSelected()
+    return not not (selExpert or selBasic)
 end
 -- 注意：SetPlacedDecorEntryHovered 是受保护 API，不能被第三方插件使用
 
@@ -518,6 +512,10 @@ local function Blizzard_HouseEditor_OnLoaded()
                 end
             end
             self._alpha = a
+            -- KISS：标题与信息行“连体”，Alpha 完全由组级唯一权威驱动
+            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha then
+                ADT.DockUI.SetSubPanelHeaderAlpha(a)
+            end
         end
         DisplayFrame:SetGroupAlpha(0)
         -- 读取淡入/淡出节奏配置（配置为单一权威，见 Housing_Config.lua）
@@ -544,8 +542,8 @@ local function Blizzard_HouseEditor_OnLoaded()
             else
                 self:SetGroupAlpha(nextA)
             end
-            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha
-               and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
+            -- 始终同步 Header Alpha
+            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha then
                 ADT.DockUI.SetSubPanelHeaderAlpha(self._alpha)
             end
             -- 淡出也触发一次，以便在完全隐藏后收缩子面板高度
@@ -556,9 +554,9 @@ local function Blizzard_HouseEditor_OnLoaded()
         function DisplayFrame:FadeInGroup()
             -- 统一：进入悬停阶段时确保 Header 可见（alpha=1），避免首帧仍为0导致“无标题”错觉。
             -- 不更改“是否跟随”的状态，由上层在 OnHoveredTargetChanged 中决定。
+            -- 始终同步 Header Alpha
             if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha then
-                local followOK = (not ADT.DockUI.IsHeaderAlphaFollowEnabled) or ADT.DockUI.IsHeaderAlphaFollowEnabled()
-                if followOK then ADT.DockUI.SetSubPanelHeaderAlpha(1) end
+                ADT.DockUI.SetSubPanelHeaderAlpha(1)
             end
             local cfg = GetFadeCFG()
             if cfg.fadeInInstant then
@@ -576,8 +574,7 @@ local function Blizzard_HouseEditor_OnLoaded()
                     else
                         s:SetGroupAlpha(nextA)
                     end
-                    if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha
-                       and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
+                    if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha then
                         ADT.DockUI.SetSubPanelHeaderAlpha(s._alpha)
                     end
                     if ADT and ADT.DockUI and ADT.DockUI.RequestSubPanelAutoResize then
@@ -608,8 +605,7 @@ local function Blizzard_HouseEditor_OnLoaded()
             if self.HintFrames then for _, ch in ipairs(self.HintFrames) do kill(ch) end end
             if self.SetGroupAlpha then self:SetGroupAlpha(0) end
             -- 保持与右侧 Header alpha 同步（若处于跟随模式）
-            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha
-               and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
+            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha then
                 ADT.DockUI.SetSubPanelHeaderAlpha(0)
             end
         end
@@ -861,7 +857,7 @@ do
         end
         -- 进入“选中”态：
         if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
-        if DisplayFrame and DisplayFrame.InstantHideGroup then DisplayFrame:InstantHideGroup() end
+        -- KISS：选中态不清空整组，避免信息行短暂被隐藏；仅按需隐藏其它提示行。
         -- 检查开关是否启用（仅用于“误操作保护”拦截；显示标题不受此开关影响）
         local protectionEnabled = ADT.GetDBValue("EnableProtection")
         if protectionEnabled == nil then protectionEnabled = true end
@@ -957,7 +953,8 @@ do
                                 or ((L["Indoor"]) or "Indoor")
                             local stockLabel = (L["Stock"]) or "Stock"
                             local labelSep = Colorize('separatorMuted', ' | ')
-                            local colon    = Colorize('separatorMuted', ":")
+                            -- 冒号后增加一个空格，避免数字贴得太近影响可读性
+                            local colon    = Colorize('separatorMuted', ": ")
                             local placeC   = Colorize('labelMuted', placeText)
                             local stockLbl = Colorize('labelMuted', stockLabel)
                             local stockVal = (stored and stored > 0)
@@ -997,6 +994,8 @@ do
                             ctrl:SetShown(hasDyeInfo)
                         end
                         if DisplayFrame.InfoLine.Show then DisplayFrame.InfoLine:Show() end
+                        -- 组级可见度与 Header 一致：选中态固定为 1
+                        if DisplayFrame.SetGroupAlpha then DisplayFrame:SetGroupAlpha(1) end
                         if DisplayFrame.InfoLine.SetAlpha then DisplayFrame.InfoLine:SetAlpha(1) end
                         if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame.InfoLine) end
                         if DisplayFrame.RecalculateHeight then DisplayFrame:RecalculateHeight() end
@@ -1202,7 +1201,8 @@ do
                             local stockLabel = (L["Stock"]) or "Stock"
                             -- 语义上色（2025 UI）：标签=柔和中性；库存数=语义色
                             local labelSep = Colorize('separatorMuted', ' | ')
-                            local colon    = Colorize('separatorMuted', ":")
+                            -- 冒号后增加一个空格，避免数字贴得太近影响可读性
+                            local colon    = Colorize('separatorMuted', ": ")
                             local placeC   = Colorize('labelMuted', placeText)
                             local stockLbl = Colorize('labelMuted', stockLabel)
                             local stockVal = (stored and stored > 0)
@@ -1336,13 +1336,24 @@ end
     end
 
     function EL:OnEditorModeChanged()
-        -- 切换基础/专家/自定义等模式时，暴雪会刷新右侧说明。
-        -- 为做到“无缝衔接”，这里即时清空我们自绘的 HoverHUD，交给新模式接管。
+        -- 单一权威：以“当前是否选中/悬停”为唯一裁决。
+        -- 若其一成立，立刻刷新，不做隐藏，确保标题与 InfoLine 同进退。
+        if IsAnyDecorSelected() then
+            return self:OnSelectedTargetChanged(true)
+        end
+        if IsHoveringDecor() then
+            return self:ProcessHoveredDecor()
+        end
+
+        -- 两者都不存在时才隐藏，并让 Header 同步淡出（保持“一荣俱荣”）。
         if DisplayFrame and DisplayFrame.InstantHideGroup then
             DisplayFrame:InstantHideGroup()
         end
-        -- 下一帧根据当前环境恢复应显示的内容：
-        -- 若已选中 → 走选中态标题与 InfoLine；否则若正在悬停 → 走悬停刷新。
+        if ADT and ADT.DockUI and ADT.DockUI.FadeOutHeader then
+            ADT.DockUI.FadeOutHeader(0.5)
+        end
+
+        -- 兜底：下一帧若恢复到选中/悬停，立即回显。
         C_Timer.After(0, function()
             if IsAnyDecorSelected() then
                 self:OnSelectedTargetChanged(true)

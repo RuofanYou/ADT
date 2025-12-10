@@ -169,27 +169,7 @@ local function CreateCategoryButton(parent)
 end
 
 -- 选中高亮（纯色矩形）
-local function CreateSelectionHighlight(parent)
-    local d = Def()
-    local f = CreateFrame("Frame", nil, parent, "ADTSettingsAnimSelectionTemplate")
-    -- 旧版视觉：改用暴雪 housing-basic-container Atlas，避免“纯色矩形”观感
-    if f.Left then f.Left:Hide() end
-    if f.Center then f.Center:Hide() end
-    if f.Right then f.Right:Hide() end
-    local bg = f:CreateTexture(nil, "BACKGROUND")
-    f.Background = bg
-    bg:SetAllPoints(true)
-    if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("housing-basic-container") then
-        bg:SetAtlas("housing-basic-container")
-    else
-        bg:SetColorTexture(1.0, 0.82, 0.0, 0.15) -- 兜底：半透明金色
-    end
-    f:Hide()
-    f:SetSize(120, d.CategoryHeight or d.ButtonSize or 28)
-    if f.EnableMouse then f:EnableMouse(false) end
-    if f.EnableMouseMotion then f:EnableMouseMotion(false) end
-    return f
-end
+-- 高亮容器改为复用 DockUI 的单一权威构造
 
 -- 初始化并构建左侧面板（静态）
 function DockLeft.Build(MainFrame, sideSectionWidth)
@@ -286,32 +266,7 @@ function DockLeft.Build(MainFrame, sideSectionWidth)
         LeftSlide:SetHeight(wanted)
     end
 
-    -- 高亮
-    local highlight = CreateSelectionHighlight(LeftSlide)
-    MainFrame.__LeftHighlight = highlight
-
-    function MainFrame:HighlightButton(button)
-        -- 与剥离前一致：使用 housing-basic-container，左右内收控制而非按文本宽度
-        highlight:Hide(); highlight:ClearAllPoints()
-        if button then
-            local labelOffset = tonumber(button.labelOffset) or 9
-            local textPad = tonumber(d.HighlightTextPaddingLeft) or 10
-            local insetLeft = math.max(0, labelOffset - textPad)
-            local insetRight = tonumber(d.HighlightRightInset) or 2
-            highlight:SetParent(button)
-            -- 确保在文本之下：层级=按钮层级-1；同一 strata
-            local strata = button.GetFrameStrata and button:GetFrameStrata() or nil
-            if strata then highlight:SetFrameStrata(strata) end
-            local lvl = (button.GetFrameLevel and button:GetFrameLevel()) or 1
-            pcall(highlight.SetFrameLevel, highlight, math.max(0, lvl - 1))
-            highlight:SetPoint("LEFT", button, "LEFT", insetLeft, 0)
-            highlight:SetPoint("RIGHT", button, "RIGHT", -insetRight, 0)
-            local minH = tonumber(d.HighlightMinHeight) or 18
-            local h = math.max(minH, (d.CategoryHeight or d.ButtonSize or 28) - 4)
-            highlight:SetHeight(h)
-            highlight:Show()
-        end
-    end
+    -- 高亮：不在 LeftPanel 复写；使用 DockUI.lua 定义的 MainFrame:HighlightButton
 
     -- 动态左侧高度（按分类数量）
     function MainFrame:UpdateLeftSectionHeight()
