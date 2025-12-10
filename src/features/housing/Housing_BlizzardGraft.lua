@@ -658,37 +658,47 @@ local function GetPlacedDecorListFrame()
     return list
 end
 
--- 将“放置的装饰”官方弹窗与 ADT 子面板自然衔接
-local function AnchorPlacedList()
-    local list = GetPlacedDecorListFrame()
-    if not list or not list.GetHeight then return end
+-- 通用：将任意框体贴合到 Dock.SubPanel 下方（若无 SubPanel 则贴 Dock 下边），并做等宽与高度保护
+local function AnchorFrameBelowDock(frame, cfg)
+    if not frame or not frame.GetHeight then return end
 
     local dock = GetDock()
     if not dock then return end
 
-    -- 目标锚点：优先衔接 SubPanel；若未创建或隐藏，则衔接 Dock 主体底边
     local anchor = dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()) or dock
     if anchor and anchor.IsShown and not anchor:IsShown() then
         anchor = dock
     end
 
-    -- 贴合与等宽。
-    -- 说明：暴雪模板的木质边框相对 Frame 存在约 ±4px 的外扩；
-    -- 为了让“视觉边缘”与 SubPanel/右侧面板一致，这里用锚点直接补偿：
-    -- 左 +4 / 右 -4。避免额外改皮肤，实现最小变更。
-    list:ClearAllPoints()
-    local dxL = assert(CFG.PlacedList and CFG.PlacedList.anchorLeftCompensation)
-    local dxR = assert(CFG.PlacedList and CFG.PlacedList.anchorRightCompensation)
-    local dy  = assert(CFG.PlacedList and CFG.PlacedList.verticalGap)
-    list:SetPoint("TOPLEFT",  anchor, "BOTTOMLEFT", dxL, -dy)
-    list:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", dxR, -dy)
-    -- 与面板同层或稍高，避免被遮挡
+    local dxL = assert(cfg and cfg.anchorLeftCompensation)
+    local dxR = assert(cfg and cfg.anchorRightCompensation)
+    local dy  = assert(cfg and cfg.verticalGap)
+
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT",  anchor, "BOTTOMLEFT", dxL, -dy)
+    frame:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", dxR, -dy)
+
+    -- 层级：与 Dock 一致并略高，避免被遮挡
     pcall(function()
         local targetStrata = dock:GetFrameStrata() or "DIALOG"
-        list:SetFrameStrata(targetStrata)
-        list:SetFrameLevel((dock:GetFrameLevel() or 10) + 10)
+        frame:SetFrameStrata(targetStrata)
+        frame:SetFrameLevel((dock:GetFrameLevel() or 10) + 10)
     end)
 
+    -- 绝不越出屏幕底部
+    frame:SetClampedToScreen(true)
+    local uiBottom = UIParent and (UIParent.GetBottom and UIParent:GetBottom()) or 0
+    local topY = (anchor and anchor.GetBottom and anchor:GetBottom()) or (dock and dock:GetBottom()) or 0
+    local available = math.max(120, (topY - dy - uiBottom) - 8) -- 8px 安全边距
+    local curH = frame:GetHeight() or 300
+    if curH > available + 0.5 then frame:SetHeight(available) end
+end
+
+-- 将“放置的装饰”官方弹窗与 ADT 子面板自然衔接
+local function AnchorPlacedList()
+    local list = GetPlacedDecorListFrame()
+    if not list then return end
+    AnchorFrameBelowDock(list, CFG.PlacedList)
     -- 禁止拖动/用户放置，保持跟随
     pcall(function()
         list:SetMovable(false)
@@ -697,16 +707,6 @@ local function AnchorPlacedList()
         list:SetScript("OnDragStart", nil)
         list:SetScript("OnDragStop", nil)
     end)
-
-    -- 高度限制：绝不超过屏幕底部
-    list:SetClampedToScreen(true)
-    local uiBottom = UIParent and (UIParent.GetBottom and UIParent:GetBottom()) or 0
-    local topY = (anchor and anchor.GetBottom and anchor:GetBottom()) or (dock and dock:GetBottom()) or 0
-    -- 注意：增加垂直间距 dy 后，清单的顶部进一步下移，
-    -- 可用高度需要相应减少 dy，才能保证“永不越出屏幕底部”的原则。
-    local available = math.max(120, (topY - dy - uiBottom) - 8) -- 保留 8px 安全边距，最少 120
-    local curH = list:GetHeight() or 300
-    if curH > available + 0.5 then list:SetHeight(available) end
 end
 
 local function EnsurePlacedListHooks()
@@ -752,6 +752,132 @@ local function EnsurePlacedListHooks()
         end
     end
     list._ADT_Anchored = true
+end
+
+--
+-- 四、染色弹窗（DyeSelectionPopout）：贴合 Dock.SubPanel 下方
+--
+local function GetDyePopoutFrame()
+    return _G.DyeSelectionPopout
+end
+
+local function AnchorDyePopout()
+    local pop = GetDyePopoutFrame()
+    if not pop then return end
+    -- 复用与“放置清单”一致的对齐与宽度策略
+    AnchorFrameBelowDock(pop, CFG.PlacedList)
+end
+
+local function EnsureDyePopoutHooks()
+    local pop = GetDyePopoutFrame()
+    if not pop or pop._ADT_Anchored then return end
+
+    -- 首次显示：先瞬时透明 + 立即贴合，再下一帧复位透明度，避免“先在原位闪现一帧再飞过去”
+    pop:HookScript("OnShow", function(self)
+        local prevA = (self.GetAlpha and self:GetAlpha()) or 1
+        if self.SetAlpha then self:SetAlpha(0) end
+        AnchorDyePopout()
+        C_Timer.After(0, function()
+            AnchorDyePopout()
+            if self.SetAlpha then self:SetAlpha(prevA) end
+        end)
+    end)
+    pop:HookScript("OnSizeChanged", function() C_Timer.After(0, AnchorDyePopout) end)
+
+    -- Dock 或 SubPanel 变化时也刷新
+    local dock = GetDock()
+    if dock then
+        if dock.HookScript then
+            dock:HookScript("OnSizeChanged", function() C_Timer.After(0, function() if pop:IsShown() then AnchorDyePopout() end end) end)
+        end
+        if dock.SubPanel and dock.SubPanel.HookScript then
+            dock.SubPanel:HookScript("OnSizeChanged", function() C_Timer.After(0, function() if pop:IsShown() then AnchorDyePopout() end end) end)
+            dock.SubPanel:HookScript("OnShow",       function() C_Timer.After(0, function() if pop:IsShown() then AnchorDyePopout() end end) end)
+        end
+    end
+
+    pop._ADT_Anchored = true
+end
+
+--
+-- 五、定制面板（DecorCustomizationsPane/RoomComponentCustomizationsPane）：同样贴合 Dock.SubPanel 下方
+--
+local function GetCustomizePanes()
+    local hf = _G.HouseEditorFrame
+    local customize = hf and hf.CustomizeModeFrame
+    local decorPane = customize and customize.DecorCustomizationsPane
+    local roomPane  = customize and customize.RoomComponentCustomizationsPane
+    return decorPane, roomPane
+end
+
+local function AnchorCustomizePane()
+    local paneDecor, paneRoom = GetCustomizePanes()
+    if paneDecor and paneDecor:IsShown() then
+        AnchorFrameBelowDock(paneDecor, CFG.PlacedList)
+        Debug("已贴合 DecorCustomizationsPane 到 SubPanel 下方")
+    end
+    if paneRoom and paneRoom:IsShown() then
+        AnchorFrameBelowDock(paneRoom, CFG.PlacedList)
+        Debug("已贴合 RoomComponentCustomizationsPane 到 SubPanel 下方")
+    end
+end
+
+local function LockPaneDragging(p)
+    if not p then return end
+    pcall(function()
+        p:SetMovable(false)
+        p:SetUserPlaced(false)
+        p:RegisterForDrag() -- 清空
+        p:SetScript("OnDragStart", nil)
+        p:SetScript("OnDragStop", nil)
+    end)
+end
+
+local function EnsureCustomizePaneHooks()
+    local paneDecor, paneRoom = GetCustomizePanes()
+    if not (paneDecor or paneRoom) then return end
+
+    for _, p in ipairs({paneDecor, paneRoom}) do
+        if p and not p._ADT_Anchored then
+            LockPaneDragging(p)
+            -- 首次显示：透明→立即贴合→下一帧复位透明度，避免初次“飞入”
+            p:HookScript("OnShow", function(self)
+                local prevA = (self.GetAlpha and self:GetAlpha()) or 1
+                if self.SetAlpha then self:SetAlpha(0) end
+                AnchorCustomizePane()
+                C_Timer.After(0, function()
+                    AnchorCustomizePane()
+                    if self.SetAlpha then self:SetAlpha(prevA) end
+                end)
+            end)
+            p:HookScript("OnSizeChanged", function() C_Timer.After(0, AnchorCustomizePane) end)
+            p._ADT_Anchored = true
+        end
+    end
+
+    local dock = GetDock()
+    if dock then
+        if dock.HookScript then
+            dock:HookScript("OnSizeChanged", function() C_Timer.After(0, AnchorCustomizePane) end)
+        end
+        if dock.SubPanel and dock.SubPanel.HookScript then
+            dock.SubPanel:HookScript("OnSizeChanged", function() C_Timer.After(0, AnchorCustomizePane) end)
+            dock.SubPanel:HookScript("OnShow",       function() C_Timer.After(0, AnchorCustomizePane) end)
+        end
+    end
+
+    -- 当进入“自定义模式”时，确保再次贴合
+    if _G.HouseEditorCustomizeModeMixin then
+        hooksecurefunc(HouseEditorCustomizeModeMixin, "OnShow", function()
+            EnsureCustomizePaneHooks(); C_Timer.After(0, AnchorCustomizePane)
+        end)
+        hooksecurefunc(HouseEditorCustomizeModeMixin, "ShowSelectedDecorInfo", function()
+            EnsureCustomizePaneHooks(); C_Timer.After(0, AnchorCustomizePane)
+        end)
+        hooksecurefunc(HouseEditorCustomizeModeMixin, "ShowSelectedRoomComponentInfo", function()
+            EnsureCustomizePaneHooks(); C_Timer.After(0, AnchorCustomizePane)
+        end)
+    end
 end
 
 -- 说明：12.0 后不再强制打开“放置的装饰”清单，
@@ -1038,8 +1164,9 @@ local function TrySetupHooks()
         hooksecurefunc(HouseEditorFrameMixin, "OnShow", function()
             -- 直接隐藏官方按钮并在 Header 放置代理按钮（避免任何重挂跳动）
             pcall(function() if ADT and ADT.DockUI and ADT.DockUI.AttachPlacedListButton then ADT.DockUI.AttachPlacedListButton() end end)
-            EnsurePlacedListHooks();
-            AnchorPlacedList();
+            EnsurePlacedListHooks(); AnchorPlacedList();
+            EnsureDyePopoutHooks(); AnchorDyePopout();
+            EnsureCustomizePaneHooks(); AnchorCustomizePane();
             HideOfficialDecorCountNow();
             ShowBudgetInHeader();
             C_Timer.After(0, AdoptInstructionsIntoDock)
@@ -1051,7 +1178,7 @@ local function TrySetupHooks()
         end)
         hooksecurefunc(HouseEditorFrameMixin, "OnActiveModeChanged", function()
             pcall(function() if ADT and ADT.DockUI and ADT.DockUI.AttachPlacedListButton then ADT.DockUI.AttachPlacedListButton() end end)
-            EnsurePlacedListHooks(); AnchorPlacedList(); HideOfficialDecorCountNow();
+            EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow();
             C_Timer.After(0, AdoptInstructionsIntoDock)
             C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end)
@@ -1131,7 +1258,7 @@ if EventRegistry and EventRegistry.RegisterCallback then
         TrySetupHooks()
         if isActive then
             -- 就位清单与按钮后再显示
-            EnsurePlacedListHooks(); AnchorPlacedList(); HideOfficialDecorCountNow();
+            EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow();
             pcall(function() if ADT and ADT.DockUI and ADT.DockUI.AttachPlacedListButton then ADT.DockUI.AttachPlacedListButton() end end)
             ShowBudgetInHeader();
             C_Timer.After(0, AdoptInstructionsIntoDock)
@@ -1164,7 +1291,7 @@ EL:RegisterEvent("ADDON_LOADED")
 EL:RegisterEvent("PLAYER_LOGIN")
 EL:SetScript("OnEvent", function(_, event, arg1)
     if event == "HOUSE_EDITOR_MODE_CHANGED" then
-        EnsurePlacedListHooks(); AnchorPlacedList(); HideOfficialDecorCountNow();
+        EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow();
         C_Timer.After(0, AdoptInstructionsIntoDock)
         C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         C_Timer.After(0.05, _ADT_QueueResize)
@@ -1177,13 +1304,13 @@ EL:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "ADDON_LOADED" and (arg1 == "Blizzard_HouseEditor" or arg1 == ADDON_NAME) then
         TrySetupHooks()
         if IsHouseEditorShown() then
-            EnsurePlacedListHooks(); AnchorPlacedList(); HideOfficialDecorCountNow(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+            EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end
     elseif event == "PLAYER_LOGIN" then
         TrySetupHooks()
         C_Timer.After(0.5, function()
             if IsHouseEditorShown() then
-                EnsurePlacedListHooks(); AnchorPlacedList(); HideOfficialDecorCountNow(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+                EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
             end
         end)
     end
@@ -1193,6 +1320,6 @@ end)
 C_Timer.After(1.0, function()
     TrySetupHooks()
     if IsHouseEditorShown() then
-        EnsurePlacedListHooks(); AnchorPlacedList(); HideOfficialDecorCountNow(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+        EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
     end
 end)

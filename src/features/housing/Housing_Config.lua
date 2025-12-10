@@ -52,6 +52,18 @@ local CFG = {
         controlFontPx     = 13, -- 右列键帽文字字号（像素）
         minFontSize       = 9,  -- 任意字体允许的最小像素（用于自动收缩下限）
     },
+    -- 子面板展开/收起动画（配置驱动，单一权威）
+    SubPanelAnim = {
+        -- 展开/收起的总时长（秒）
+        inDuration  = 0.18,
+        outDuration = 0.18,
+        -- 缩放最小值（避免 0 造成某些版本下的数值异常）
+        minScale    = 0.001,
+        -- 平滑曲线（Animation:SetSmoothing 的参数）：可选 IN/OUT/IN_OUT
+        smoothing   = "OUT",
+        -- 是否同时做 Alpha 的淡入/淡出
+        withAlpha   = true,
+    },
     -- 暴雪“放置的装饰清单”对齐 DockUI 的配置（单一权威）
     PlacedList = {
         -- 说明：官方清单木质边框相对 Frame 有约 ±4px 的外扩；
