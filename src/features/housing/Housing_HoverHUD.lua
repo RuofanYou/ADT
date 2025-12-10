@@ -487,9 +487,12 @@ local function Blizzard_HouseEditor_OnLoaded()
             end
         end
         function DisplayFrame:FadeInGroup()
+            -- 仅在“未选中”态由悬停组驱动 Header alpha；选中时 Header 由专用 fader 接管
             if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow and ADT.DockUI.SetSubPanelHeaderAlpha then
-                ADT.DockUI.SetHeaderAlphaFollow(true)
-                ADT.DockUI.SetSubPanelHeaderAlpha(0)
+                if not (IsDecorSelected and IsDecorSelected()) then
+                    ADT.DockUI.SetHeaderAlphaFollow(true)
+                    ADT.DockUI.SetSubPanelHeaderAlpha(0)
+                end
             end
             self:SetScript("OnUpdate", GroupFadeIn_OnUpdate)
         end
@@ -670,7 +673,10 @@ end
 do
     EL.dynamicEvents = {
         "HOUSE_EDITOR_MODE_CHANGED",
+        -- 悬停：基础/专家模式均需要显示装饰名
         "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED",
+        "HOUSING_EXPERT_MODE_HOVERED_TARGET_CHANGED",
+        -- 选中：基础/专家模式
         "HOUSING_BASIC_MODE_SELECTED_TARGET_CHANGED",
         "HOUSING_EXPERT_MODE_SELECTED_TARGET_CHANGED",
     }
@@ -705,7 +711,7 @@ do
         if ADT and ADT.DebugPrint and event ~= "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" then
             ADT.DebugPrint("[Housing] OnEvent: "..tostring(event))
         end
-        if event == "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" then
+        if event == "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" or event == "HOUSING_EXPERT_MODE_HOVERED_TARGET_CHANGED" then
             self:OnHoveredTargetChanged(...)
         elseif event == "HOUSE_EDITOR_MODE_CHANGED" then
             self:OnEditorModeChanged()
@@ -724,7 +730,9 @@ do
             -- 取消选中：若仍在悬停，则不做淡出，直接交回“悬停跟随”；否则才淡出
             local hovered = IsHoveringDecor() and GetHoveredDecorInfo()
             if hovered and hovered.name then
-                if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(true) end
+                if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then
+                    ADT.DockUI.SetHeaderAlphaFollow(not (IsDecorSelected and IsDecorSelected()))
+                end
                 if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then ADT.DockUI.SetSubPanelHeaderText(hovered.name) end
                 -- alpha 后续由悬停 OnUpdate 统一驱动
             else
@@ -733,10 +741,9 @@ do
             end
             return
         end
-        -- 进入“选中”态：为避免与暴雪“选中说明”叠层，立刻清空我们自绘的 HoverHUD
-        if DisplayFrame and DisplayFrame.InstantHideGroup then
-            DisplayFrame:InstantHideGroup()
-        end
+        -- 进入“选中”态：切到“非跟随”后再隐藏悬停组，避免把 Header Alpha 连带清零（造成二次淡入）
+        if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
+        if DisplayFrame and DisplayFrame.InstantHideGroup then DisplayFrame:InstantHideGroup() end
         -- 检查开关是否启用（仅用于“误操作保护”拦截；显示标题不受此开关影响）
         local protectionEnabled = ADT.GetDBValue("EnableProtection")
         if protectionEnabled == nil then protectionEnabled = true end
@@ -843,10 +850,9 @@ do
 
     function EL:OnHoveredTargetChanged(hasHoveredTarget, targetType)
         if hasHoveredTarget then
-            -- 只要进入“悬停链路”，立即把 Header 切回“跟随悬停”的统一驱动，
-            -- 防止此前处于“选中专用 fader”状态导致后续悬停不再更新 alpha。
+            -- 未选中时才切回“跟随悬停”；选中状态保持 Header 由专用 fader 管控
             if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then
-                ADT.DockUI.SetHeaderAlphaFollow(true)
+                ADT.DockUI.SetHeaderAlphaFollow(not (IsDecorSelected and IsDecorSelected()))
             end
             if not self.isUpdating then
                 self.t = 0
@@ -869,8 +875,6 @@ do
                     if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
                     if DisplayFrame.InstantHideGroup then DisplayFrame:InstantHideGroup() end
                 else
-                    local df = DisplayFrame.SubFrame or DisplayFrame
-                    if df.FadeOut then df:FadeOut(0.5) end
                     if DisplayFrame.FadeOutGroup then DisplayFrame:FadeOutGroup(0.5) end
                 end
             end
@@ -892,6 +896,13 @@ do
         if IsHoveringDecor() then
             local info = GetHoveredDecorInfo()
             if info then
+                -- 若处于“选中”状态：不启用 Header 跟随，也不重放悬停淡入；仅保留当前选中标题
+                if IsDecorSelected and IsDecorSelected() then
+                    if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then
+                        ADT.DockUI.SetHeaderAlphaFollow(false)
+                    end
+                    return true
+                end
                 -- 智能跟随：
                 -- 若标题文本与当前悬停名称一致且已完全可见，则不再切回“跟随”，
                 -- 以避免重复将 Header alpha 拉回 0 造成二次淡入；否则进入跟随模式。
@@ -909,9 +920,7 @@ do
                 end
                 self.decorInstanceInfo = info
                 if DisplayFrame then
-                    -- 显示“重复”等快捷键行（不修改其左侧文本）
-                    local df = DisplayFrame.SubFrame or DisplayFrame
-                    if df.FadeIn then df:FadeIn() end
+                    -- 统一由组级淡入驱动，避免先只显示第一行（“重复”）再显示其它行
                     if DisplayFrame.FadeInGroup then DisplayFrame:FadeInGroup() end
                     -- 悬停新增可见内容后，立即请求 SubPanel 自适应一次（随后还会在淡入过程中多次触发）
                     if ADT and ADT.DockUI and ADT.DockUI.RequestSubPanelAutoResize then
@@ -943,11 +952,7 @@ do
             end
         end
         self:UnregisterEvent("MODIFIER_STATE_CHANGED")
-        if DisplayFrame then
-            local df = DisplayFrame.SubFrame or DisplayFrame
-            if df.FadeOut then df:FadeOut(0.5) end
-            if DisplayFrame.FadeOutGroup then DisplayFrame:FadeOutGroup(0.5) end
-        end
+        if DisplayFrame and DisplayFrame.FadeOutGroup then DisplayFrame:FadeOutGroup(0.5) end
     end
 
     function EL:GetHoveredDecorEntryID()

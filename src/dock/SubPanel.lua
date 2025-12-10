@@ -102,10 +102,15 @@ local function AttachTo(main)
         -- - 不依赖业务侧（Housing）的行数/字体/布局细节，完全依据可见像素范围计算；
         -- - 避免双实现（DRY）：高度唯一权威改为由 SubPanel 自身测量；业务侧只需触发一次“请求自适应”。
         do
-            local AUTO_MIN = 160
-            local AUTO_MAX = 1024
-            local INSET_TOP = 14   -- content 与 sub 顶边的内边距（CreateFrame 时的锚点偏移）
-            local INSET_BOTTOM = 10 -- content 与 sub 底边的内边距
+            -- 改为使用 Housing_Config.lua 的“单一权威”配置，避免硬编码
+            local CFG = ADT.GetHousingCFG and ADT.GetHousingCFG() or nil
+            local L   = CFG and CFG.Layout or {}
+            local AUTO_MIN     = tonumber(L.subPanelMinHeight)   or 160
+            local AUTO_MAX     = tonumber(L.subPanelMaxHeight)   or 1024
+            local INSET_TOP    = tonumber(L.contentTopPadding)   or 14   -- content 与 sub 顶边的内边距
+            local INSET_BOTTOM = tonumber(L.contentBottomPadding) or 10   -- content 与 sub 底边的内边距
+            local HEADER_NUDGE = tonumber(L.headerTopNudge)      or 10   -- Header 相对 Content 的下移
+            local HEADER_GAP   = tonumber(L.headerToInstrGap)    or 8    -- Header 与说明列表的间距
             local pendingTicker
             local lastApplied
             
@@ -117,11 +122,12 @@ local function AttachTo(main)
                         -- 若存在可见后代，则认为“正文存在”
                         if AnyNonHeaderVisible(ch, header) then return true end
                         -- 无后代或后代不可见时，仅在自己具备有效绘制面积且非透明时才算可见
-                        local alphaOK = (not ch.GetAlpha) or (ch:GetAlpha() or 0) > 0.01
+                        local alphaOK = (not ch.GetAlpha) or ((ch:GetAlpha() or 0) > 0.01)
+                        local visibleOK = (not ch.IsVisible) or ch:IsVisible()
                         local w = (ch.GetWidth and ch:GetWidth()) or 0
                         local h = (ch.GetHeight and ch:GetHeight()) or 0
                         local hasArea = (w or 0) > 2 and (h or 0) > 2
-                        if alphaOK and hasArea and (not ch.GetChildren or select('#', ch:GetChildren()) == 0) then
+                        if alphaOK and visibleOK and hasArea and (not ch.GetChildren or select('#', ch:GetChildren()) == 0) then
                             return true
                         end
                     end
@@ -140,35 +146,67 @@ local function AttachTo(main)
 
             local function DeepestBottom(frame)
                 if not (frame and frame.GetBottom) then return nil end
+                -- 透明/不可见的容器不参与高度计算，避免把 HoverHUD 等透明容器的“更低 bottom”算进去
+                if (frame.GetAlpha and (frame:GetAlpha() or 0) <= 0.01) then return nil end
+                if (frame.IsVisible and not frame:IsVisible()) then return nil end
                 local minB = frame:GetBottom()
                 if frame.GetChildren then
                     for _, ch in ipairs({frame:GetChildren()}) do
                         if ch and (not ch.IsShown or ch:IsShown()) then
-                            local b = DeepestBottom(ch)
-                            if b then minB = (minB and math.min(minB, b)) or b end
+                            -- 同样忽略透明/不可见子节点
+                            if (not ch.GetAlpha or (ch:GetAlpha() or 0) > 0.01) and (not ch.IsVisible or ch:IsVisible()) then
+                                local b = DeepestBottom(ch)
+                                if b then minB = (minB and math.min(minB, b)) or b end
+                            end
                         end
                     end
                 end
                 return minB
             end
 
+            -- 计算目标高度。
+            -- 修正点：
+            -- - 顶锚从“弹窗顶部/Header 顶部”改为“Header 下方分隔线 + headerToInstrGap”，
+            --   以避免额外把 Header 顶部空间计入“正文高度”造成底部多余留白。
+            -- - 同时保持 Header 自身始终包含在 SubPanel 高度内（即：Header 可见区域 + GAP + 正文 + 下内边距）。
             local function ComputeRequiredHeight()
                 if not (sub and sub.Content) then return end
-                local cont = sub.Content
-                local topMost, bottomMost
+                local cont   = sub.Content
+                local header = sub.Header
+                if not header then return end
+
+                -- 1) 计算“正文”的下边界（排除 header 自身）；上边界固定取“Header 分隔线下方 GAP 处”
+                local bottomMost
                 for _, ch in ipairs({cont:GetChildren()}) do
-                    if ch and (not ch.IsShown or ch:IsShown()) then
-                        local ct = ch.GetTop and ch:GetTop()
-                        local cb = DeepestBottom(ch) or (ch.GetBottom and ch:GetBottom())
-                        if ct and cb then
-                            topMost = topMost and math.max(topMost, ct) or ct
-                            bottomMost = bottomMost and math.min(bottomMost, cb) or cb
+                    if ch and ch ~= header and (not ch.IsShown or ch:IsShown()) then
+                        -- 过滤透明/不可见容器，避免误把 HoverHUD 等透明容器计入高度
+                        if (not ch.GetAlpha or (ch:GetAlpha() or 0) > 0.01) and (not ch.IsVisible or ch:IsVisible()) then
+                            local cb = DeepestBottom(ch) or (ch.GetBottom and ch:GetBottom())
+                            if cb then bottomMost = bottomMost and math.min(bottomMost, cb) or cb end
                         end
                     end
                 end
-                if not (topMost and bottomMost) then return nil end
-                local contentPixels = math.max(0, topMost - bottomMost)
-                local target = math.floor(contentPixels + INSET_TOP + INSET_BOTTOM + 0.5)
+
+                -- 2) 以 Header 分隔线为顶部参考，动态测算高度
+                local headerHeight = (header.GetHeight and header:GetHeight()) or ((Def.ButtonSize or 28) + 2)
+                local headerBottom = header.GetBottom and header:GetBottom() or nil
+                -- 纵向布局稳定前可能尚未获得 Bottom；此时回退到“Header 顶部法”，避免返回 nil
+                local headerTop    = header.GetTop and header:GetTop() or nil
+
+                -- 顶端基准：Header 下边（或以顶-高估算）减去 GAP
+                local headerRefBottom = headerBottom or (headerTop and (headerTop - headerHeight)) or 0
+                local topRef = headerRefBottom - HEADER_GAP
+
+                local contentPixels = 0
+                if bottomMost then
+                    contentPixels = math.max(0, topRef - bottomMost)
+                end
+
+                -- 顶端：内容区到 SubPanel 顶部的固定内边距（含 header 高度/位置/GAP）
+                local topPadding = INSET_TOP + HEADER_NUDGE + headerHeight + HEADER_GAP
+
+                -- 目标高度 = 顶部(内容→Header 分隔线/GAP/内边距) + 正文高度 + 底部内边距
+                local target = math.floor(topPadding + contentPixels + INSET_BOTTOM + 0.5)
                 target = math.max(AUTO_MIN, math.min(AUTO_MAX, target))
                 return target
             end
@@ -210,10 +248,9 @@ local function AttachTo(main)
                 end)
             end
 
-            -- 对外暴露统一入口：ADT.DockUI.RequestSubPanelAutoResize()
-            ADT.DockUI = ADT.DockUI or {}
-            ADT.DockUI.RequestSubPanelAutoResize = function()
-                if sub:IsShown() then RequestAutoResize() end
+            -- 提供给外部的统一触发入口：以方法形式挂到 sub 本体，避免全局重复实现。
+            sub._ADT_RequestAutoResize = function()
+                if sub and sub.IsShown and sub:IsShown() then RequestAutoResize() end
             end
 
             -- 尺寸/可见性变动时触发一次
@@ -310,11 +347,17 @@ local function EnsureHeaderFader()
     return header._ADT_HeaderFader
 end
 
-function ADT.DockUI.FadeInHeader()
+-- Header 淡入：若 fromCurrent 为 true，则从当前 Alpha 继续补完，不重置到 0。
+function ADT.DockUI.FadeInHeader(fromCurrent)
     local f = EnsureHeaderFader(); if not f then return end
     _follow = false
-    if f.SetAlpha then f:SetAlpha(0) end
+    if not fromCurrent and f.SetAlpha then f:SetAlpha(0) end
     if f.FadeIn then f:FadeIn() end
+end
+
+-- 语义化别名：用于“同名切换时补完淡入”，避免重复播放动画
+function ADT.DockUI.FinishHeaderFadeIn()
+    return ADT.DockUI.FadeInHeader(true)
 end
 
 function ADT.DockUI.FadeOutHeader(delay)

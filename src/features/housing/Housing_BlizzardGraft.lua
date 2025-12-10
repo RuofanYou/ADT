@@ -47,6 +47,7 @@ local HeaderTitleBackup
 -- 前向声明：避免在闭包中捕获到全局未定义的 IsHouseEditorShown
 --（Lua 的词法作用域要求在首次使用前声明局部变量，否则将解析为全局）
 local IsHouseEditorShown
+local GetActiveModeFrame -- 前向声明，供早期函数引用
 
 -- 更新：按需微调“放置的装饰”官方面板（仅布局/交互禁用），不改其数据与刷新逻辑。
 
@@ -127,6 +128,8 @@ local function EnsureBudgetWidget()
     BudgetWidget:SetPoint("CENTER", Header, "CENTER", 0, 0)
     BudgetWidget:SetHeight(36)
     BudgetWidget:SetWidth(240)
+    -- 初次创建时保持透明，等锚点与文本准备好后再显现（防止视觉“飞入”）
+    if BudgetWidget.SetAlpha then BudgetWidget:SetAlpha(0) end
     BudgetWidget:SetScript("OnEnter", function(self)
         if not self.tooltipText then return end
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
@@ -183,6 +186,7 @@ local function EnsureBudgetWidget()
             for _, e in ipairs(self.updateEvents) do self:UnregisterEvent(e) end
         end
     end)
+
 end
 
 local function ShowBudgetInHeader()
@@ -193,8 +197,16 @@ local function ShowBudgetInHeader()
         dock.HeaderTitle:Hide()
     end
     if BudgetWidget then
+        if BudgetWidget.SetAlpha then BudgetWidget:SetAlpha(0) end
+        BudgetWidget:ClearAllPoints()
+        BudgetWidget:SetPoint("CENTER", dock.Header, "CENTER", 0, 0)
+        LayoutBudgetWidget(); RepositionBudgetVertically(); UpdateBudgetText()
         BudgetWidget:Show()
-        UpdateBudgetText()
+        C_Timer.After(0, function()
+            if BudgetWidget and BudgetWidget:IsShown() and BudgetWidget.SetAlpha then
+                BudgetWidget:SetAlpha(1)
+            end
+        end)
     end
     Debug("Header 计数已显示到 Dock")
     -- 维护计数刷新与可见性
@@ -222,6 +234,26 @@ local function RestoreHeaderTitle()
     if dock.HeaderTitle and HeaderTitleBackup then
         dock.HeaderTitle:SetText(HeaderTitleBackup)
         dock.HeaderTitle:Show()
+    end
+end
+
+-- 立刻隐藏官方右上角 DecorCount，避免与我们 Header 计数“先出现后消失”的跳动观感
+local function HideOfficialDecorCountNow()
+    local active = GetActiveModeFrame()
+    local dc = active and active.DecorCount
+    if not dc then return end
+    -- 先把 alpha 置 0，再调用 Hide，避免任何一帧的闪现
+    if dc.SetAlpha then dc:SetAlpha(0) end
+    if dc.Hide then dc:Hide() end
+    dc._ADTForceHidden = true
+    if not dc._ADT_HideHooked then
+        dc._ADT_HideHooked = true
+        hooksecurefunc(dc, "Show", function(self)
+            if self._ADTForceHidden then
+                if self.SetAlpha then self:SetAlpha(0) end
+                self:Hide()
+            end
+        end)
     end
 end
 
@@ -602,7 +634,7 @@ local function _ADT_RestoreTypography(instr)
     if instr.UpdateLayout then instr:UpdateLayout() end
 end
 
-local function GetActiveModeFrame()
+GetActiveModeFrame = function()
     if _G.HouseEditorFrame_GetFrame then
         local f = _G.HouseEditorFrame_GetFrame()
         if f and f.GetActiveModeFrame then
@@ -996,8 +1028,11 @@ local function TrySetupHooks()
     -- 钩住显示/隐藏与模式切换
     pcall(function()
         hooksecurefunc(HouseEditorFrameMixin, "OnShow", function()
-            -- 优先采纳按钮以避免出现“飞过去”的观感
+            -- 先就位按钮与清单锚点，避免首次出现的跳动
             pcall(function() if ADT and ADT.DockUI and ADT.DockUI.AttachPlacedListButton then ADT.DockUI.AttachPlacedListButton() end end)
+            EnsurePlacedListHooks();
+            AnchorPlacedList();
+            HideOfficialDecorCountNow();
             ShowBudgetInHeader();
             C_Timer.After(0, AdoptInstructionsIntoDock)
             C_Timer.After(0.1, AdoptInstructionsIntoDock)
@@ -1008,6 +1043,7 @@ local function TrySetupHooks()
         end)
         hooksecurefunc(HouseEditorFrameMixin, "OnActiveModeChanged", function()
             pcall(function() if ADT and ADT.DockUI and ADT.DockUI.AttachPlacedListButton then ADT.DockUI.AttachPlacedListButton() end end)
+            EnsurePlacedListHooks(); AnchorPlacedList(); HideOfficialDecorCountNow();
             C_Timer.After(0, AdoptInstructionsIntoDock)
             C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end)
@@ -1086,11 +1122,12 @@ if EventRegistry and EventRegistry.RegisterCallback then
     EventRegistry:RegisterCallback("HouseEditor.StateUpdated", function(_, isActive)
         TrySetupHooks()
         if isActive then
+            -- 就位清单与按钮后再显示
+            EnsurePlacedListHooks(); AnchorPlacedList(); HideOfficialDecorCountNow();
+            pcall(function() if ADT and ADT.DockUI and ADT.DockUI.AttachPlacedListButton then ADT.DockUI.AttachPlacedListButton() end end)
             ShowBudgetInHeader();
             C_Timer.After(0, AdoptInstructionsIntoDock)
             C_Timer.After(0.1, AdoptInstructionsIntoDock)
-            C_Timer.After(0, EnsurePlacedListHooks)
-            C_Timer.After(0.05, AnchorPlacedList)
             C_Timer.After(0.05, ShowPlacedListIfExpertActive)
             -- 启动轮询直到成功采用
             if not EL._adoptTicker then
@@ -1119,6 +1156,7 @@ EL:RegisterEvent("ADDON_LOADED")
 EL:RegisterEvent("PLAYER_LOGIN")
 EL:SetScript("OnEvent", function(_, event, arg1)
     if event == "HOUSE_EDITOR_MODE_CHANGED" then
+        EnsurePlacedListHooks(); AnchorPlacedList(); HideOfficialDecorCountNow();
         C_Timer.After(0, AdoptInstructionsIntoDock)
         C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         C_Timer.After(0.05, _ADT_QueueResize)
@@ -1131,13 +1169,13 @@ EL:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "ADDON_LOADED" and (arg1 == "Blizzard_HouseEditor" or arg1 == ADDON_NAME) then
         TrySetupHooks()
         if IsHouseEditorShown() then
-            ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+            EnsurePlacedListHooks(); AnchorPlacedList(); HideOfficialDecorCountNow(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end
     elseif event == "PLAYER_LOGIN" then
         TrySetupHooks()
         C_Timer.After(0.5, function()
             if IsHouseEditorShown() then
-                ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+                EnsurePlacedListHooks(); AnchorPlacedList(); HideOfficialDecorCountNow(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
             end
         end)
     end
@@ -1147,6 +1185,6 @@ end)
 C_Timer.After(1.0, function()
     TrySetupHooks()
     if IsHouseEditorShown() then
-        ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+        EnsurePlacedListHooks(); AnchorPlacedList(); HideOfficialDecorCountNow(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
     end
 end)

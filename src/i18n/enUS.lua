@@ -8,7 +8,7 @@ ADT.Locales = ADT.Locales or {}
 ADT.L = ADT.L or {}
 
 -- 英文语言表（默认）
-ADT.Locales.enUS = {
+    ADT.Locales.enUS = {
     ["ModuleName Housing_HoverHUD"] = "Decor Hover HUD",
     ["ModuleDescription Housing_HoverHUD"] = "In Decorate Mode:\n\n- Hover the cursor over a decor to display its name and stock.\n\n- Press Ctrl+D to place another instance (default).\n\nThe new object will not inherit the current angles and scales.",
     ["Duplicate"] = "Duplicate",
@@ -37,11 +37,14 @@ ADT.Locales.enUS = {
     ["Enable CTRL+T Reset All"] = "Enable CTRL+T Reset All",
     ["Enable CTRL+T Reset All tooltip"] = "In Expert Mode, pressing Ctrl+T resets all transforms. Turn off to disable the hotkey and hide the hint.",
     ["Enable L Lock"] = "Enable L Lock/Unlock",
-    ["Enable L Lock tooltip"] = "Press L to lock/unlock the hovered decor. Turn off to hide the hint and disable the hotkey.",
+        ["Enable L Lock tooltip"] = "Press L to lock/unlock the hovered decor. Turn off to hide the hint and disable the hotkey.",
+        -- Dock auto open in editor
+        ["Auto Open Dock in Editor"] = "Open Dock on entering editor",
+        ["Auto Open Dock in Editor tooltip"] = "When you enter or return to the House Editor, ADT's Command Dock opens automatically. Turn off to stop auto opening; Ctrl+Q or /adt still works.",
     ["Lock/Unlock"] = "Lock/Unlock",
 
     -- Auto Rotate (Batch Place)
-    ["Enable Auto Rotate on CTRL"] = "Enable Auto Rotate (CTRL Batch)",
+    ["Enable Auto Rotate on CTRL"] = "Enable Auto Rotate",
     ["Enable Auto Rotate on CTRL tooltip"] = "When holding CTRL to batch place, the decor will be auto-rotated at grab time.",
     ["Auto Rotate Mode"] = "Auto Rotate Mode",
     ["Auto Rotate Mode tooltip"] = "Preset: always rotate by the specified degrees. Learn: reuse the last rotation you used before placing. Sequence: cycle through configured angles.",
@@ -156,7 +159,7 @@ ADT.Locales.enUS = {
 }
 
 -- 中文语言表
-ADT.Locales.zhCN = {
+    ADT.Locales.zhCN = {
     ["ModuleName Housing_HoverHUD"] = "悬停信息 HUD",
     ["ModuleDescription Housing_HoverHUD"] = "在装饰模式：\n\n- 鼠标悬停装饰以显示其名称与库存数量。\n\n- 按下 Ctrl+D 可快速放置一个相同的装饰（默认）。\n\n新对象不会继承当前角度与缩放。",
     ["Duplicate"] = "重复",
@@ -185,13 +188,16 @@ ADT.Locales.zhCN = {
     ["Enable CTRL+T Reset All"] = "启用 CTRL+T 全部重置",
     ["Enable CTRL+T Reset All tooltip"] = "在专家模式下，按 Ctrl+T 重置所有变换；关闭后禁用该热键并隐藏提示。",
     ["Enable L Lock"] = "启用 L 以锁定装饰",
-    ["Enable L Lock tooltip"] = "按 L 锁定/解锁当前悬停的装饰；关闭后隐藏提示并禁用该热键。",
+        ["Enable L Lock tooltip"] = "按 L 锁定/解锁当前悬停的装饰；关闭后隐藏提示并禁用该热键。",
+        -- Dock auto open in editor
+        ["Auto Open Dock in Editor"] = "默认开启设置面板",
+        ["Auto Open Dock in Editor tooltip"] = "进入或回到住宅编辑模式时自动显示控制中心（Dock）。关闭后不再自动弹出，但仍可用 Ctrl+Q 或 /adt 打开。",
 
     -- 右侧提示中的“锁定/解锁”标题
     ["Lock/Unlock"] = "锁定",
 
     -- 自动旋转（批量放置）
-    ["Enable Auto Rotate on CTRL"] = "启用自动旋转（CTRL 批量放置）",
+    ["Enable Auto Rotate on CTRL"] = "启用自动旋转",
     ["Enable Auto Rotate on CTRL tooltip"] = "当按住 CTRL 连续放置时，在抓起预览的瞬间自动旋转到预设角度。",
     ["Auto Rotate Mode"] = "自动旋转模式",
     ["Auto Rotate Mode tooltip"] = "预设：始终按指定角度旋转；学习：复用上一次你在放置前手动调整过的角度；序列：按配置的角度序列循环。",
