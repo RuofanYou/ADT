@@ -261,6 +261,8 @@ do
             local gap  = math.abs(CFG.Row.vSpacing or 0)
             local n = 0
             local function vshown(f) return f and f.IsShown and f:IsShown() end
+            -- 信息行（室内/外 | 库存 | 🎨）
+            if self.InfoLine and vshown(self.InfoLine) then n = n + 1 end
             if self.SubFrame and vshown(self.SubFrame) then n = n + 1 end
             if self.HintFrames then
                 for _, f in ipairs(self.HintFrames) do if vshown(f) then n = n + 1 end end
@@ -444,8 +446,9 @@ do
         if entryInfo then
             stored = (entryInfo.quantity or 0) + (entryInfo.remainingRedeemable or 0)
         end
-        self.ItemCountText:SetText(stored)
-        self.ItemCountText:SetShown(stored > 0)
+        -- 库存数字改由 InfoLine 展示；隐藏旧数字
+        self.ItemCountText:SetText("")
+        self.ItemCountText:Hide()
         
         -- 单一权威：始终由 UpdateHintVisibility 控制各提示行的显隐
         -- 不再无条件显示，而是读取唯一的设置数据
@@ -487,6 +490,7 @@ local function Blizzard_HouseEditor_OnLoaded()
         function DisplayFrame:SetGroupAlpha(a)
             a = tonumber(a) or 0
             if a < 0 then a = 0 elseif a > 1 then a = 1 end
+            if self.InfoLine and self.InfoLine.SetAlpha then self.InfoLine:SetAlpha(a) end
             if self.SubFrame and self.SubFrame.SetAlpha then self.SubFrame:SetAlpha(a) end
             if self.HintFrames then
                 for _, f in ipairs(self.HintFrames) do
@@ -581,6 +585,7 @@ local function Blizzard_HouseEditor_OnLoaded()
                 if f.SetAlpha then f:SetAlpha(0) end
                 if f.alpha then f.alpha = 0 end
             end
+            kill(self.InfoLine)
             kill(self.SubFrame)
             if self.HintFrames then for _, ch in ipairs(self.HintFrames) do kill(ch) end end
             if self.SetGroupAlpha then self:SetGroupAlpha(0) end
@@ -596,6 +601,22 @@ local function Blizzard_HouseEditor_OnLoaded()
             if DisplayFrame.SetIgnoreParentScale then DisplayFrame:SetIgnoreParentScale(false) end
         end)
 
+        -- 信息行（置顶一行）：室内/外 + 库存 | 🎨已染/总槽
+        do
+            local infoLine = CreateFrame("Frame", nil, DisplayFrame, "ADT_HouseEditorInstructionTemplate")
+            DisplayFrame.InfoLine = infoLine
+            Mixin(infoLine, DisplayFrameMixin)
+            infoLine:OnLoad()
+            -- 右侧只显示纯文本，不使用键帽背景
+            pcall(function()
+                if infoLine.Control and infoLine.Control.Background then infoLine.Control.Background:Hide() end
+                if infoLine.Control and infoLine.Control.Icon then infoLine.Control.Icon:Hide() end
+                if infoLine.Control and infoLine.Control.Text then infoLine.Control.Text:Show() end
+            end)
+            if infoLine.InstructionText then infoLine.InstructionText:SetText("") end
+            if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(infoLine) end
+        end
+
         local SubFrame = CreateFrame("Frame", nil, DisplayFrame, "ADT_HouseEditorInstructionTemplate")
         DisplayFrame.SubFrame = SubFrame
         Mixin(SubFrame, DisplayFrameMixin)
@@ -603,6 +624,8 @@ local function Blizzard_HouseEditor_OnLoaded()
         -- 默认显示 CTRL+D，兼容旧版通过 ADT.GetDuplicateKeyName() 返回文本
         SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or "CTRL+D")
         if SubFrame.LockStatusText then SubFrame.LockStatusText:Hide() end
+        -- 新版将库存移动到 InfoLine 显示；隐藏旧的顶部数字
+        if SubFrame.ItemCountText then SubFrame.ItemCountText:Hide() end
 
         -- 追加：显示其它热键提示（Ctrl+X / C / V / S / R / 批量放置）
         DisplayFrame.HintFrames = {}
@@ -1033,8 +1056,52 @@ do
                         stored = (entryInfo.quantity or 0) + (entryInfo.remainingRedeemable or 0)
                     end
                     if DisplayFrame.SubFrame and DisplayFrame.SubFrame.ItemCountText then
-                        DisplayFrame.SubFrame.ItemCountText:SetText(stored)
-                        DisplayFrame.SubFrame.ItemCountText:SetShown(stored > 0)
+                        DisplayFrame.SubFrame.ItemCountText:SetText("")
+                        DisplayFrame.SubFrame.ItemCountText:Hide()
+                    end
+                    -- 信息行：室内/室外 + 库存 | 🎨x/y
+                    if DisplayFrame.InfoLine then
+                        local leftText
+                        do
+                            local indoor = not not info.isAllowedIndoors
+                            local outdoor = not not info.isAllowedOutdoors
+                            local placeText = (indoor and outdoor) and ((L["Indoor & Outdoor"]) or "Indoor & Outdoor")
+                                or (indoor and ((L["Indoor"]) or "Indoor"))
+                                or (outdoor and ((L["Outdoor"]) or "Outdoor"))
+                                or ((L["Indoor"]) or "Indoor")
+                            local stockLabel = (L["Stock"]) or "Stock"
+                            leftText = string.format("%s | %s:%d", placeText, stockLabel, stored)
+                        end
+                        local rightText = ""
+                        do
+                            local slots = (info.dyeSlots or {})
+                            local total = #slots
+                            if total and total > 0 then
+                                local used = 0
+                                for i = 1, total do
+                                    local s = slots[i]
+                                    if s and s.dyeColorID then used = used + 1 end
+                                end
+                                rightText = string.format("🎨%d/%d", used, total)
+                            else
+                                rightText = ""
+                            end
+                        end
+                        if DisplayFrame.InfoLine.InstructionText then
+                            DisplayFrame.InfoLine.InstructionText:SetText(leftText)
+                        end
+                        if DisplayFrame.InfoLine.Control and DisplayFrame.InfoLine.Control.Text then
+                            DisplayFrame.InfoLine.Control.Text:SetText(rightText)
+                            DisplayFrame.InfoLine.Control.Text:SetShown(rightText ~= "")
+                        end
+                        if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame.InfoLine) end
+                        -- 再下一帧根据最终可用宽度复算一次，避免初次宽度=0 造成省略号
+                        C_Timer.After(0, function()
+                            if ADT and ADT.ApplyHousingInstructionStyle and DisplayFrame and DisplayFrame.InfoLine then
+                                ADT.ApplyHousingInstructionStyle(DisplayFrame.InfoLine)
+                            end
+                        end)
+                        if DisplayFrame.RecalculateHeight then DisplayFrame:RecalculateHeight() end
                     end
                 end
                 return true
@@ -1164,6 +1231,7 @@ do
         end
         
         -- 收集所有需要根据设置显隐的帧（按顺序）
+        -- InfoLine = 基础信息（室内/外 | 库存 | 🎨）
         -- SubFrame = Duplicate (CTRL+D)
         -- HintFrames[1] = Cut (CTRL+X)
         -- HintFrames[2] = Copy (CTRL+C)
@@ -1174,7 +1242,13 @@ do
         
         local allFrames = {}
         local visibilityConfig = {}
-        
+
+        -- InfoLine（始终显示；随组淡入/淡出）
+        if DisplayFrame.InfoLine then
+            table.insert(allFrames, DisplayFrame.InfoLine)
+            table.insert(visibilityConfig, true)
+        end
+
         -- SubFrame (Duplicate)
         if DisplayFrame.SubFrame then
             table.insert(allFrames, DisplayFrame.SubFrame)
@@ -1221,12 +1295,15 @@ do
             frame.ignoreInLayout = true  -- 交由我们手工锚点
             frame:ClearAllPoints()
             if visible then
-                -- 关键修复：上一版只锚到 TOPRIGHT，行本身没有固定宽度时（例如父容器宽度尚未
-                -- 完成布局，GetWidth 返回 0），row 的 LEFT 会贴近 RIGHT，导致左侧文本看上去
-                -- “靠着键帽挤在一起”。这里同步锚 TOPLEFT 到上一行的 BOTTOMLEFT，保证行宽由
-                -- 父容器左右边界确定，即刻拥有稳定宽度，随后再由样式器计算左列与键帽的边界。
-                frame:SetPoint("TOPRIGHT", prevVisible, "BOTTOMRIGHT", 0, -ygap)
-                frame:SetPoint("TOPLEFT",  prevVisible, "BOTTOMLEFT",  0, -ygap)
+                -- 第一行锚到容器 TOP；其余行依次锚到上一可见行的 BOTTOM
+                if prevVisible == DisplayFrame then
+                    frame:SetPoint("TOPRIGHT", prevVisible, "TOPRIGHT", 0, 0)
+                    frame:SetPoint("TOPLEFT",  prevVisible, "TOPLEFT",  0, 0)
+                else
+                    -- 同步锚 TOPLEFT/TOPRIGHT，保证拥有稳定宽度
+                    frame:SetPoint("TOPRIGHT", prevVisible, "BOTTOMRIGHT", 0, -ygap)
+                    frame:SetPoint("TOPLEFT",  prevVisible, "BOTTOMLEFT",  0, -ygap)
+                end
                 -- 同帧补一把：若样式器已加载，立即按“单一权威”应用一次，确保键帽贴右。
                 if ADT and ADT.ApplyHousingInstructionStyle then
                     ADT.ApplyHousingInstructionStyle(frame)
@@ -1254,6 +1331,10 @@ function EL:OnLocaleChanged()
     if DisplayFrame.SubFrame then
         local keyName = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or (CTRL.."+D")
         DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", keyName)
+    end
+    -- 信息行：语言切换后等待下一次悬停刷新
+    if DisplayFrame.InfoLine and DisplayFrame.InfoLine.InstructionText then
+        DisplayFrame.InfoLine.InstructionText:SetText("")
     end
     -- 其他提示行
     local map = {

@@ -810,33 +810,64 @@ local function GetCustomizePanes()
     return decorPane, roomPane
 end
 
+-- 基于 Dock 宽度，计算“定制面板”的内容固定宽度（fixedWidth），避免依赖面板自身宽度
+-- 说明：首次打开时 RoomComponentPane 在 :Show() 前就会执行 :Layout()，
+-- 若此时仍是模板默认 fixedWidth=340，会造成首帧内容未对齐；
+-- 这里直接以 Dock.SubPanel 的实际宽度作为权威来源计算 fixedWidth，
+-- 消除与锚点/显示顺序相关的竞态。
+local function _ADT_SyncPaneFixedWidthToDock(p)
+    if not (p and p.SetFixedWidth) then return end
+    local lp = tonumber(p.leftPadding) or 0
+    local rp = tonumber(p.rightPadding) or 0
+    local function apply(targetContentW)
+        if not targetContentW or targetContentW <= 0 then return end
+        local cw = math.max(1, targetContentW)
+        if math.abs((p.fixedWidth or 0) - cw) > 0.5 then
+            p:SetFixedWidth(cw)
+            if p.UpdateLayout then pcall(p.UpdateLayout, p) end
+        end
+    end
+    -- 优先在“已锚定后”的时序直接以面板自身宽度为准（最稳妥）。
+    local ownW = p.GetWidth and p:GetWidth()
+    if ownW and ownW > 0 then
+        return apply(ownW - lp - rp)
+    end
+    -- 早于 Show/布局时（如 SetRoomComponentInfo 早触发），退化到 Dock.SubPanel 的宽度估算。
+    local dock = GetDock(); if not dock then return end
+    local anchor = dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()) or dock
+    if not (anchor and anchor.GetWidth) then return end
+    local dxL = assert(CFG and CFG.PlacedList and CFG.PlacedList.anchorLeftCompensation)
+    local dxR = assert(CFG and CFG.PlacedList and CFG.PlacedList.anchorRightCompensation)
+    local anchorW = anchor:GetWidth() or 0
+    if anchorW <= 0 then return end
+    apply(anchorW + (dxR or 0) - (dxL or 0) - lp - rp)
+end
+
+-- 轻量“跟随观察器”：面板可见期间短时监听宽度变化，确保与 SubPanel 动态缩放完全同步。
+local function _ADT_EnsurePaneResizeWatcher(p)
+    if not p or p._ADT_watcherTicker then return end
+    local checks = 0
+    p._ADT_watcherTicker = C_Timer.NewTicker(0.05, function(t)
+        if not p:IsShown() then t:Cancel(); p._ADT_watcherTicker=nil; return end
+        _ADT_SyncPaneFixedWidthToDock(p)
+        checks = checks + 1
+        -- 1. 在打开后一段时间内（~1s）持续跟随
+        -- 2. 若外部仍在缩放，事件钩子也会触发；这里仅作为兜底补偿。
+        if checks >= 20 then t:Cancel(); p._ADT_watcherTicker=nil end
+    end)
+end
+
 local function AnchorCustomizePane()
     local paneDecor, paneRoom = GetCustomizePanes()
     if paneDecor and paneDecor:IsShown() then
         AnchorFrameBelowDock(paneDecor, CFG.PlacedList)
-        -- 同步布局宽度：fixedWidth 是“内容区宽度”（不含左右内边距）。
-        if paneDecor.SetFixedWidth and paneDecor.GetWidth then
-            local lp = tonumber(paneDecor.leftPadding) or 0
-            local rp = tonumber(paneDecor.rightPadding) or 0
-            local contentW = math.max(1, (paneDecor:GetWidth() or 0) - lp - rp)
-            if math.abs((paneDecor.fixedWidth or 0) - contentW) > 0.5 then
-                paneDecor:SetFixedWidth(contentW)
-                if paneDecor.UpdateLayout then pcall(paneDecor.UpdateLayout, paneDecor) end
-            end
-        end
+        -- 统一以 Dock 宽度为权威同步 fixedWidth，避免首帧不对齐
+        _ADT_SyncPaneFixedWidthToDock(paneDecor)
         Debug("已贴合 DecorCustomizationsPane 到 SubPanel 下方")
     end
     if paneRoom and paneRoom:IsShown() then
         AnchorFrameBelowDock(paneRoom, CFG.PlacedList)
-        if paneRoom.SetFixedWidth and paneRoom.GetWidth then
-            local lp = tonumber(paneRoom.leftPadding) or 0
-            local rp = tonumber(paneRoom.rightPadding) or 0
-            local contentW = math.max(1, (paneRoom:GetWidth() or 0) - lp - rp)
-            if math.abs((paneRoom.fixedWidth or 0) - contentW) > 0.5 then
-                paneRoom:SetFixedWidth(contentW)
-                if paneRoom.UpdateLayout then pcall(paneRoom.UpdateLayout, paneRoom) end
-            end
-        end
+        _ADT_SyncPaneFixedWidthToDock(paneRoom)
         Debug("已贴合 RoomComponentCustomizationsPane 到 SubPanel 下方")
     end
 end
@@ -859,15 +890,21 @@ local function EnsureCustomizePaneHooks()
     for _, p in ipairs({paneDecor, paneRoom}) do
         if p and not p._ADT_Anchored then
             LockPaneDragging(p)
-            -- 首次显示：透明→立即贴合→下一帧复位透明度，避免初次“飞入”
+            -- 首次显示：透明→立即贴合→同步 fixedWidth→下一帧复位透明度，避免初次“飞入/未对齐”
             p:HookScript("OnShow", function(self)
                 local prevA = (self.GetAlpha and self:GetAlpha()) or 1
                 if self.SetAlpha then self:SetAlpha(0) end
                 AnchorCustomizePane()
+                _ADT_SyncPaneFixedWidthToDock(self)
+                _ADT_EnsurePaneResizeWatcher(self)
                 C_Timer.After(0, function()
                     AnchorCustomizePane()
+                    _ADT_SyncPaneFixedWidthToDock(self)
                     if self.SetAlpha then self:SetAlpha(prevA) end
                 end)
+            end)
+            p:HookScript("OnHide", function(self)
+                if self._ADT_watcherTicker then self._ADT_watcherTicker:Cancel(); self._ADT_watcherTicker=nil end
             end)
             p:HookScript("OnSizeChanged", function() C_Timer.After(0, AnchorCustomizePane) end)
             p._ADT_Anchored = true
@@ -876,12 +913,28 @@ local function EnsureCustomizePaneHooks()
 
     local dock = GetDock()
     if dock then
+        local function queueSync()
+            C_Timer.After(0, function()
+                AnchorCustomizePane()
+                local d, r = GetCustomizePanes()
+                if d and d:IsShown() then _ADT_SyncPaneFixedWidthToDock(d) end
+                if r and r:IsShown() then _ADT_SyncPaneFixedWidthToDock(r) end
+                if d and d:IsShown() then _ADT_EnsurePaneResizeWatcher(d) end
+                if r and r:IsShown() then _ADT_EnsurePaneResizeWatcher(r) end
+            end)
+        end
         if dock.HookScript then
-            dock:HookScript("OnSizeChanged", function() C_Timer.After(0, AnchorCustomizePane) end)
+            dock:HookScript("OnSizeChanged", queueSync)
         end
         if dock.SubPanel and dock.SubPanel.HookScript then
-            dock.SubPanel:HookScript("OnSizeChanged", function() C_Timer.After(0, AnchorCustomizePane) end)
-            dock.SubPanel:HookScript("OnShow",       function() C_Timer.After(0, AnchorCustomizePane) end)
+            dock.SubPanel:HookScript("OnSizeChanged", queueSync)
+            dock.SubPanel:HookScript("OnShow",       queueSync)
+        end
+        -- 关键：SubPanel 的 Content 区域宽度会随 DockUI 的统一左右留白动态调整；
+        -- 仅监听 SubPanel 尺寸不足以捕捉“仅留白变化”的场景，这里补挂 Content 的 OnSizeChanged。
+        local content = dock.SubPanel and dock.SubPanel.Content
+        if content and content.HookScript then
+            content:HookScript("OnSizeChanged", queueSync)
         end
     end
 
@@ -904,17 +957,21 @@ end
 if _G.RoomComponentPaneMixin and not _G.RoomComponentPaneMixin._ADT_FixedWidthHooked then
     _G.RoomComponentPaneMixin._ADT_FixedWidthHooked = true
     hooksecurefunc(RoomComponentPaneMixin, "SetRoomComponentInfo", function(self)
-        if not (self and self.SetFixedWidth and self.GetWidth) then return end
-        local function sync()
-            local lp = tonumber(self.leftPadding) or 0
-            local rp = tonumber(self.rightPadding) or 0
-            local contentW = math.max(1, (self:GetWidth() or 0) - lp - rp)
-            if math.abs((self.fixedWidth or 0) - contentW) > 0.5 then
-                self:SetFixedWidth(contentW)
-                if self.UpdateLayout then pcall(self.UpdateLayout, self) end
-            end
-        end
-        sync(); C_Timer.After(0, sync)
+        if not self then return end
+        -- 在布局前强制以 Dock 宽度同步 fixedWidth，消除首开竞态
+        _ADT_SyncPaneFixedWidthToDock(self)
+        -- 再下一帧复核一次，覆盖 Dock/SubPanel 在本帧内发生的尺寸变化
+        C_Timer.After(0, function() _ADT_SyncPaneFixedWidthToDock(self); _ADT_EnsurePaneResizeWatcher(self) end)
+    end)
+end
+
+-- 额外：染色面板在部分客户端语言/缩放下也可能出现首帧错位，做同样的 fixedWidth 同步保护（若其支持）
+if _G.HousingDyePaneMixin and not _G.HousingDyePaneMixin._ADT_FixedWidthHooked then
+    _G.HousingDyePaneMixin._ADT_FixedWidthHooked = true
+    hooksecurefunc(HousingDyePaneMixin, "SetDecorInfo", function(self)
+        if not self then return end
+        _ADT_SyncPaneFixedWidthToDock(self)
+        C_Timer.After(0, function() _ADT_SyncPaneFixedWidthToDock(self); _ADT_EnsurePaneResizeWatcher(self) end)
     end)
 end
 

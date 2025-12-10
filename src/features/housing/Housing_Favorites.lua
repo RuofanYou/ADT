@@ -64,8 +64,37 @@ local function ExtractRecordIDFromEntryFrame(frame)
     return nil
 end
 
--- 星标外观（Atlas 名称来源：系统素材库）
-local STAR_ATLAS = "CampCollection-icon-star"  -- 注意拼写：CampCollection
+-- 样式/动效统一参数（配置驱动：集中调整）
+local FX = {
+    starAtlas = "CampCollection-icon-star", -- 注意拼写：CampCollection
+    starSize = 22,
+    starOffset = { x = -4, y = -2 },
+    color = {
+        normal = {1, 1, 0},     -- 非收藏/提示用黄
+        favorited = {1, 0.9, 0}, -- 收藏后更暖的黄
+    },
+    alpha = {
+        decorHover = 0.5,  -- 鼠标在 Decor 卡片上但未悬停星标
+        starHover  = 1.0,   -- 鼠标悬停在星标命中区
+        starPressed= 0.8,   -- 鼠标按下星标
+        favorite   = 1.0,   -- 收藏常驻显示
+    },
+    clickFlash = {          -- 点击后 Alpha 闪烁动效
+        to = 0.6,
+        inDur = 0.05,
+        outDur = 0.08,
+    },
+}
+
+local function SetColor(tex, rgb)
+    tex:SetVertexColor(rgb[1], rgb[2], rgb[3])
+end
+
+-- 本地化包装：优先取 ADT.L，再回退英文
+local function Ls(key, fallback)
+    local L = ADT and ADT.L or nil
+    return (L and L[key]) or fallback
+end
 
 -- 为目录按钮附加/更新星标（不侵入按钮业务；完全独立）
 local function EnsureStarOnButton(btn)
@@ -73,9 +102,9 @@ local function EnsureStarOnButton(btn)
 
     -- 贴图层级：覆盖在按钮最上层但不遮挡Tooltip
     local star = btn:CreateTexture(nil, "OVERLAY", nil, 7)
-    star:SetAtlas(STAR_ATLAS)
-    star:SetSize(22, 22)
-    star:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -4, -2)
+    star:SetAtlas(FX.starAtlas)
+    star:SetSize(FX.starSize, FX.starSize)
+    star:SetPoint("TOPRIGHT", btn, "TOPRIGHT", FX.starOffset.x, FX.starOffset.y)
     star:Hide() -- 默认不常驻
     btn._ADTStar = star
 
@@ -88,24 +117,24 @@ local function EnsureStarOnButton(btn)
     -- 轻量交互动效：点击时做一个 Alpha 闪烁
     local clickAG = star:CreateAnimationGroup()
     local a1 = clickAG:CreateAnimation("Alpha")
-    a1:SetFromAlpha(1)
-    a1:SetToAlpha(0.6)
-    a1:SetDuration(0.05)
+    a1:SetFromAlpha(FX.alpha.starHover)
+    a1:SetToAlpha(FX.clickFlash.to)
+    a1:SetDuration(FX.clickFlash.inDur)
     local a2 = clickAG:CreateAnimation("Alpha")
-    a2:SetFromAlpha(0.6)
-    a2:SetToAlpha(1)
-    a2:SetDuration(0.08)
+    a2:SetFromAlpha(FX.clickFlash.to)
+    a2:SetToAlpha(FX.alpha.starHover)
+    a2:SetDuration(FX.clickFlash.outDur)
     star._ADTClickAG = clickAG
 
     hit:SetScript("OnEnter", function()
         local rid = ExtractRecordIDFromEntryFrame(btn)
         local fav = rid and IsFavoritedRID(rid)
         GameTooltip:SetOwner(hit, "ANCHOR_RIGHT")
-        GameTooltip:SetText(fav and ("取消收藏") or ("收藏"))
+        GameTooltip:SetText(fav and Ls("Unfavorite", "Unfavorite") or Ls("Favorite", "Favorite"))
         GameTooltip:Show()
         -- 关键修复：进入星标命中区时显式 Show，避免父按钮 OnLeave 抢先隐藏
         star:Show()
-        star:SetAlpha(1)
+        star:SetAlpha(FX.alpha.starHover)
     end)
     hit:SetScript("OnLeave", function()
         GameTooltip:Hide()
@@ -113,7 +142,7 @@ local function EnsureStarOnButton(btn)
         if btn:IsMouseOver() then
             local rid = ExtractRecordIDFromEntryFrame(btn)
             if rid and not IsFavoritedRID(rid) then
-                star:SetAlpha(0.85)
+                star:SetAlpha(FX.alpha.decorHover)
                 star:Show()
             end
             return
@@ -125,10 +154,10 @@ local function EnsureStarOnButton(btn)
         end
     end)
     hit:SetScript("OnMouseDown", function()
-        star:SetAlpha(0.8)
+        star:SetAlpha(FX.alpha.starPressed)
     end)
     hit:SetScript("OnMouseUp", function()
-        star:SetAlpha(1)
+        star:SetAlpha(FX.alpha.starHover)
     end)
     hit:SetScript("OnClick", function()
         local rid = ExtractRecordIDFromEntryFrame(btn)
@@ -138,11 +167,8 @@ local function EnsureStarOnButton(btn)
         Favorites:RefreshStar(btn)
         if star._ADTClickAG then star._ADTClickAG:Play() end
         PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-        if newState then
-            ADT.Notify("已收藏", "info")
-        else
-            ADT.Notify("已取消收藏", "info")
-        end
+        if newState then ADT.Notify(Ls("Added to Favorites", "Added to favorites"), "info")
+        else ADT.Notify(Ls("Removed from Favorites", "Removed from favorites"), "info") end
         -- 若“仅显示收藏”开启，则实时刷新列表
         if Favorites:IsFilterOn() then
             Favorites:RefreshCatalog()
@@ -153,8 +179,8 @@ local function EnsureStarOnButton(btn)
     btn:HookScript("OnEnter", function()
         local rid = ExtractRecordIDFromEntryFrame(btn)
         if rid and not IsFavoritedRID(rid) then
-            star:SetVertexColor(1, 1, 0) -- 高亮黄
-            star:SetAlpha(0.9)
+            SetColor(star, FX.color.normal)
+            star:SetAlpha(FX.alpha.decorHover)
             star:Show()
         end
     end)
@@ -174,14 +200,14 @@ function Favorites:RefreshStar(btn)
     local rid = ExtractRecordIDFromEntryFrame(btn)
     local fav = rid and IsFavoritedRID(rid)
     if fav then
-        -- 收藏：常驻显示，明亮黄
-        star:SetVertexColor(1, 0.9, 0)
-        star:SetAlpha(1)
+        -- 收藏：常驻显示
+        SetColor(star, FX.color.favorited)
+        star:SetAlpha(FX.alpha.favorite)
         star:Show()
     else
         -- 非收藏：默认隐藏（由悬停控制显示）
-        star:SetVertexColor(1, 1, 0)
-        star:SetAlpha(0.85)
+        SetColor(star, FX.color.normal)
+        star:SetAlpha(FX.alpha.decorHover)
         star:Hide()
     end
 end
@@ -199,15 +225,19 @@ local function SweepVisibleCatalogButtons(scrollBox)
     end)
 end
 
--- 收集“收藏的目录条目”（按照 recordID→entryID 的权威关系组装）
+-- 收集“收藏 ∩ 当前筛选/分类/搜索结果”的目录条目
+-- 说明：
+-- - 为满足“叠加筛选”诉求，来源集合改为 catalogSearcher:GetCatalogSearchResults()
+--   这样会自然叠加：仅染色/室内/室外/已收集/未收集/标签组/搜索框/分类等全部官方筛选。
+-- - 仍保持 recordID 为唯一权威，严禁做任何“兼容映射”。
 local function CollectFavoriteEntries(storagePanel)
     if not (storagePanel and storagePanel.catalogSearcher) then return {} end
     local favs = GetFavMap()
     if not next(favs) then return {} end
     local results = {}
-    -- 使用“搜索项全集”，避免受当前分类筛选限制
-    local all = storagePanel.catalogSearcher:GetAllSearchItems()
-    for _, id in ipairs(all or {}) do
+    -- 以“当前筛选结果”为基集合，随后取与收藏的交集
+    local filtered = storagePanel.catalogSearcher:GetCatalogSearchResults()
+    for _, id in ipairs(filtered or {}) do
         if id.entryType == Enum.HousingCatalogEntryType.Decor and favs[id.recordID] then
             table.insert(results, id)
         end
@@ -221,14 +251,26 @@ function Favorites:RefreshCatalog()
     local sp = hf and hf.StoragePanel
     if not sp then return end
 
+    -- 新逻辑：收藏筛选应与“左侧分类/返回按钮”解耦，仅覆盖右侧结果集。
+    -- 因此不再使用 SetCustomCatalogData（它会触发 Categories:SetManualFocusState(true) 从而出现返回按钮）。
     if Favorites:IsFilterOn() then
+        -- 仅在“仓库”标签内生效；市场/专题等自定义视图不叠加收藏筛选。
+        if sp.IsInMarketTab and sp:IsInMarketTab() then
+            return
+        end
+        if sp.customCatalogData then
+            return
+        end
         local entries = CollectFavoriteEntries(sp)
-        -- 为空也要设定自定义数据，以呈现“空列表”状态（遵循官方行为）
-        local header = "收藏"
-        sp:SetCustomCatalogData(entries, header, nil)
+        local retain = true
+        local header = Ls("Favorites", "Favorites")
+        -- 直接把“收藏 ∩ 当前筛选”的结果送入 OptionsContainer；不改动分类焦点与返回按钮状态。
+        sp.OptionsContainer:SetCatalogData(entries, retain, header, nil)
+        -- 在我们覆盖结果后，同步星标与计数显示（官方会在 UpdateCatalogData 里做；此处补齐一次以避免滞后）。
+        if sp.UpdateLoadingSpinner then pcall(sp.UpdateLoadingSpinner, sp) end
+        if sp.UpdateCategoryTotal then pcall(sp.UpdateCategoryTotal, sp) end
     else
-        -- 还原官方数据流
-        sp:SetCustomCatalogData(nil)
+        -- 还原官方数据流：让 searcher 自行刷新
         if sp.catalogSearcher then
             sp.catalogSearcher:RunSearch()
         end
@@ -248,7 +290,7 @@ local function HookFilterDropdown(filters)
             origGen(dropdown, root)
         end
         root:CreateDivider()
-        root:CreateCheckbox("仅显示收藏", function() return Favorites:IsFilterOn() end, function()
+        root:CreateCheckbox(Ls("Show Favorites Only", "Show Favorites Only"), function() return Favorites:IsFilterOn() end, function()
             Favorites:ToggleFilter()
             -- 保持下拉菜单开启并刷新选中态
             return MenuResponse.Refresh
@@ -276,6 +318,16 @@ local function HookFilterDropdown(filters)
     if fd.ValidateResetState then fd:ValidateResetState() end
 end
 
+-- 同步下拉UI（勾选状态、重置按钮、已打开菜单的文本）
+local function SyncFilterDropdownUI()
+    local sp = _G.HouseEditorFrame and _G.HouseEditorFrame.StoragePanel
+    local fd = sp and sp.Filters and sp.Filters.FilterDropdown
+    if not fd then return end
+    if fd.ValidateResetState then pcall(fd.ValidateResetState, fd) end
+    local menu = rawget(fd, "menu")
+    if menu and menu.ReinitializeAll then pcall(menu.ReinitializeAll, menu) end
+end
+
 -- 在 HouseEditor 的存储面板可用时，安装滚动列表的星标刷新钩子
 local function TryInstallToStoragePanel()
     local hf = _G.HouseEditorFrame
@@ -296,6 +348,19 @@ local function TryInstallToStoragePanel()
 
     -- 过滤下拉接入（官方在 StorageFrame:OnLoad 时已完成 Initialize，这里直接挂）
     HookFilterDropdown(sp and sp.Filters)
+
+    -- 当官方搜索结果更新时，如“仅显示收藏”开启，则用“收藏 ∩ 当前结果”刷新自定义列表，
+    -- 达成“叠加筛选”的体验（例如：仅可染色 + 仅收藏）。
+    if not sp._ADTFav_Results_Hooked then
+        hooksecurefunc(sp, "OnEntryResultsUpdated", function(self)
+            if Favorites:IsFilterOn() then
+                Favorites:RefreshCatalog()
+            end
+        end)
+        sp._ADTFav_Results_Hooked = true
+    end
+
+    -- 不再拦截 SetCustomCatalogData：避免把“离开官方自定义视图”误判为需要关闭收藏筛选。
 
     return true
 end
@@ -329,3 +394,11 @@ end
 
 -- 模块装载即初始化
 Favorites:Init()
+
+-- 语言切换：刷新标题/菜单文案
+function Favorites:OnLocaleChanged()
+    if Favorites:IsFilterOn() then
+        Favorites:RefreshCatalog()
+    end
+    SyncFilterDropdownUI()
+end
