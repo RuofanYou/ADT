@@ -5,6 +5,7 @@ local L = ADT and ADT.L or {}
 -- 直接使用暴雪 Housing API
 local C_HousingDecor = C_HousingDecor
 local GetHoveredDecorInfo = C_HousingDecor.GetHoveredDecorInfo
+--local GetDecorInstanceInfoForGUID = C_HousingDecor.GetDecorInstanceInfoForGUID
 local IsHoveringDecor = C_HousingDecor.IsHoveringDecor
 local GetActiveHouseEditorMode = C_HouseEditor.GetActiveHouseEditorMode
 local IsHouseEditorActive = C_HouseEditor.IsHouseEditorActive
@@ -550,13 +551,11 @@ local function Blizzard_HouseEditor_OnLoaded()
             end
         end
         function DisplayFrame:FadeInGroup()
-            -- 专家模式下彻底不使用“悬停驱动”的 Header alpha
-            if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow and ADT.DockUI.SetSubPanelHeaderAlpha then
-                if not InExpertMode() then
-                    ADT.DockUI.SetHeaderAlphaFollow(true)
-                    -- 悬停开始即满不透明，避免“先半透明”的错觉
-                    ADT.DockUI.SetSubPanelHeaderAlpha(1)
-                end
+            -- 统一：进入悬停阶段时确保 Header 可见（alpha=1），避免首帧仍为0导致“无标题”错觉。
+            -- 不更改“是否跟随”的状态，由上层在 OnHoveredTargetChanged 中决定。
+            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha then
+                local followOK = (not ADT.DockUI.IsHeaderAlphaFollowEnabled) or ADT.DockUI.IsHeaderAlphaFollowEnabled()
+                if followOK then ADT.DockUI.SetSubPanelHeaderAlpha(1) end
             end
             local cfg = GetFadeCFG()
             if cfg.fadeInInstant then
@@ -1017,6 +1016,10 @@ do
         end
     end
 
+    --
+    -- 注意：专家/基础模式使用统一的 GetHoveredDecorInfo 作为唯一权威来源，
+    -- 不再做额外的 GUID 反查补全，保持最小化改动与 DRY。
+
     function EL:ProcessHoveredDecor()
         self.decorInstanceInfo = nil
         if IsHoveringDecor() then
@@ -1054,7 +1057,7 @@ do
                     end
                     -- 更新右侧标题与库存数量（仅数据更新，不篡改 SubFrame 的 InstructionText）
                     if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then
-                        local name = info.name or ""
+                    local name = info.name or ""
                         -- 若该装饰被保护，标题前加锁图标（与旧实现保持一致）
                         if EL and EL.Protection and EL.Protection.IsProtected and info.decorGUID then
                             local isProt = EL.Protection:IsProtected(info.decorGUID, info.decorID)

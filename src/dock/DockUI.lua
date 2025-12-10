@@ -67,6 +67,9 @@ local Def = {
     LeftPanelPadTop = 14,
     LeftPanelPadBottom = 14,
 
+    -- SubPanel 宽度测量的屏幕硬上限占比（防止极端文本拉爆面板）
+    SubPanelViewportCapRatio = 0.8,
+
     -- ================= Header/顶部区域可调参数（统一权威） =================
     HeaderHeight = 68,                 -- Header 高度
     HeaderTitleOffsetX = 22,           -- Header 标题 X 偏移
@@ -1201,7 +1204,12 @@ do
             ADT.DebugPrint("[SettingsPanel] Entry OnEnter dbKey="..tostring(self.dbKey)
                 .." over="..tostring(self:IsMouseOver()))
         end
-        MainFrame:HighlightButton(self)
+        -- 先清除其它条目的文本高亮，避免残留
+        if MainFrame and MainFrame.ModuleTab and MainFrame.ModuleTab.ScrollView and MainFrame.ModuleTab.ScrollView.CallObjectMethod then
+            MainFrame.ModuleTab.ScrollView:CallObjectMethod("Entry", "HideTextHighlight")
+        end
+        -- 仅为当前条目显示“包文本”的高亮
+        if self.UpdateTextHighlight then self:UpdateTextHighlight(true) end
         self:UpdateVisual()
         if not self.isChangelogButton then
             MainFrame:ShowFeaturePreview(self.data, self.parentDBKey)
@@ -1209,7 +1217,7 @@ do
     end
 
     function EntryButtonMixin:OnLeave()
-        MainFrame:HighlightButton()
+        if self.UpdateTextHighlight then self:UpdateTextHighlight(false) end
         self:UpdateVisual()
     end
 
@@ -1340,18 +1348,50 @@ do
         end
     end
 
+    -- ————— 文本区域高亮（单一权威：仅此处实现） —————
+    function EntryButtonMixin:EnsureTextHighlight()
+        if self.TextHighlight and self.TextHighlight.GetObjectType then return self.TextHighlight end
+        local hl = self:CreateTexture(nil, "BACKGROUND")
+        self.TextHighlight = hl
+        if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("housing-basic-container") then
+            hl:SetAtlas("housing-basic-container")
+        else
+            hl:SetColorTexture(1.0, 0.82, 0.0, 0.15)
+        end
+        hl:Hide()
+        return hl
+    end
+
+    function EntryButtonMixin:HideTextHighlight()
+        if self.TextHighlight then self.TextHighlight:Hide() end
+    end
+
+    function EntryButtonMixin:UpdateTextHighlight(show)
+        local hl = self:EnsureTextHighlight()
+        if not show then hl:Hide(); return end
+        local pad = (Def.HighlightTextPadX or 6)
+        local leftInset = (Def.EntryLabelLeftInset or 28)
+        local rightBias = (Def.HighlightRightBias or 0)
+        local minH = (Def.HighlightMinHeight or 18)
+        local fs = self.Label
+        local btnW = tonumber(self:GetWidth()) or 0
+        local maxText = math.max(0, btnW - 2 * (Def.EntryLabelLeftInset or 28))
+        local textW = 0
+        if fs and fs.GetStringWidth then textW = math.ceil(fs:GetStringWidth() or 0) end
+        local visibleW = math.min(textW, maxText)
+        local left = leftInset - pad
+        local width = math.max(1, visibleW + 2 * pad + rightBias)
+        local height = math.max(minH, (self.GetHeight and (self:GetHeight() - 4)) or minH)
+        hl:ClearAllPoints()
+        hl:SetPoint("LEFT", self, "LEFT", left, 0)
+        hl:SetSize(width, height)
+        hl:Show()
+    end
+
     function EntryButtonMixin:UpdateVisual()
+        -- 统一色彩策略：高亮不改变文字颜色；仅按可用/不可用切换。
         if self:IsEnabled() then
-            if self:IsMouseMotionFocus() then
-                SetTextColor(self.Label, Def.TextColorHighlight)
-            else
-                -- 下拉菜单使用柔和金色，普通条目使用默认颜色
-                if self.data and self.data.type == 'dropdown' then
-                    SetTextColor(self.Label, { 0.922, 0.871, 0.761 })
-                else
-                    SetTextColor(self.Label, Def.TextColorNormal)
-                end
-            end
+            SetTextColor(self.Label, Def.TextColorNormal)
         else
             SetTextColor(self.Label, Def.TextColorDisabled)
         end
@@ -1377,6 +1417,9 @@ do
         f:SetScript("OnDisable", f.OnDisable)
         f:SetScript("OnClick", f.OnClick)
         SetTextColor(f.Label, Def.TextColorNormal)
+        -- 禁止换行并限制为单行，避免右侧仍有空间时出现意外换行。
+        if f.Label and f.Label.SetMaxLines then f.Label:SetMaxLines(1) end
+        if f.Label and f.Label.SetWordWrap then f.Label:SetWordWrap(false) end
 
         -- 复选框属于“小尺寸图元”，若使用三线性过滤(TRILINEAR)，在缩放/生成mipmap时会从图集相邻切片取样，
         -- 即便我们做了 +1px inset，仍可能出现“橙色勾边缘发灰/发白”的串色伪影。
@@ -1692,7 +1735,8 @@ do  -- Left Section
 
         if self.CentralSection and self.ModuleTab and self.ModuleTab.ScrollView then
             local CentralSection = self.CentralSection
-            local newWidth = API.Round(CentralSection:GetWidth() - 2*Def.ButtonSize)
+            -- 对象宽度直接采用 CentralSection 宽度；内部留白由模板(Label 左28/右28)提供。
+            local newWidth = API.Round(CentralSection:GetWidth())
             if newWidth > 0 then
                 self.centerButtonWidth = newWidth
                 local ScrollView = self.ModuleTab.ScrollView
@@ -1742,6 +1786,8 @@ do  -- Left Section
         -- 语言切换后，文本宽度变化需要重新计算容器宽
         if self.UpdateAutoWidth then self:UpdateAutoWidth() end
     end
+
+    -- 中央“设置项”行高亮：已下沉到 EntryButtonMixin（每个条目自管），避免跨层级 frame level 混乱。
 end
 
 
@@ -2413,7 +2459,8 @@ local function CreateUI()
     -- 自动宽度：根据当前可见内容的字符串宽度，动态放宽中央区域
     function MainFrame:UpdateAutoWidth()
         local sidew = tonumber(self.LeftSection and self.LeftSection:GetWidth()) or tonumber(self.sideSectionWidth) or ComputeSideSectionWidth() or 180
-        local margin = 2 * (Def.ButtonSize or 28) -- CentralSection 左右留白（与模板一致）
+        -- 取消外层左右额外留白；模板已提供 Label 左28/右28 的内部留白。
+        local margin = 0
 
         local maxNeeded = 0
         local sv = self.ModuleTab and self.ModuleTab.ScrollView
@@ -2438,16 +2485,29 @@ local function CreateUI()
             accumulate("Header")
         end
 
+        -- 合并 SubPanel 的宽度需求（由 SubPanel 自行测量并上报）
+        local subNeed = 0
+        do
+            local sub = self.SubPanel or (self.EnsureSubPanel and self:EnsureSubPanel())
+            if sub and sub.GetDesiredCenterWidth then
+                subNeed = tonumber(sub:GetDesiredCenterWidth()) or 0
+            end
+        end
+
         -- 至少保证一个合理的最小值
         local minCenter = 240
-        local wantedCenter = math.max(minCenter, maxNeeded)
+        local wantedCenter = math.max(minCenter, maxNeeded, subNeed)
         -- 视口最大宽度限制（避免超出屏幕）
         local parent = self:GetParent() or UIParent
         local maxTotal = (parent.GetWidth and parent:GetWidth() or 1600) - Def.ScreenRightMargin - 4
         -- 无右侧栏：总宽 = 左栏 + 中央需求 + 边距
-        local targetTotal = sidew + wantedCenter + margin
+        local targetTotal = sidew + wantedCenter
         if targetTotal > maxTotal then targetTotal = maxTotal end
-        self:SetWidth(targetTotal)
+        targetTotal = math.floor(targetTotal + 0.5)
+        local currentTotal = math.floor((self:GetWidth() or 0) + 0.5)
+        if targetTotal ~= currentTotal then
+            self:SetWidth(targetTotal)
+        end
         self.sideSectionWidth = sidew
 
         -- 同步中央区域内各条目实际宽度
@@ -2457,7 +2517,7 @@ local function CreateUI()
         local CentralSection = self.CentralSection
         if CentralSection and self.ModuleTab and self.ModuleTab.ScrollView then
             local newWidth = tonumber(CentralSection:GetWidth()) or 0
-            newWidth = math.floor(newWidth - margin + 0.5)
+            newWidth = math.floor(newWidth + 0.5)
             if newWidth > 0 then
                 self.centerButtonWidth = newWidth
                 local ScrollView = self.ModuleTab.ScrollView
@@ -2585,7 +2645,8 @@ local function CreateUI()
                 local rightw = tonumber(MainFrame.rightSectionWidth) or leftw
                 w = math.max(0, total - leftw - rightw)
             end
-            w = API.Round(w - 2*Def.ButtonSize)
+            -- 不在此处扣除外层 margin，避免与模板自身内边距叠加导致有效文本宽度过窄。
+            w = API.Round(w)
             if w < 120 then w = 120 end
             return w
         end
@@ -2710,7 +2771,8 @@ local function CreateUI()
         local total = tonumber(self:GetWidth()) or 0
         local leftw = tonumber(self.sideSectionWidth) or 0
         local w = tonumber(CentralSection:GetWidth()) or (total - leftw)
-        local newWidth = API.Round((w or 0) - 2*Def.ButtonSize)
+        -- 统一：对象宽度直接采用 CentralSection 宽度，避免重复扣除。
+        local newWidth = API.Round((w or 0))
         if newWidth < 120 then newWidth = 120 end
         if newWidth <= 0 then return end
 

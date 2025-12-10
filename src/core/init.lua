@@ -316,6 +316,16 @@ f:SetScript("OnEvent", function(self, event, addonName)
         -- 在 SavedVariables 就位后，依据用户设置重新应用语言（确保持久化生效）
         if ADT.ApplyLocale and ADT.GetActiveLocale then
             ADT.ApplyLocale(ADT.GetActiveLocale())
+            -- 关键修复：/reload 后分类/条目仍保留中文
+            -- 原因：i18n 在早期以客户端语言初始化，随后 UI 在首次构建时
+            -- 读取到了当时的 L 表并缓存到 CommandDock._sorted 中；
+            -- 尽管此处再次 ApplyLocale 到用户选择的语言，但未重建 _sorted，
+            -- 导致“通用/临时板/最近放置”等早期生成的分类仍使用旧文案。
+            -- 解决：语言应用后立刻触发一次模块重建，确保一切显示文本都以
+            -- 当前语言重新生成（符合“单一权威+DRY”）。
+            if ADT.CommandDock and ADT.CommandDock.RebuildModules then
+                ADT.CommandDock:RebuildModules()
+            end
         end
         RegisterSettingsCategory()
         if ADT.Housing and ADT.Housing.LoadSettings then
@@ -327,8 +337,10 @@ f:SetScript("OnEvent", function(self, event, addonName)
             -- 仅当 UI 已构建完毕（存在对象池与滚动容器）时刷新；否则等待真正打开面板时再刷新。
             local canRefresh = Main.ModuleTab and Main.ModuleTab.ScrollView
             if canRefresh then
+                -- 重建完模块后刷新 UI 内容与布局
                 if Main.RefreshCategoryList then Main:RefreshCategoryList() end
                 if Main.RefreshFeatureList then Main:RefreshFeatureList() end
+                if Main.RefreshLanguageLayout then Main:RefreshLanguageLayout(true) end
             end
         end
         self:UnregisterEvent("ADDON_LOADED")

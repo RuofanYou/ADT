@@ -21,10 +21,17 @@ local function AttachTo(main)
         local sub = CreateFrame("Frame", nil, self)
         self.SubPanel = sub
 
-        -- 与主面板下边无缝拼接；宽度与右侧区域一致
-        -- 子面板左偏移与左侧分类栏宽度保持一致
-        local leftOffset = tonumber(self.sideSectionWidth) or ComputeSideSectionWidth() or 180
-        sub:SetPoint("TOPLEFT", self, "BOTTOMLEFT", leftOffset, 0)
+        -- 与主面板下边无缝拼接；宽度与“中央区域”一致。
+        -- 关键改动：左侧锚点不再使用“创建时的固定像素偏移”（sideSectionWidth），
+        -- 改为直接锚到 CentralSection 的 BOTTOMLEFT，从而在语言切换/字体变化
+        -- 导致左侧分类栏宽度变动时，子面板能即时跟随，无需额外刷新。
+        if self.CentralSection then
+            sub:SetPoint("TOPLEFT", self.CentralSection, "BOTTOMLEFT", 0, 0)
+        else
+            -- 兜底（极早期调用）：仍按当前估算宽度贴紧右侧区域。
+            local leftOffset = tonumber(self.sideSectionWidth) or ComputeSideSectionWidth() or 180
+            sub:SetPoint("TOPLEFT", self, "BOTTOMLEFT", leftOffset, 0)
+        end
         sub:SetPoint("TOPRIGHT", self, "BOTTOMRIGHT", 0, 0)
         sub:SetHeight(192)
         sub:SetFrameStrata(self:GetFrameStrata())
@@ -244,6 +251,11 @@ local function AttachTo(main)
                         t:Cancel(); pendingTicker = nil
                         -- 排版稳定后判空一次
                         EvaluateAutoHide()
+                        -- 宽度为 DockUI 的唯一权威，这里只“请求父容器重算”。
+                        if ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel then
+                            local main = ADT.CommandDock.SettingsPanel
+                            if main.UpdateAutoWidth then main:UpdateAutoWidth() end
+                        end
                     end
                 end)
             end
@@ -251,6 +263,103 @@ local function AttachTo(main)
             -- 提供给外部的统一触发入口：以方法形式挂到 sub 本体，避免全局重复实现。
             sub._ADT_RequestAutoResize = function()
                 if sub and sub.IsShown and sub:IsShown() then RequestAutoResize() end
+            end
+
+            -- 宽度需求上报：返回“在不换行前提下正文所需的中心区域宽度”。
+            -- 注意：不直接设宽；DockUI.UpdateAutoWidth 作为唯一裁决者。
+            do
+                local meter
+                local function ensureMeter()
+                    if not meter then
+                        meter = sub:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                        meter:Hide()
+                    end
+                    return meter
+                end
+
+                local function measureFS(fs)
+                    if not (fs and fs.GetText) then return 0 end
+                    local text = fs:GetText() or ""
+                    if text == "" then return 0 end
+                    local m = ensureMeter()
+                    -- 尝试复制字体
+                    if fs.GetFont then
+                        local file, h, flags = fs:GetFont()
+                        if file and h then m:SetFont(file, h, flags) end
+                    elseif fs.GetFontObject and fs:GetFontObject() then
+                        m:SetFontObject(fs:GetFontObject())
+                    end
+                    m:SetText(text)
+                    local w = m:GetStringWidth() or 0
+                    return math.ceil(w)
+                end
+
+                local function isRightAnchored(region)
+                    if not (region and region.GetNumPoints) then return false end
+                    local n = region:GetNumPoints() or 0
+                    for i=1,n do
+                        local p = region:GetPoint(i)
+                        if type(p) == 'string' and p:find("RIGHT") then return true end
+                    end
+                    return false
+                end
+
+                function sub:GetDesiredCenterWidth()
+                    if not (self and self.Content) then return 0 end
+                    local content = self.Content
+                    local maxRow, headerW = 0, 0
+
+                    -- Header 文本（若存在且可见）
+                    if self.Header and self.Header.Label and (self.Header.Label:IsShown() or true) then
+                        headerW = measureFS(self.Header.Label) or 0
+                    end
+
+                    local GAP = 10
+                    for _, row in ipairs({content:GetChildren()}) do
+                        if row and row ~= self.Header then
+                            local leftMax, rightSum, anyFS = 0, 0, false
+                            -- 仅测 FontString，其他控件（如 Key 按钮）通常自带文本区域，以其 FontString 为准
+                            if row.GetRegions then
+                                for _, r in ipairs({row:GetRegions()}) do
+                                    if r and r.GetObjectType and r:GetObjectType() == "FontString" then
+                                        anyFS = true
+                                        local w = measureFS(r)
+                                        if isRightAnchored(r) then
+                                            rightSum = rightSum + w
+                                        else
+                                            if w > leftMax then leftMax = w end
+                                        end
+                                    end
+                                end
+                            end
+
+                            local rowW
+                            if anyFS and rightSum > 0 and leftMax > 0 then
+                                rowW = leftMax + GAP + rightSum
+                            elseif anyFS then
+                                rowW = math.max(leftMax, rightSum)
+                            else
+                                -- 兜底：没有可测文本时，不以“容器当前宽度”反推，避免与父容器形成正反馈导致无限增宽。
+                                -- 此类行（纯分隔/纯图形）对“无换行宽度”的决策应为 0。
+                                rowW = 0
+                            end
+                            if type(rowW) == 'number' and rowW > maxRow then maxRow = rowW end
+                        end
+                    end
+
+                    local pad = (GetRightPadding and GetRightPadding()) or 0
+                    local safe = 16 -- 轻微安全边
+                    local want = math.max(headerW, maxRow) + pad + safe
+                    -- 保护：避免把不合理的大值（例如异常字体测量）一路放大到接近屏幕宽
+                    local parent = (self:GetParent() or UIParent)
+                    local viewport = (parent and parent.GetWidth and parent:GetWidth()) or 1600
+                    local capRatio = (Def and Def.SubPanelViewportCapRatio) or 0.8
+                    if type(capRatio) ~= 'number' or capRatio <= 0 or capRatio > 1 then capRatio = 0.8 end
+                    local hardCap = math.floor(viewport * capRatio)
+                    if want > hardCap then want = hardCap end
+                    want = math.max(0, math.floor(want + 0.5))
+                    return want
+                end
             end
 
             -- 尺寸/可见性变动时触发一次

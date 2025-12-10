@@ -46,7 +46,7 @@ ADT.L = ADT.L or {}
     ["Enable L Lock"] = "Enable L Lock/Unlock",
         ["Enable L Lock tooltip"] = "Press L to lock/unlock the hovered decor. Turn off to hide the hint and disable the hotkey.",
         -- Dock auto open in editor
-        ["Auto Open Dock in Editor"] = "Open Dock on entering editor",
+        ["Auto Open Dock in Editor"] = "Open Dock by Default ",
         ["Auto Open Dock in Editor tooltip"] = "When you enter or return to the House Editor, ADT's Command Dock opens automatically. Turn off to stop auto opening; Ctrl+Q or /adt still works.",
     ["Lock/Unlock"] = "Lock/Unlock",
 
