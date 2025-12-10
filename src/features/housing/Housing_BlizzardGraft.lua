@@ -19,54 +19,8 @@ local function Debug(msg)
     if ADT and ADT.DebugPrint then ADT.DebugPrint("[Graft] " .. tostring(msg)) end
 end
 
--- ===========================
--- 配置（单一权威，可按需调节）
--- ===========================
-local CFG = {
-    -- Dock 子面板与 Header 的间距、边距以及高度限制
-    Layout = {
-        headerToInstrGap = 8,  -- Header 与说明列表之间的垂直间距
-        contentTopPadding = 14,
-        headerTopNudge   = 10, -- Header 相对 Content 的下移偏移
-        contentBottomPadding = 10,
-        subPanelMinHeight = 160,
-        subPanelMaxHeight = 720,
-    },
-    -- 每一“行”说明（HouseEditorInstructionTemplate）的视觉参数
-    Row = {
-        -- 行高与间距需要兼顾多语言与字号缩放，否则会造成键帽文本挤压/堆叠。
-        minHeight = 22,   -- 行最小高度：与 24px 键帽高度协调
-        hSpacing  = 8,    -- 左右两列之间的间距（默认 10）
-        vSpacing  = 2,    -- 不同行之间的垂直间距（容器级）
-        vPadEach  = 1,    -- 每行上下额外内边距（topPadding/bottomPadding）
-        -- 左侧与 SubPanel.Content 对齐：默认采用 DockUI 的统一左右留白（GetRightPadding），
-        -- 以便与 Header.Divider 左/右缩进保持一致；若需更贴边，可改为 0。
-        leftPad   = nil,       -- nil 表示使用 DockUI 统一留白；设为数字则显式覆盖
-        textLeftNudge = 0,     -- 仅信息文字的额外 X 偏移（单位像素，正值→向右，负值→向左）
-        textYOffset   = 0,     -- 仅信息文字的额外 Y 偏移（单位像素，正值→向上，负值→向下）
-        -- 右侧仍与 DockUI 的统一右内边距一致
-        rightPad  = 6,
-    },
-    -- 右侧“按键气泡”
-    Control = {
-        height      = 24,  -- 整个 Control 容器高度（默认 45）
-        bgHeight    = 22,  -- 背景九宫格的高度（默认 40）
-        textPad     = 22,  -- 气泡左右总留白，原逻辑约 26
-        minScale    = 0.70, -- 进一步收缩按钮文本的下限
-        -- 视觉右侧微调：按键气泡的九宫格右端存在外延/光晕，看起来会更靠边；
-        -- 为了让“视觉上的右侧留白”与左侧文本留白一致，这里额外收回 4px。
-        rightEdgeBias = 12,
-    },
-    -- 字体缩放
-    Typography = {
-        instructionScale = 0.78, -- 左列说明文字缩放
-        controlScaleBase = 0.78, -- 右列按钮文字基础缩放（在 Fit 中可能继续变小）
-        minFontSize      = 9,    -- 任何字体的最小像素
-    },
-}
-
--- 对外暴露：供 ADT 自建的 Instruction 行（HoverHUD）读取统一样式
-ADT.HousingInstrCFG = CFG
+-- 统一从配置脚本读取（唯一权威）
+local CFG = assert(ADT and ADT.HousingInstrCFG, "ADT.HousingInstrCFG 缺失：请确认 Housing_Config.lua 先于本文件加载")
 
 -- 取到 Dock 主框体与 Header
 local function GetDock()
@@ -671,10 +625,16 @@ local function AnchorPlacedList()
         anchor = dock
     end
 
-    -- 贴合与等宽
+    -- 贴合与等宽。
+    -- 说明：暴雪模板的木质边框相对 Frame 存在约 ±4px 的外扩；
+    -- 为了让“视觉边缘”与 SubPanel/右侧面板一致，这里用锚点直接补偿：
+    -- 左 +4 / 右 -4。避免额外改皮肤，实现最小变更。
     list:ClearAllPoints()
-    list:SetPoint("TOPLEFT",  anchor, "BOTTOMLEFT", 0, 0)
-    list:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
+    local dxL = assert(CFG.PlacedList and CFG.PlacedList.anchorLeftCompensation)
+    local dxR = assert(CFG.PlacedList and CFG.PlacedList.anchorRightCompensation)
+    local dy  = assert(CFG.PlacedList and CFG.PlacedList.verticalGap)
+    list:SetPoint("TOPLEFT",  anchor, "BOTTOMLEFT", dxL, -dy)
+    list:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", dxR, -dy)
     -- 与面板同层或稍高，避免被遮挡
     pcall(function()
         local targetStrata = dock:GetFrameStrata() or "DIALOG"
@@ -695,7 +655,9 @@ local function AnchorPlacedList()
     list:SetClampedToScreen(true)
     local uiBottom = UIParent and (UIParent.GetBottom and UIParent:GetBottom()) or 0
     local topY = (anchor and anchor.GetBottom and anchor:GetBottom()) or (dock and dock:GetBottom()) or 0
-    local available = math.max(120, (topY - uiBottom) - 8) -- 保留 8px 安全边距，最少 120
+    -- 注意：增加垂直间距 dy 后，清单的顶部进一步下移，
+    -- 可用高度需要相应减少 dy，才能保证“永不越出屏幕底部”的原则。
+    local available = math.max(120, (topY - dy - uiBottom) - 8) -- 保留 8px 安全边距，最少 120
     local curH = list:GetHeight() or 300
     if curH > available + 0.5 then list:SetHeight(available) end
 end
@@ -842,6 +804,10 @@ local function AdoptInstructionsIntoDock()
     -- 任何由暴雪内部引起的尺寸变化（文本换行、行显隐）都会触发：
     if instr.HookScript then
         instr:HookScript("OnSizeChanged", function()
+            -- 强制行宽与内容宽度保持一致（包括 HoverHUD 行），然后再计算高度。
+            if instr and instr.GetChildren then
+                for _, ch in ipairs({instr:GetChildren()}) do _ADT_SetRowFixedWidth(ch) end
+            end
             _ADT_QueueResize()
         end)
         instr:HookScript("OnShow", function()

@@ -228,9 +228,9 @@ do
     function DisplayFrameMixin:UpdateVisuals() end
     function DisplayFrameMixin:UpdateControl() end
 
-    -- 统一样式访问（单一权威）：一律从 Housing_BlizzardGraft.lua 暴露的 ADT.HousingInstrCFG 读取
+    -- 统一样式访问（单一权威）：强制从 Housing_Config.lua 暴露的 ADT.HousingInstrCFG 读取
     local function GetCFG()
-        return ADT and ADT.HousingInstrCFG
+        return assert(ADT and ADT.HousingInstrCFG, "ADT.HousingInstrCFG 缺失：请确认 Housing_Config.lua 已加载")
     end
 
     -- 计算并设置顶层 DisplayFrame 的高度，使其完整包裹自建的子行
@@ -438,6 +438,8 @@ local function Blizzard_HouseEditor_OnLoaded()
             DisplayFrame.rightPadding = 0
             DisplayFrame.spacing = (cfg and cfg.Row and cfg.Row.vSpacing) or 0
         end
+        -- 初次创建即按统一权威样式应用，尽量减少“首帧未贴齐”
+        if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame) end
         DisplayFrame.expand = true
         -- 组级淡入/淡出控制（对子项统一 Alpha），避免仅子行褪色导致快捷键常驻可见
         DisplayFrame._alpha = 0
@@ -614,6 +616,16 @@ function EL:ReparentHoverHUD(newParent)
     end)
     if DisplayFrame.NormalizeKeycapWidth then DisplayFrame:NormalizeKeycapWidth() end
     if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame) end
+    -- 关键：尺寸变化时强制重算键帽宽度与左右留白（修复“HoverHUD 不贴右”的根因：
+    -- 初次 Reparent 后父容器在下一帧才会拉伸到最终宽度）。
+    if newParent.HookScript and not DisplayFrame._hookedForResize then
+        DisplayFrame._hookedForResize = true
+        newParent:HookScript("OnSizeChanged", function()
+            if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame) end
+            if DisplayFrame.NormalizeKeycapWidth then DisplayFrame:NormalizeKeycapWidth() end
+            if DisplayFrame.RecalculateHeight then DisplayFrame:RecalculateHeight() end
+        end)
+    end
     DisplayFrame:Show()
     -- 初次重挂后保持隐藏状态，等待真正的悬停再淡入
     if DisplayFrame.SetGroupAlpha then DisplayFrame:SetGroupAlpha(0) end

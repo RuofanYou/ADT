@@ -36,9 +36,11 @@ local function AttachTo(main)
         borderFrame:SetFrameLevel(sub:GetFrameLevel() + 100)
         sub.BorderFrame = borderFrame
 
+        -- 与 DockUI 主框体保持一致：边框严格贴合容器，不做 ±4 像素外扩，
+        -- 以免视觉上比右侧面板“略宽”。
         local border = borderFrame:CreateTexture(nil, "OVERLAY")
-        border:SetPoint("TOPLEFT", borderFrame, "TOPLEFT", -4, 4)
-        border:SetPoint("BOTTOMRIGHT", borderFrame, "BOTTOMRIGHT", 4, -4)
+        border:SetPoint("TOPLEFT", borderFrame, "TOPLEFT", 0, 0)
+        border:SetPoint("BOTTOMRIGHT", borderFrame, "BOTTOMRIGHT", 0, 0)
         border:SetAtlas("housing-wood-frame")
         border:SetTextureSliceMargins(16, 16, 16, 16)
         border:SetTextureSliceMode(Enum.UITextureSliceMode.Stretched)
@@ -46,8 +48,11 @@ local function AttachTo(main)
 
         local bg = sub:CreateTexture(nil, "BACKGROUND")
         bg:SetAtlas("housing-basic-panel-background")
-        bg:SetPoint("TOPLEFT", sub, "TOPLEFT", -4, -2)
-        bg:SetPoint("BOTTOMRIGHT", sub, "BOTTOMRIGHT", -2, 2)
+        -- 背景也与 DockUI 右侧区域的 inset 规则保持一致（参考 DockUI.Def）。
+        local rightInset = (Def.RightBGInsetRight ~= nil) and Def.RightBGInsetRight or -2
+        local bottomInset = (Def.CenterBGInsetBottom ~= nil) and Def.CenterBGInsetBottom or 2
+        bg:SetPoint("TOPLEFT", sub, "TOPLEFT", 0, 0)
+        bg:SetPoint("BOTTOMRIGHT", sub, "BOTTOMRIGHT", rightInset, bottomInset)
         sub.Background = bg
 
         -- 统一内容容器
