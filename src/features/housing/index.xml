@@ -6,6 +6,7 @@
     <Script file="Housing_HoverHUD.lua"/>
     <Script file="Housing_BatchPlace.lua"/>
     <Script file="Housing_AutoRotate.lua"/>
+    <Script file="Housing_KeyRotate.lua"/>
     <Script file="Housing_Recent.lua"/>
     <Script file="Housing_VisitAssistant.lua"/>
     <!-- 自建“装饰物浏览器”弹窗已下线：仅搬运官方清单按钮与面板尺寸，

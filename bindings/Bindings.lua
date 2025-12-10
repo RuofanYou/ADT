@@ -10,6 +10,9 @@ BINDING_NAME_ADT_TOGGLE_HISTORY = "打开/关闭：最近放置（Dock 分类）
 -- 临时板专用按键
 BINDING_NAME_ADT_TEMP_STORE = "临时板：存入并移除（Ctrl+S）"
 BINDING_NAME_ADT_TEMP_RECALL = "临时板：取出并放置（Ctrl+R）"
+-- 旋转快捷键（建议在按键设置里绑定到 Q/E）
+BINDING_NAME_ADT_ROTATE_CCW_90 = "旋转 -90°（逆时针）"
+BINDING_NAME_ADT_ROTATE_CW_90  = "旋转 +90°（顺时针）"
 
 -- 高级编辑（虚拟多选）相关绑定名称
 BINDING_NAME_ADT_ADV_TOGGLE = "切换：虚拟多选开关（录制并批量同步）"
@@ -80,4 +83,19 @@ end
 function ADT_Temp_RecallTop()
     if not TempLoaded() then print("ADT: 临时板模块未加载") return end
     ADT.Clipboard:RecallTopStartPlacing()
+end
+
+-- ===== 基本模式：旋转90°（基于 AutoRotate 的步进映射） =====
+local function RotateLoaded()
+    return ADT and ADT.RotateHotkey and ADT.RotateHotkey.RotateSelectedByDegrees
+end
+
+function ADT_Rotate_CCW_90()
+    if not RotateLoaded() then print("ADT: 旋转模块未加载") return end
+    ADT.RotateHotkey:RotateSelectedByDegrees(-90)
+end
+
+function ADT_Rotate_CW_90()
+    if not RotateLoaded() then print("ADT: 旋转模块未加载") return end
+    ADT.RotateHotkey:RotateSelectedByDegrees(90)
 end

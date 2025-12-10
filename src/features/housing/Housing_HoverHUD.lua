@@ -1771,6 +1771,8 @@ do
     local btnCopy, btnPaste, btnCut
     -- 一键重置变换（T / CTRL-T）
     local btnResetSubmode, btnResetAll
+    -- 旋转快捷键（Q/E 90°）
+    local btnRotateQ, btnRotateE
     -- 高级编辑：虚拟多选 按键按钮（不做强制覆盖，仅提供绑定接口）
     local btnAdvToggle, btnAdvToggleHovered, btnAdvClear, btnAdvAnchorHover, btnAdvAnchorSelected
 
@@ -1839,6 +1841,21 @@ do
             if ADT and ADT.Housing and ADT.Housing.ResetAllTransforms then ADT.Housing:ResetAllTransforms() end
         end)
 
+        -- 旋转 90°（Q/E）：调用 RotateHotkey 模块（若未加载则安全无操作）
+        btnRotateQ = CreateFrame("Button", "ADT_HousingOverride_RotateQ", owner, "SecureActionButtonTemplate")
+        btnRotateE = CreateFrame("Button", "ADT_HousingOverride_RotateE", owner, "SecureActionButtonTemplate")
+        -- 根据玩家反馈：Q=顺时针(+90)，E=逆时针(-90)
+        btnRotateQ:SetScript("OnClick", function()
+            if ADT and ADT.RotateHotkey and ADT.RotateHotkey.RotateSelectedByDegrees then
+                ADT.RotateHotkey:RotateSelectedByDegrees(90)
+            end
+        end)
+        btnRotateE:SetScript("OnClick", function()
+            if ADT and ADT.RotateHotkey and ADT.RotateHotkey.RotateSelectedByDegrees then
+                ADT.RotateHotkey:RotateSelectedByDegrees(-90)
+            end
+        end)
+
         -- 误操作保护按钮（L 键锁定/解锁）
         btnToggleLock = CreateFrame("Button", "ADT_HousingOverride_ToggleLock", owner, "SecureActionButtonTemplate")
         btnToggleLock:SetScript("OnClick", function()
@@ -1865,6 +1882,9 @@ do
         { key = "CTRL-T", button = function() return btnResetAll end },
         -- 误操作保护：锁定/解锁
         { key = "L", button = function() return btnToggleLock end },
+        -- 旋转 90°（Q/E）：仅在房屋编辑器内生效
+        { key = "Q", button = function() return btnRotateQ end },
+        { key = "E", button = function() return btnRotateE end },
     }
 
     function EL:ClearOverrides()
@@ -1891,6 +1911,10 @@ do
                 local en3 = ADT.GetDBValue("EnableLock")
                 if en3 == nil then en3 = true end
                 allowed = en3
+            elseif cfg.key == "Q" or cfg.key == "E" then
+                local en4 = ADT.GetDBValue("EnableQERotate")
+                if en4 == nil then en4 = true end
+                allowed = en4
             end
             if btn and allowed then
                 SetOverrideBindingClick(owner, true, cfg.key, btn:GetName())

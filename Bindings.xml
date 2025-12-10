@@ -23,4 +23,10 @@
     <Binding name="ADT_ADV_ANCHOR_SELECTED">
         ADT_Adv_SetAnchor_Selected();
     </Binding>
+    <Binding name="ADT_ROTATE_CCW_90">
+        ADT_Rotate_CCW_90();
+    </Binding>
+    <Binding name="ADT_ROTATE_CW_90">
+        ADT_Rotate_CW_90();
+    </Binding>
 </Bindings>

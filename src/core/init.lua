@@ -18,6 +18,8 @@ end
 -- 默认配置（单一权威）
 local DEFAULTS = {
     EnableDupe = true,
+    -- 是否启用 Q/E 旋转 90°（仅在住宅编辑器内生效）
+    EnableQERotate = true,
     -- 是否启用 T 重置默认属性（专家模式下重置当前子模式）
     EnableResetT = true,
     -- 是否启用 Ctrl+T 全部重置
@@ -327,6 +329,10 @@ f:SetScript("OnEvent", function(self, event, addonName)
         RegisterSettingsCategory()
         if ADT.Housing and ADT.Housing.LoadSettings then
             ADT.Housing:LoadSettings()
+        end
+        -- 关键：/reload 后确保自动旋转模块按持久化配置加载
+        if ADT.AutoRotate and ADT.AutoRotate.LoadSettings then
+            ADT.AutoRotate:LoadSettings()
         end
         -- 若控制中心已构建，刷新一次分类与条目（避免语言切换后残留旧文案）
         if ADT.CommandDock and ADT.CommandDock.SettingsPanel then

@@ -45,6 +45,8 @@ ADT.L = ADT.L or {}
     ["Enable CTRL+T Reset All tooltip"] = "In Expert Mode, pressing Ctrl+T resets all transforms. Turn off to disable the hotkey and hide the hint.",
     ["Enable L Lock"] = "Enable L Lock/Unlock",
         ["Enable L Lock tooltip"] = "Press L to lock/unlock the hovered decor. Turn off to hide the hint and disable the hotkey.",
+    ["Enable Q/E Rotate"] = "Enable Q/E Rotate",
+        ["Enable Q/E Rotate tooltip"] = "While in the House Editor: Q rotates the grabbed/selected decor by +90°, E by -90°. Turn off to disable these hotkeys and hide related hints.",
         -- Dock auto open in editor
         ["Auto Open Dock in Editor"] = "Open Dock by Default ",
         ["Auto Open Dock in Editor tooltip"] = "When you enter or return to the House Editor, ADT's Command Dock opens automatically. Turn off to stop auto opening; Ctrl+Q or /adt still works.",
@@ -208,6 +210,8 @@ ADT.L = ADT.L or {}
     ["Enable CTRL+T Reset All tooltip"] = "在专家模式下，按 Ctrl+T 重置所有变换；关闭后禁用该热键并隐藏提示。",
     ["Enable L Lock"] = "启用 L 以锁定装饰",
         ["Enable L Lock tooltip"] = "按 L 锁定/解锁当前悬停的装饰；关闭后隐藏提示并禁用该热键。",
+    ["Enable Q/E Rotate"] = "启用 Q/E 旋转",
+        ["Enable Q/E Rotate tooltip"] = "在住宅编辑器中：Q 为 +90°，E 为 -90° 旋转当前抓起/选中的装饰；关闭后禁用该热键并隐藏提示。",
         -- Dock auto open in editor
         ["Auto Open Dock in Editor"] = "默认开启设置面板",
         ["Auto Open Dock in Editor tooltip"] = "进入或回到住宅编辑模式时自动显示控制中心（Dock）。关闭后不再自动弹出，但仍可用 Ctrl+Q 或 /adt 打开。",

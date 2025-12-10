@@ -372,6 +372,21 @@ local function buildModules()
         categoryKeys = { 'Housing' },
         uiOrder = 8,
     }
+
+    -- 启用 Q/E 旋转 90°
+    local moduleQERotate = {
+        name = (L and L["Enable Q/E Rotate"]) or "启用 Q/E 旋转",
+        dbKey = 'EnableQERotate',
+        description = (L and L["Enable Q/E Rotate tooltip"]) or "在住宅编辑器内按 Q / E 将当前抓起/选中的装饰旋转 -90° / +90°；关闭后禁用该热键并隐藏相关提示。",
+        toggleFunc = function(state)
+            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableQERotate', state) end
+            dbgToggle('EnableQERotate', state)
+            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
+            if ADT and ADT.Housing and ADT.Housing.RefreshOverrides then ADT.Housing:RefreshOverrides() end
+        end,
+        categoryKeys = { 'Housing' },
+        uiOrder = 9,
+    }
     
     -- 语言选择下拉菜单模块
     local moduleLanguage = {
@@ -449,8 +464,8 @@ local function buildModules()
         key = 'Housing',
         categoryName = (L and L['SC Housing']) or '通用',
         categoryType = 'settings', -- 设置类分类
-        modules = { moduleEditorAutoOpen, moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace, moduleResetT, moduleResetAll, moduleLock, moduleLanguage },
-        numModules = 10,
+        modules = { moduleEditorAutoOpen, moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace, moduleResetT, moduleResetAll, moduleLock, moduleQERotate, moduleLanguage },
+        numModules = 11,
     }
 
     -- 临时板分类（装饰列表类）
