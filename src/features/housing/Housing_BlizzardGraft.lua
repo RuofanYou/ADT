@@ -657,8 +657,93 @@ local function GetPlacedDecorListFrame()
     return list
 end
 
-local function AnchorPlacedList() return end
-local function EnsurePlacedListHooks() return end
+-- 将“放置的装饰”官方弹窗与 ADT 子面板自然衔接
+local function AnchorPlacedList()
+    local list = GetPlacedDecorListFrame()
+    if not list or not list.GetHeight then return end
+
+    local dock = GetDock()
+    if not dock then return end
+
+    -- 目标锚点：优先衔接 SubPanel；若未创建或隐藏，则衔接 Dock 主体底边
+    local anchor = dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()) or dock
+    if anchor and anchor.IsShown and not anchor:IsShown() then
+        anchor = dock
+    end
+
+    -- 贴合与等宽
+    list:ClearAllPoints()
+    list:SetPoint("TOPLEFT",  anchor, "BOTTOMLEFT", 0, 0)
+    list:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
+    -- 与面板同层或稍高，避免被遮挡
+    pcall(function()
+        local targetStrata = dock:GetFrameStrata() or "DIALOG"
+        list:SetFrameStrata(targetStrata)
+        list:SetFrameLevel((dock:GetFrameLevel() or 10) + 10)
+    end)
+
+    -- 禁止拖动/用户放置，保持跟随
+    pcall(function()
+        list:SetMovable(false)
+        list:SetUserPlaced(false)
+        list:RegisterForDrag() -- 清空
+        list:SetScript("OnDragStart", nil)
+        list:SetScript("OnDragStop", nil)
+    end)
+
+    -- 高度限制：绝不超过屏幕底部
+    list:SetClampedToScreen(true)
+    local uiBottom = UIParent and (UIParent.GetBottom and UIParent:GetBottom()) or 0
+    local topY = (anchor and anchor.GetBottom and anchor:GetBottom()) or (dock and dock:GetBottom()) or 0
+    local available = math.max(120, (topY - uiBottom) - 8) -- 保留 8px 安全边距，最少 120
+    local curH = list:GetHeight() or 300
+    if curH > available + 0.5 then list:SetHeight(available) end
+end
+
+local function EnsurePlacedListHooks()
+    local list = GetPlacedDecorListFrame()
+    if not list or list._ADT_Anchored then return end
+
+    -- 一次性：禁用拖拽与关闭按钮（防止 StartMoving 报错 & 用户误关）
+    local function LockInteractions()
+        pcall(function()
+            list:SetMovable(false)
+            list:SetUserPlaced(false)
+        end)
+        if list.DragBar then
+            list.DragBar:EnableMouse(false)
+            list.DragBar:SetScript("OnMouseDown", nil)
+            list.DragBar:SetScript("OnMouseUp", nil)
+            list.DragBar.isMovingTarget = false
+        end
+        if list.CloseButton then
+            list.CloseButton:Hide()
+            list.CloseButton:EnableMouse(false)
+            list.CloseButton:SetScript("OnClick", nil)
+        end
+    end
+    LockInteractions()
+
+    -- 首次显示时与尺寸变动时都重新校准一次
+    list:HookScript("OnShow", function()
+        LockInteractions()
+        C_Timer.After(0, AnchorPlacedList)
+    end)
+    list:HookScript("OnSizeChanged", function() C_Timer.After(0, AnchorPlacedList) end)
+
+    -- 主面板/子面板大小变化时也刷新一次（多源冗余保证）
+    local dock = GetDock()
+    if dock then
+        if dock.HookScript then
+            dock:HookScript("OnSizeChanged", function() C_Timer.After(0, AnchorPlacedList) end)
+        end
+        if dock.SubPanel and dock.SubPanel.HookScript then
+            dock.SubPanel:HookScript("OnSizeChanged", function() C_Timer.After(0, AnchorPlacedList) end)
+            dock.SubPanel:HookScript("OnShow",       function() C_Timer.After(0, AnchorPlacedList) end)
+        end
+    end
+    list._ADT_Anchored = true
+end
 
 -- 说明：12.0 后不再强制打开“放置的装饰”清单，
 -- 但文件中仍有延迟调用点引用 ShowPlacedListIfExpertActive。
@@ -738,8 +823,22 @@ local function AdoptInstructionsIntoDock()
             if instr and instr.SetFixedWidth and w then instr:SetFixedWidth(w) end
         end)
     end
+    -- 关键修复：首帧进入高级/专家模式时，暴雪容器会先按默认样式（居中/非展开）完成一次排版，
+    -- 再触发我们的 hook（hooksecurefunc 是“事后”调用），导致第一帧看起来“整体偏右”。
+    -- 处理：在首次重挂到 Dock 后，先对现有子项应用一次 ADT 样式（左对齐/展开/锚点解耦），
+    -- 再主动触发 Layout，确保第一帧就按我们的样式排版；随后仍保留官方 UpdateAllVisuals。
+    pcall(function() _ADT_ApplyTypography(instr) end)
+    if instr.MarkDirty then instr:MarkDirty() end
+    if instr.UpdateLayout then instr:UpdateLayout() end
+    -- 再跑一次官方刷新，保证数据与显示完整，然后用 0 帧延迟再套一次样式兜底（覆盖官方可能改写的行属性）。
     if instr.UpdateAllVisuals then instr:UpdateAllVisuals() end
     if instr.UpdateLayout then instr:UpdateLayout() end
+    C_Timer.After(0, function()
+        if not instr or not instr.GetChildren then return end
+        pcall(function() _ADT_ApplyTypography(instr) end)
+        if instr.MarkDirty then instr:MarkDirty() end
+        if instr.UpdateLayout then instr:UpdateLayout() end
+    end)
     -- 任何由暴雪内部引起的尺寸变化（文本换行、行显隐）都会触发：
     if instr.HookScript then
         instr:HookScript("OnSizeChanged", function()
@@ -785,7 +884,18 @@ local function AdoptInstructionsIntoDock()
 
     local children = {instr:GetChildren()}
     for _, ch in ipairs(children) do stripLine(ch) end
+    -- 经过“隐藏特定行/清除鼠标图标”后，官方容器会再次排版。
+    -- 为避免再次回到默认居中，这里确保在排版前先套用 ADT 样式，并强制一次 Layout。
+    pcall(function() _ADT_ApplyTypography(instr) end)
+    if instr.MarkDirty then instr:MarkDirty() end
     if instr.UpdateLayout then instr:UpdateLayout() end
+    -- 以及再延迟一帧做一次兜底，解决个别路径上文本换行/键帽宽度变更造成的次帧漂移。
+    C_Timer.After(0, function()
+        if not instr or not instr.GetChildren then return end
+        pcall(function() _ADT_ApplyTypography(instr) end)
+        if instr.MarkDirty then instr:MarkDirty() end
+        if instr.UpdateLayout then instr:UpdateLayout() end
+    end)
     _ADT_QueueResize()
 
     -- 如果官方暴露了直接 key，进一步保险

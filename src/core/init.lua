@@ -36,8 +36,6 @@ local DEFAULTS = {
     ExtraClipboard = {},
     -- 调试开关（仅在开启时才向聊天框 print）
     DebugEnabled = false,
-    -- UI 位置持久化：历史弹窗
-    HistoryPopupPos = nil,
     -- UI 位置持久化：控制中心主面板
     SettingsPanelPos = nil,
     -- UI 尺寸持久化：控制中心主面板（w/h）
@@ -96,6 +94,9 @@ local function MigrateIfNeeded(db)
     end
 
     -- 未来可在此扩展更多迁移（保持一次性、幂等）
+    -- 移除已废弃的独立弹窗位置字段
+    db.HistoryPopupPos = nil
+    db.ClipboardPopupPos = nil
 end
 
 local function GetDB()

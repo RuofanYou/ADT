@@ -144,4 +144,4 @@ function History:DebugPrint()
 end
 
 -- 初始化消息
-if ADT and ADT.DebugPrint then ADT.DebugPrint("放置历史模块已加载。输入 /adthistory 打开历史面板。") end
+if ADT and ADT.DebugPrint then ADT.DebugPrint("放置历史模块已加载。在 /adt 控制中心的‘最近放置’分类查看。") end

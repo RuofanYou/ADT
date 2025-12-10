@@ -487,6 +487,27 @@ local function Blizzard_HouseEditor_OnLoaded()
             if delay then self._alpha = 2 end
             self:SetScript("OnUpdate", GroupFadeOut_OnUpdate)
         end
+        -- 关键工具：立刻停止一切淡入/淡出并把整组提示隐藏（透明度归零）
+        -- 用于“瞬时切换到其它状态（如选中/切换模式）”时避免文本叠层。
+        function DisplayFrame:InstantHideGroup()
+            -- 停止组级 OnUpdate
+            self:SetScript("OnUpdate", nil)
+            -- 终止子行的 OnUpdate 并置零透明度
+            local function kill(f)
+                if not f then return end
+                if f.SetScript then f:SetScript("OnUpdate", nil) end
+                if f.SetAlpha then f:SetAlpha(0) end
+                if f.alpha then f.alpha = 0 end
+            end
+            kill(self.SubFrame)
+            if self.HintFrames then for _, ch in ipairs(self.HintFrames) do kill(ch) end end
+            if self.SetGroupAlpha then self:SetGroupAlpha(0) end
+            -- 保持与右侧 Header alpha 同步（若处于跟随模式）
+            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha
+               and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
+                ADT.DockUI.SetSubPanelHeaderAlpha(0)
+            end
+        end
         -- 跟随父容器缩放（Dock 子面板）；之前强制忽略父缩放会导致与内容区像素系不一致，
         -- 右侧键帽相对“弹窗内部右缘”的对齐出现偏差
         pcall(function()
@@ -670,6 +691,10 @@ do
             end
             return
         end
+        -- 进入“选中”态：为避免与暴雪“选中说明”叠层，立刻清空我们自绘的 HoverHUD
+        if DisplayFrame and DisplayFrame.InstantHideGroup then
+            DisplayFrame:InstantHideGroup()
+        end
         -- 检查开关是否启用（仅用于“误操作保护”拦截；显示标题不受此开关影响）
         local protectionEnabled = ADT.GetDBValue("EnableProtection")
         if protectionEnabled == nil then protectionEnabled = true end
@@ -794,9 +819,15 @@ do
                 self.decorInstanceInfo = nil
             end
             if DisplayFrame then
-                local df = DisplayFrame.SubFrame or DisplayFrame
-                if df.FadeOut then df:FadeOut(0.5) end
-                if DisplayFrame.FadeOutGroup then DisplayFrame:FadeOutGroup(0.5) end
+                -- 如果此时用户发生“选中/切换模式”，立即隐藏以避免叠层；
+                -- 否则正常走淡出。
+                if IsDecorSelected() then
+                    if DisplayFrame.InstantHideGroup then DisplayFrame:InstantHideGroup() end
+                else
+                    local df = DisplayFrame.SubFrame or DisplayFrame
+                    if df.FadeOut then df:FadeOut(0.5) end
+                    if DisplayFrame.FadeOutGroup then DisplayFrame:FadeOutGroup(0.5) end
+                end
             end
         end
     end
@@ -918,7 +949,11 @@ do
     end
 
     function EL:OnEditorModeChanged()
-        -- 保留扩展点
+        -- 切换基础/专家/自定义等模式时，暴雪会刷新右侧说明。
+        -- 为做到“无缝衔接”，这里即时清空我们自绘的 HoverHUD，交给新模式接管。
+        if DisplayFrame and DisplayFrame.InstantHideGroup then
+            DisplayFrame:InstantHideGroup()
+        end
     end
 
     function EL:OnModifierStateChanged(key, down)

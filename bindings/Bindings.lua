@@ -6,7 +6,7 @@ local ADDON_NAME, ADT = ...
 -- 绑定头与名称（用于按键设置界面显示）
 -- 注意：这些全局常量是暴雪的约定命名，必须是全局。
 BINDING_HEADER_ADT = "AdvancedDecorationTools"
-BINDING_NAME_ADT_TOGGLE_HISTORY = "打开/关闭：最近放置（历史弹窗）"
+BINDING_NAME_ADT_TOGGLE_HISTORY = "打开/关闭：最近放置（Dock 分类）"
 -- 临时板专用按键
 BINDING_NAME_ADT_TEMP_STORE = "临时板：存入并移除（Ctrl+S）"
 BINDING_NAME_ADT_TEMP_RECALL = "临时板：取出并放置（Ctrl+R）"
@@ -23,11 +23,15 @@ BINDING_NAME_ADT_ADV_ANCHOR_SELECTED = "锚点：设为当前选中"
 
 -- 历史面板切换
 function ADT_ToggleHistory()
-    if ADT and ADT.HistoryPopup and ADT.HistoryPopup.Toggle then
-        ADT.HistoryPopup:Toggle()
-    else
-        if ADT and ADT.Notify then ADT.Notify((ADT.L and ADT.L["History module not loaded"]) or "History module not loaded", 'error') end
+    local Main = ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel
+    if not Main then return end
+    -- 若当前已显示且正处于“最近放置”分类，则收起；否则打开并切到该分类
+    if Main:IsShown() and Main.currentDecorCategory == 'History' then
+        Main:Hide(); return
     end
+    local mode = (HouseEditorFrame and HouseEditorFrame:IsShown()) and "editor" or "standalone"
+    Main:ShowUI(mode)
+    if Main.ShowDecorListCategory then Main:ShowDecorListCategory('History') end
 end
 
 -- 原“复制/粘贴/剪切”快捷键已废弃，避免多套逻辑并存。

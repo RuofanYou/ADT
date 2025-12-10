@@ -214,12 +214,15 @@ end)
 
 -- UI 迁移到 ClipboardPopup；此处保留后备入口
 function Clipboard:Toggle()
-    if ADT and ADT.ClipboardPopup and ADT.ClipboardPopup.Toggle then
-        ADT.ClipboardPopup:Toggle()
-        return
+    -- 弹窗已彻底移除；改为打开 Dock 并切换到“临时板”分类
+    local Main = ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel
+    if not Main then return end
+    if Main:IsShown() and Main.currentDecorCategory == 'Clipboard' then
+        Main:Hide(); return
     end
-    -- 兜底：如果 ClipboardPopup 未加载，提示使用 /adthistory 或检查加载顺序
-    if ADT and ADT.Notify then ADT.Notify(ADT.L["Clipboard UI not loaded"], 'error') end
+    local mode = (HouseEditorFrame and HouseEditorFrame:IsShown()) and "editor" or "standalone"
+    Main:ShowUI(mode)
+    if Main.ShowDecorListCategory then Main:ShowDecorListCategory('Clipboard') end
 end
 
 -- 启动提示命令

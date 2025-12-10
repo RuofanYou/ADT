@@ -66,6 +66,29 @@ local Def = {
     StaticRightAttachOffset = 0,
     LeftPanelPadTop = 14,
     LeftPanelPadBottom = 14,
+
+    -- ================= Header/顶部区域可调参数（统一权威） =================
+    HeaderHeight = 68,                 -- Header 高度
+    HeaderTitleOffsetX = 22,           -- Header 标题 X 偏移
+    HeaderTitleOffsetY = -10,          -- Header 标题 Y 偏移（负值为向下）
+
+    -- 放置清单按钮（PlacedDecorListButton）在 Header 内的位置/层级
+    PlacedListBtnPoint = "LEFT",       -- 锚点（按钮自身）
+    PlacedListBtnRelPoint = "LEFT",    -- 相对锚点（Header）
+    PlacedListBtnOffsetX = 40,         -- X 偏移
+    PlacedListBtnOffsetY = -1,          -- Y 偏移
+    PlacedListBtnRaiseAboveBorder = 1, -- 提升到边框之上的 FrameLevel 偏移（0 表示不提升）
+
+    -- ================= 中央滚动区域边距 =================
+    ScrollViewInsetTop = 2,
+    ScrollViewInsetBottom = 2,
+    RightBGInsetRight = -2,            -- 右侧统一背景右侧 inset
+    RightBGInsetBottom = 2,            -- 右侧统一背景底部 inset
+    CenterBGInsetBottom = 2,           -- 中央区域背景底部 inset
+
+    -- ================= 左侧分类按钮细节 =================
+    CategoryButtonLabelOffset = 9,     -- 文本左内边距（与数字角标对称）
+    CategoryCountRightInset = 2,       -- 数字角标右内缩
 }
 
 -- 单一权威：右侧内容起始的左内边距，强制与左侧 Category 的外边距一致
@@ -275,6 +298,115 @@ do
         MainFrame:Hide()
         if ADT.UI and ADT.UI.PlaySoundCue then
             ADT.UI.PlaySoundCue('ui.checkbox.off')
+        end
+    end)
+end
+--
+-- 将暴雪家宅编辑器中的“放置的装饰清单”按钮（PlacedDecorListButton）
+-- 采纳到 ADT 的 Header 内（偏左位置）。
+-- 单一权威：采纳/恢复逻辑仅在本文件维护，外部只需触发 DockUI.Attach/Restore。
+--
+ADT.DockUI = ADT.DockUI or {}
+do
+    local Attached -- 是否已挂到 Dock Header
+    local OrigParent, OrigPoint -- 备份信息便于恢复
+
+    local function GetPlacedListButton()
+        local hf = _G.HouseEditorFrame
+        local expert = hf and hf.ExpertDecorModeFrame
+        local btn = expert and expert.PlacedDecorListButton
+        return btn, expert
+    end
+
+    local function RestoreToOriginal()
+        local btn = GetPlacedListButton()
+        if not btn then return end
+        if OrigParent then btn:SetParent(OrigParent) end
+        btn:ClearAllPoints()
+        if OrigPoint and type(OrigPoint) == 'table' then
+            local p, rel, rp, x, y = OrigPoint.p, OrigPoint.rel, OrigPoint.rp, OrigPoint.x, OrigPoint.y
+            if not rel then
+                -- 尝试回退到默认锚点：RIGHT 锚到父级 DecorCount 左侧（见 Referrence/Blizzard_HouseEditorExpertDecorMode.xml）
+                local _, expert = GetPlacedListButton()
+                rel = expert and expert.DecorCount or OrigParent
+                p, rp, x, y = "RIGHT", "LEFT", -20, 0
+            end
+            btn:SetPoint(p or "CENTER", rel, rp or p, tonumber(x) or 0, tonumber(y) or 0)
+        end
+        btn:SetFrameStrata("MEDIUM")
+        Attached = false
+    end
+
+    local function _IsExpertMode()
+        local HEM = C_HouseEditor and C_HouseEditor.GetActiveHouseEditorMode and C_HouseEditor.GetActiveHouseEditorMode()
+        return HEM == (Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.ExpertDecor)
+    end
+
+    local function AttachIntoHeader()
+        if not (MainFrame and MainFrame.Header) then return end
+        if not _IsExpertMode() then return end -- 仅专家模式显示
+        local btn = GetPlacedListButton()
+        if not btn then return end
+        -- 首次采纳时备份原父级与第一个锚点
+        if not OrigParent then
+            OrigParent = btn:GetParent()
+            -- 仅备份第一个锚点即可复原
+            local p, rel, rp, x, y = btn:GetPoint(1)
+            OrigPoint = { p = p, rel = rel, rp = rp, x = x, y = y }
+        end
+
+        btn:SetParent(MainFrame.Header)
+        btn:ClearAllPoints()
+        -- 位置：贴 Header 左缘，参数化可调
+        local p = Def.PlacedListBtnPoint or "LEFT"
+        local rp = Def.PlacedListBtnRelPoint or p
+        local dx = Def.PlacedListBtnOffsetX or 10
+        local dy = Def.PlacedListBtnOffsetY or 0
+        btn:SetPoint(p, MainFrame.Header, rp, dx, dy)
+        -- 层级：位于木框之上，避免看起来发灰/半透明（可通过 Def.PlacedListBtnRaiseAboveBorder 关闭/调整）
+        local strata = MainFrame:GetFrameStrata() or "FULLSCREEN_DIALOG"
+        btn:SetFrameStrata(strata)
+        local raise = tonumber(Def.PlacedListBtnRaiseAboveBorder) or 0
+        if raise ~= 0 and MainFrame.BorderFrame and MainFrame.BorderFrame.GetFrameLevel then
+            btn:SetFrameLevel((MainFrame.BorderFrame:GetFrameLevel() or (btn:GetFrameLevel() or 0)) + raise)
+        end
+        -- 防御：确保完全不透明可见
+        if btn.SetAlpha then btn:SetAlpha(1) end
+        if btn.EnableMouse then btn:EnableMouse(true) end
+        btn:Show()
+        Attached = true
+    end
+
+    -- 对外方法：尝试采纳/恢复
+    function ADT.DockUI.AttachPlacedListButton()
+        AttachIntoHeader()
+    end
+    function ADT.DockUI.RestorePlacedListButton()
+        RestoreToOriginal()
+    end
+
+    -- 事件驱动：进入家宅编辑器时附着；离开时恢复
+    local EL = CreateFrame("Frame")
+    EL:RegisterEvent("HOUSE_EDITOR_MODE_CHANGED")
+    EL:RegisterEvent("ADDON_LOADED")
+    EL:RegisterEvent("PLAYER_LOGIN")
+    EL:SetScript("OnEvent", function(_, event, arg1)
+        if event == "ADDON_LOADED" then
+            -- 暴雪 HouseEditor 加载后尝试一次
+            if arg1 == "Blizzard_HouseEditor" then C_Timer.After(0, AttachIntoHeader) end
+        elseif event == "PLAYER_LOGIN" then
+            C_Timer.After(0.2, AttachIntoHeader)
+        elseif event == "HOUSE_EDITOR_MODE_CHANGED" then
+            -- 进入编辑器 → 附着；退出 → 复原
+            if C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive() then
+                if _IsExpertMode() then
+                    C_Timer.After(0, AttachIntoHeader)
+                else
+                    if Attached then RestoreToOriginal() end
+                end
+            else
+                if Attached then RestoreToOriginal() end
+            end
         end
     end)
 end
@@ -830,7 +962,7 @@ do
         local f = CreateFrame("Button", nil, parent)
         Mixin(f, CategoryButtonMixin)
         f:SetSize(120, 26)
-        f.labelOffset = 9
+        f.labelOffset = Def.CategoryButtonLabelOffset or 9
         if f.RegisterForClicks then f:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
         f.Label = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         f.Label:SetJustifyH("LEFT")
@@ -854,7 +986,7 @@ do
         f.Count:SetJustifyH("RIGHT")
         -- 数字右内边距 2px，避免贴边；与容器宽度分离以获得更稳定的视觉对齐
         f.Count:ClearAllPoints()
-        f.Count:SetPoint("RIGHT", CountContainer, "RIGHT", -2, 0)
+        f.Count:SetPoint("RIGHT", CountContainer, "RIGHT", - (Def.CategoryCountRightInset or 2), 0)
         SetTextColor(f.Count, Def.TextColorNonInteractable)
 
         f:SetScript("OnEnter", f.OnEnter)
@@ -2065,7 +2197,7 @@ local function CreateUI()
 
     -- 顶部大 Header（对标 HouseEditor Storage 视觉）
     do
-        local headerHeight = 68
+        local headerHeight = Def.HeaderHeight or 68
         local Header = CreateFrame("Frame", nil, MainFrame)
         MainFrame.Header = Header
         -- Header 仅覆盖右侧区域（不延伸到左侧分类区），并且左边始终贴合 LeftSection 的右缘
@@ -2081,7 +2213,7 @@ local function CreateUI()
 
         local title = Header:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
         MainFrame.HeaderTitle = title
-        title:SetPoint("LEFT", Header, "LEFT", 22, -10)
+        title:SetPoint("LEFT", Header, "LEFT", Def.HeaderTitleOffsetX or 22, Def.HeaderTitleOffsetY or -10)
         title:SetJustifyH("LEFT")
         title:SetText((ADT.L and ADT.L['Addon Full Name']) or '高级装修工具')
 
@@ -2255,9 +2387,10 @@ local function CreateUI()
     RightSection:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
     RightSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
 
-    -- CentralSection：顶部位于 Header 下方，右侧直接贴 MainFrame 右边
+    -- CentralSection：顶部必须“紧贴 Header 底部”作为锚点，
+    -- 不能再与 LeftSection 顶部对齐（那样会把内容顶到 Header 区域内部）。
     CentralSection:ClearAllPoints()
-    CentralSection:SetPoint("TOPLEFT", LeftSection, "TOPRIGHT", 0, 0)
+    CentralSection:SetPoint("TOPLEFT", MainFrame.Header or MainFrame, "BOTTOMLEFT", 0, 0)
     CentralSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
     if CentralSection.EnableMouse then CentralSection:EnableMouse(false) end
     if CentralSection.EnableMouseMotion then CentralSection:EnableMouseMotion(false) end
@@ -2290,7 +2423,7 @@ local function CreateUI()
         RBG:SetAtlas("housing-basic-panel-background")
         RBG:ClearAllPoints()
         RBG:SetPoint("TOPLEFT", MainFrame.Header or MainFrame, "TOPLEFT", 0, 0)
-        RBG:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", -2, 2)
+        RBG:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", Def.RightBGInsetRight or -2, Def.RightBGInsetBottom or 2)
         -- 再创建中央区域独立背景，层级同为 BACKGROUND，不影响点击
         --（保留以强化中央区的对比度；两者叠加仍在 BACKGROUND 图层）
         
@@ -2300,15 +2433,17 @@ local function CreateUI()
         MainFrame.CenterBackground = CenterBG
         CenterBG:SetAtlas("housing-basic-panel-background")
         CenterBG:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", 0, 0)
-        CenterBG:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", 0, 2)
+        CenterBG:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", 0, Def.CenterBGInsetBottom or 2)
 
         -- 暂不显示自研滚动条，后续将切换为暴雪 ScrollBox 体系
         MainFrame.ModuleTab.ScrollBar = nil
 
         local ScrollView = API.CreateListView(Tab1)
         MainFrame.ModuleTab.ScrollView = ScrollView
-        ScrollView:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", 0, -2)
-        ScrollView:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", 0, 2)
+        -- 列表视图顶端 = CentralSection 顶端（亦即 Header 底部）
+        -- 给 2px 的向内间距，避免文字紧贴分隔线。
+        ScrollView:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", 0, - (Def.ScrollViewInsetTop or 2))
+        ScrollView:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", 0, (Def.ScrollViewInsetBottom or 2))
         ScrollView:SetStepSize(Def.ButtonSize * 2)
         ScrollView:OnSizeChanged()
         ScrollView:EnableMouseBlocker(true)
