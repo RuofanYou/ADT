@@ -60,6 +60,36 @@ local DEFAULTS = {
     EnableDockAutoOpenInEditor = true,
 }
 
+-- 统一设置事件总线（单一权威）：任何对 ADT_DB 的写操作都通过此处发出事件
+ADT.Settings = ADT.Settings or {}
+do
+    local Bus = ADT.Settings
+    Bus._listeners = Bus._listeners or {}
+
+    function Bus.On(key, fn)
+        if not key or type(fn) ~= 'function' then return end
+        Bus._listeners[key] = Bus._listeners[key] or {}
+        table.insert(Bus._listeners[key], fn)
+    end
+
+    function Bus.Emit(key, value)
+        local arr = Bus._listeners and Bus._listeners[key]
+        if not arr then return end
+        for _, fn in ipairs(arr) do
+            pcall(fn, value)
+        end
+    end
+
+    -- 在 ADDON_LOADED 之后，可用于把“当前持久化值”广播给已注册监听者
+    function Bus.ApplyAll()
+        local db = _G.ADT_DB or {}
+        for key, fns in pairs(Bus._listeners or {}) do
+            local v = db[key]
+            for _, fn in ipairs(fns) do pcall(fn, v) end
+        end
+    end
+end
+
 local function CopyDefaults(dst, src)
     if type(dst) ~= "table" then dst = {} end
     for k, v in pairs(src) do
@@ -133,6 +163,9 @@ end
 function ADT.SetDBValue(key, value)
     local db = GetDB()
     db[key] = value
+    if ADT.Settings and ADT.Settings.Emit then
+        ADT.Settings.Emit(key, value)
+    end
 end
 
 function ADT.FlipDBBool(key)
@@ -333,6 +366,10 @@ f:SetScript("OnEvent", function(self, event, addonName)
         -- 关键：/reload 后确保自动旋转模块按持久化配置加载
         if ADT.AutoRotate and ADT.AutoRotate.LoadSettings then
             ADT.AutoRotate:LoadSettings()
+        end
+        -- 广播当前所有设置值，驱动已注册的 on-change 监听者（例如模块自身加载刷新）
+        if ADT.Settings and ADT.Settings.ApplyAll then
+            ADT.Settings.ApplyAll()
         end
         -- 若控制中心已构建，刷新一次分类与条目（避免语言切换后残留旧文案）
         if ADT.CommandDock and ADT.CommandDock.SettingsPanel then

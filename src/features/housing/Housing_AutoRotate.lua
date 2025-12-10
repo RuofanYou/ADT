@@ -858,6 +858,24 @@ end
 M:LoadSettings()
 RegisterSettings()
 
+-- 绑定设置事件：避免每个选项重复写一份 toggleFunc
+if ADT and ADT.Settings and ADT.Settings.On then
+    for _, k in ipairs({
+        'EnableAutoRotateOnCtrlPlace',
+        'AutoRotateMode',
+        'AutoRotatePresetDegrees',
+        'AutoRotateSequence',
+        'AutoRotateApplyScope',
+        'AutoRotateStepDegrees',
+    }) do
+        ADT.Settings.On(k, function()
+            if ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then
+                ADT.AutoRotate:LoadSettings()
+            end
+        end)
+    end
+end
+
 -- 注册“模块提供者”，以便在语言切换导致 CommandDock 重建时，重新注入本模块的设置项。
 if ADT and ADT.CommandDock and ADT.CommandDock.RegisterModuleProvider then
     ADT.CommandDock:RegisterModuleProvider(function(CC)
