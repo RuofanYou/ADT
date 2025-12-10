@@ -34,6 +34,12 @@ end
 
 SlashCmdList["ADT"] = function(msg)
     msg = (msg or ""):lower():match("^%s*(.-)%s*$")
+    -- /adt visit 角色-服务器
+    if msg:match("^visit") then
+        if ADT and ADT.VisitAssistant and ADT.VisitAssistant.HandleSlash then
+            if ADT.VisitAssistant:HandleSlash(msg) then return end
+        end
+    end
     -- /adt dock ... 子命令：诊断 Dock 交互问题
     if msg:match("^dock") then
         local _, sub = msg:match("^(%S+)%s*(.*)$")

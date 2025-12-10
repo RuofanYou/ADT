@@ -51,6 +51,12 @@ local DEFAULTS = {
     AutoRotateStepDegrees = 15,         -- 基本模式单次步进角度（估值，可在设置中调节）
     -- 注意：按 decorRecordID 的专属步进、序列索引、学习记录等运行期/半持久化数据
     -- 统一收敛到 ADT_DB.AutoRotate 子表中，避免出现重复字段。
+
+    -- 访屋助手（VisitAssistant）配置（配置驱动，统一权威）
+    VisitAutoRemoveFriend = true,     -- 通过好友曲线拿到 GUID 后，是否自动移除临时好友
+    VisitFriendWaitSec = 8,           -- 等待好友列表刷新最大秒数
+    -- 进入编辑模式时自动打开控制中心（Dock）
+    EnableDockAutoOpenInEditor = true,
 }
 
 local function CopyDefaults(dst, src)

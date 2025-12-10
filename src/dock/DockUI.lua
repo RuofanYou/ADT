@@ -111,6 +111,35 @@ ADT.DockUI = ADT.DockUI or {}
 ADT.DockUI.Def = Def
 ADT.DockUI.GetRightPadding = GetRightPadding
 
+-- 提前提供一个“请求子面板自适应高度”的稳定入口（占位包装器）。
+-- 目的：解决 /reload 后 HoverHUD 先于 SubPanel 初始化时，
+--       首次 RecalculateHeight 触发的请求被丢失的问题。
+-- 真实实现仍在 SubPanel.lua 内部生成（单一权威），
+-- 此处仅做一次性延迟转发，避免业务层出现空指针。
+if not ADT.DockUI.RequestSubPanelAutoResize then
+    ADT.DockUI.RequestSubPanelAutoResize = function()
+        -- 优先直接找到 SubPanel 实例并调用其单一权威入口，避免任何重复实现。
+        local main = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+        local sub = main and (main.SubPanel or (main.EnsureSubPanel and main:EnsureSubPanel()))
+        local caller = sub and sub._ADT_RequestAutoResize
+        if type(caller) == "function" then
+            caller()
+            return
+        end
+        -- 若 SubPanel 尚未完成构建，延后半帧重试一次（最多一次）。
+        if not (ADT and ADT.DockUI) then return end
+        if ADT.DockUI.__resizeRetryScheduled then return end
+        ADT.DockUI.__resizeRetryScheduled = true
+        C_Timer.After(0.05, function()
+            if ADT and ADT.DockUI then ADT.DockUI.__resizeRetryScheduled = nil end
+            local main2 = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+            local sub2 = main2 and (main2.SubPanel or (main2.EnsureSubPanel and main2:EnsureSubPanel()))
+            local caller2 = sub2 and sub2._ADT_RequestAutoResize
+            if type(caller2) == "function" then caller2() end
+        end)
+    end
+end
+
 -- 依据“实际分类文本宽度”动态计算左侧栏目标宽度（单一权威）
 -- 说明：不再使用按语种的固定值；改为测量当前语言下所有分类标题的像素宽度，
 --       再加上控件自身的左右留白，得到最小充分宽度。
@@ -322,8 +351,10 @@ end
 --
 ADT.DockUI = ADT.DockUI or {}
 do
-    local Attached -- 是否已挂到 Dock Header
-    local OrigParent, OrigPoint -- 备份信息便于恢复
+    -- 最小化策略：不再“重挂暴雪按钮”，而是永久隐藏官方按钮，
+    -- 在 Header 内创建一个自有的代理按钮，点击后仅调用官方清单的 Show/Hide。
+    -- 这样既无首帧跳动，也避免多路径时序。
+    local ProxyBtn -- Header 内的代理按钮
 
     local function GetPlacedListButton()
         local hf = _G.HouseEditorFrame
@@ -356,52 +387,57 @@ do
         return HEM == (Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.ExpertDecor)
     end
 
-    local function AttachIntoHeader()
-        if not (MainFrame and MainFrame.Header) then return end
-        if not _IsExpertMode() then return end -- 仅专家模式显示
+    local function HideOfficialButton()
         local btn = GetPlacedListButton()
         if not btn then return end
-        -- 首次采纳时备份原父级与第一个锚点
-        if not OrigParent then
-            OrigParent = btn:GetParent()
-            -- 仅备份第一个锚点即可复原
-            local p, rel, rp, x, y = btn:GetPoint(1)
-            OrigPoint = { p = p, rel = rel, rp = rp, x = x, y = y }
+        btn:Hide()
+        btn:EnableMouse(false)
+        -- 阻止后续任何 Show
+        if not btn._ADT_HideHooked then
+            btn._ADT_HideHooked = true
+            hooksecurefunc(btn, "Show", function(self) self:Hide() end)
         end
+    end
 
-        -- 在重挂期间临时透明，避免出现“飞过去”的观感
-        local prevAlpha = (btn.GetAlpha and btn:GetAlpha()) or 1
-        if btn.SetAlpha then btn:SetAlpha(0) end
-
-        btn:SetParent(MainFrame.Header)
-        btn:ClearAllPoints()
-        -- 位置：贴 Header 左缘，参数化可调
-        local p = Def.PlacedListBtnPoint or "LEFT"
-        local rp = Def.PlacedListBtnRelPoint or p
-        local dx = Def.PlacedListBtnOffsetX or 10
-        local dy = Def.PlacedListBtnOffsetY or 0
-        btn:SetPoint(p, MainFrame.Header, rp, dx, dy)
-        -- 层级：位于木框之上，避免看起来发灰/半透明（可通过 Def.PlacedListBtnRaiseAboveBorder 关闭/调整）
+    local function EnsureProxyButton()
+        if ProxyBtn and ProxyBtn:GetParent() == MainFrame.Header then return ProxyBtn end
+        if not (MainFrame and MainFrame.Header) then return nil end
+        local b = CreateFrame("Button", nil, MainFrame.Header)
+        b:SetSize(36, 36)
+        b:SetPoint(Def.PlacedListBtnPoint or "LEFT", MainFrame.Header, Def.PlacedListBtnRelPoint or (Def.PlacedListBtnPoint or "LEFT"), Def.PlacedListBtnOffsetX or 10, Def.PlacedListBtnOffsetY or 0)
+        -- 图标（与官方一致）
+        local icon = b:CreateTexture(nil, "ARTWORK")
+        icon:SetAllPoints(true)
+        icon:SetAtlas("decor-placement-list-default")
+        b.Icon = icon
+        local hover = b:CreateTexture(nil, "OVERLAY")
+        hover:SetAllPoints(true)
+        hover:SetAtlas("decor-placement-list-active")
+        hover:SetAlpha(0)
+        b.Hover = hover
+        b:SetScript("OnEnter", function(self) self.Hover:SetAlpha(0.6) end)
+        b:SetScript("OnLeave", function(self) self.Hover:SetAlpha(0) end)
+        b:SetScript("OnClick", function()
+            local _, expert = GetPlacedListButton()
+            local list = expert and expert.PlacedDecorList
+            if not list then return end
+            if list:IsShown() then list:Hide() else list:Show() end
+        end)
         local strata = MainFrame:GetFrameStrata() or "FULLSCREEN_DIALOG"
-        btn:SetFrameStrata(strata)
-        local raise = tonumber(Def.PlacedListBtnRaiseAboveBorder) or 0
-        if raise ~= 0 and MainFrame.BorderFrame and MainFrame.BorderFrame.GetFrameLevel then
-            btn:SetFrameLevel((MainFrame.BorderFrame:GetFrameLevel() or (btn:GetFrameLevel() or 0)) + raise)
-        end
-        -- 恢复透明度
-        if btn.SetAlpha then btn:SetAlpha(prevAlpha) end
-        if btn.EnableMouse then btn:EnableMouse(true) end
-        btn:Show()
-        Attached = true
+        b:SetFrameStrata(strata)
+        if MainFrame.BorderFrame then b:SetFrameLevel(MainFrame.BorderFrame:GetFrameLevel() + 2) end
+        ProxyBtn = b
+        return b
     end
 
-    -- 对外方法：尝试采纳/恢复
-    function ADT.DockUI.AttachPlacedListButton()
-        AttachIntoHeader()
+    local function AttachIntoHeader()
+        HideOfficialButton()
+        EnsureProxyButton()
     end
-    function ADT.DockUI.RestorePlacedListButton()
-        RestoreToOriginal()
-    end
+
+    -- 对外：保留同名入口，内部改为“隐藏官方 + 创建代理”
+    function ADT.DockUI.AttachPlacedListButton() AttachIntoHeader() end
+    function ADT.DockUI.RestorePlacedListButton() end -- 统一由官方 UI 管理，无需恢复
 
     -- 事件驱动：进入家宅编辑器时附着；离开时恢复
     local EL = CreateFrame("Frame")

@@ -9,10 +9,29 @@ local IsHoveringDecor = C_HousingDecor.IsHoveringDecor
 local GetActiveHouseEditorMode = C_HouseEditor.GetActiveHouseEditorMode
 local IsHouseEditorActive = C_HouseEditor.IsHouseEditorActive
 local GetCatalogEntryInfoByRecordID = C_HousingCatalog.GetCatalogEntryInfoByRecordID
-local IsDecorSelected = C_HousingBasicMode.IsDecorSelected
+-- 注意：专家/基础模式有不同的 IsDecorSelected，这里统一封装为单一权威
+local function IsAnyDecorSelected()
+    local mode = GetActiveHouseEditorMode and GetActiveHouseEditorMode()
+    if mode == (Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.ExpertDecor) then
+        if C_HousingExpertMode and C_HousingExpertMode.IsDecorSelected then
+            return not not C_HousingExpertMode.IsDecorSelected()
+        end
+    else
+        if C_HousingBasicMode and C_HousingBasicMode.IsDecorSelected then
+            return not not C_HousingBasicMode.IsDecorSelected()
+        end
+    end
+    return false
+end
 -- 注意：SetPlacedDecorEntryHovered 是受保护 API，不能被第三方插件使用
 
 local DisplayFrame
+
+-- 模式判断工具：是否处于专家模式
+local function InExpertMode()
+    local mode = GetActiveHouseEditorMode and GetActiveHouseEditorMode()
+    return mode == (Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.ExpertDecor)
+end
 
 local function GetCatalogDecorInfo(decorID, tryGetOwnedInfo)
     tryGetOwnedInfo = true
@@ -238,7 +257,7 @@ do
         local CFG = GetCFG(); if not CFG or not CFG.Row then return end
         if not self.InstructionText then
             -- 作为容器：按“可见子行数量”计算整体高度
-            local rowH = CFG.Row.minHeight
+            local rowH = math.max(tonumber(CFG.Row.minHeight or 0) or 0, tonumber(CFG.Control and CFG.Control.height or 0) or 0)
             local gap  = math.abs(CFG.Row.vSpacing or 0)
             local n = 0
             local function vshown(f) return f and f.IsShown and f:IsShown() end
@@ -257,7 +276,7 @@ do
             return
         end
         -- 行：按统一行高与间距估算高度
-        local rowH = CFG.Row.minHeight
+        local rowH = math.max(tonumber(CFG.Row.minHeight or 0) or 0, tonumber(CFG.Control and CFG.Control.height or 0) or 0)
         local gap = math.abs(CFG.Row.vSpacing or 0)
         local total = rowH
         local function vshown(f) return f and f.IsShown and f:IsShown() end
@@ -442,7 +461,10 @@ local function Blizzard_HouseEditor_OnLoaded()
         if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame) end
         DisplayFrame.expand = true
         -- 组级淡入/淡出控制（对子项统一 Alpha），避免仅子行褪色导致快捷键常驻可见
+        -- 当前组透明度（0~1）。
         DisplayFrame._alpha = 0
+        -- 淡出前的延时（秒），独立于 alpha，避免用“>1 的 alpha”临时代码带来的闪烁。
+        DisplayFrame._fadeDelay = 0
         function DisplayFrame:SetGroupAlpha(a)
             a = tonumber(a) or 0
             if a < 0 then a = 0 elseif a > 1 then a = 1 end
@@ -452,31 +474,33 @@ local function Blizzard_HouseEditor_OnLoaded()
                     if f and f.SetAlpha then f:SetAlpha(a) end
                 end
             end
+            self._alpha = a
         end
         DisplayFrame:SetGroupAlpha(0)
-        local function GroupFadeIn_OnUpdate(self, elapsed)
-            self._alpha = (self._alpha or 0) + 5 * elapsed
-            if self._alpha >= 1 then
-                self._alpha = 1
-                self:SetScript("OnUpdate", nil)
-            end
-            self:SetGroupAlpha(self._alpha)
-            if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha
-               and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
-                ADT.DockUI.SetSubPanelHeaderAlpha(self._alpha)
-            end
-            -- 悬停淡入过程中，内容“从不可见变为可见”，需要驱动 SubPanel 重新测量高度
-            if ADT and ADT.DockUI and ADT.DockUI.RequestSubPanelAutoResize then
-                ADT.DockUI.RequestSubPanelAutoResize()
-            end
+        -- 读取淡入/淡出节奏配置（配置为单一权威，见 Housing_Config.lua）
+        local function GetFadeCFG()
+            local cfg = ADT and ADT.HousingInstrCFG
+            local fading = cfg and cfg.Fading or nil
+            return {
+                fadeInInstant = not (fading and fading.fadeInInstant == false),
+                fadeInRate    = (fading and fading.fadeInRate) or 8,   -- 秒^-1
+                fadeOutRate   = (fading and fading.fadeOutRate) or 3,  -- 秒^-1
+            }
         end
         local function GroupFadeOut_OnUpdate(self, elapsed)
-            self._alpha = (self._alpha or 1) - 2 * elapsed
-            if self._alpha <= 0 then
-                self._alpha = 0
-                self:SetScript("OnUpdate", nil)
+            local cfg = GetFadeCFG()
+            -- 若设置了延时，则先倒计时，不改变当前可见度
+            if (self._fadeDelay or 0) > 0 then
+                self._fadeDelay = math.max(0, (self._fadeDelay or 0) - (elapsed or 0))
+                return
             end
-            self:SetGroupAlpha(self._alpha)
+            local nextA = (self._alpha or 1) - (cfg.fadeOutRate or 3) * (elapsed or 0)
+            if nextA <= 0 then
+                self:SetGroupAlpha(0)
+                self:SetScript("OnUpdate", nil)
+            else
+                self:SetGroupAlpha(nextA)
+            end
             if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha
                and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
                 ADT.DockUI.SetSubPanelHeaderAlpha(self._alpha)
@@ -487,17 +511,43 @@ local function Blizzard_HouseEditor_OnLoaded()
             end
         end
         function DisplayFrame:FadeInGroup()
-            -- 仅在“未选中”态由悬停组驱动 Header alpha；选中时 Header 由专用 fader 接管
+            -- 专家模式下彻底不使用“悬停驱动”的 Header alpha
             if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow and ADT.DockUI.SetSubPanelHeaderAlpha then
-                if not (IsDecorSelected and IsDecorSelected()) then
+                if not InExpertMode() then
                     ADT.DockUI.SetHeaderAlphaFollow(true)
-                    ADT.DockUI.SetSubPanelHeaderAlpha(0)
+                    -- 悬停开始即满不透明，避免“先半透明”的错觉
+                    ADT.DockUI.SetSubPanelHeaderAlpha(1)
                 end
             end
-            self:SetScript("OnUpdate", GroupFadeIn_OnUpdate)
+            local cfg = GetFadeCFG()
+            if cfg.fadeInInstant then
+                self._fadeDelay = 0
+                self:SetGroupAlpha(1)
+                self:SetScript("OnUpdate", nil)
+            else
+                -- 若需要动画淡入（可配置），采用给定速度向 1 逼近
+                self:SetScript("OnUpdate", function(s, elapsed)
+                    local rate = (GetFadeCFG().fadeInRate or 8)
+                    local nextA = (s._alpha or 0) + rate * (elapsed or 0)
+                    if nextA >= 1 then
+                        s:SetGroupAlpha(1)
+                        s:SetScript("OnUpdate", nil)
+                    else
+                        s:SetGroupAlpha(nextA)
+                    end
+                    if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha
+                       and ADT.DockUI.IsHeaderAlphaFollowEnabled and ADT.DockUI.IsHeaderAlphaFollowEnabled() then
+                        ADT.DockUI.SetSubPanelHeaderAlpha(s._alpha)
+                    end
+                    if ADT and ADT.DockUI and ADT.DockUI.RequestSubPanelAutoResize then
+                        ADT.DockUI.RequestSubPanelAutoResize()
+                    end
+                end)
+            end
         end
         function DisplayFrame:FadeOutGroup(delay)
-            if delay then self._alpha = 2 end
+            -- 仅记录延时，不再通过“alpha>1”实现延迟，避免离开时突变为完全可见
+            self._fadeDelay = tonumber(delay) or 0
             self:SetScript("OnUpdate", GroupFadeOut_OnUpdate)
         end
         -- 关键工具：立刻停止一切淡入/淡出并把整组提示隐藏（透明度归零）
@@ -582,7 +632,7 @@ local function Blizzard_HouseEditor_OnLoaded()
     -- 等到被重挂到 Dock 时再按需告知（见 ReparentHoverHUD）。
     -- container.UnselectedInstructions = { DisplayFrame }
 
-        if IsDecorSelected() then
+        if IsAnyDecorSelected() then
         DisplayFrame:Hide()
     end
 end
@@ -711,6 +761,10 @@ do
         if ADT and ADT.DebugPrint and event ~= "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" then
             ADT.DebugPrint("[Housing] OnEvent: "..tostring(event))
         end
+        -- 专家模式下完全忽略悬停事件
+        if InExpertMode() and (event == "HOUSING_EXPERT_MODE_HOVERED_TARGET_CHANGED" or event == "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED") then
+            return
+        end
         if event == "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" or event == "HOUSING_EXPERT_MODE_HOVERED_TARGET_CHANGED" then
             self:OnHoveredTargetChanged(...)
         elseif event == "HOUSE_EDITOR_MODE_CHANGED" then
@@ -728,11 +782,11 @@ do
         -- 统一：选中/取消选中都要处理 UI
         if not hasSelected then
             -- 取消选中：若仍在悬停，则不做淡出，直接交回“悬停跟随”；否则才淡出
+            -- 专家模式下：若 API 抖动产生假“未选中”，但实际仍选中（IsAnyDecorSelected=true），则忽略
+            if InExpertMode() and IsAnyDecorSelected() then return end
             local hovered = IsHoveringDecor() and GetHoveredDecorInfo()
             if hovered and hovered.name then
-                if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then
-                    ADT.DockUI.SetHeaderAlphaFollow(not (IsDecorSelected and IsDecorSelected()))
-                end
+                if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(true) end
                 if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderText then ADT.DockUI.SetSubPanelHeaderText(hovered.name) end
                 -- alpha 后续由悬停 OnUpdate 统一驱动
             else
@@ -741,7 +795,7 @@ do
             end
             return
         end
-        -- 进入“选中”态：切到“非跟随”后再隐藏悬停组，避免把 Header Alpha 连带清零（造成二次淡入）
+        -- 进入“选中”态：
         if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
         if DisplayFrame and DisplayFrame.InstantHideGroup then DisplayFrame:InstantHideGroup() end
         -- 检查开关是否启用（仅用于“误操作保护”拦截；显示标题不受此开关影响）
@@ -765,6 +819,10 @@ do
                 if (tonumber(headerAlpha) or 0) < 1 then
                     if ADT and ADT.DockUI and ADT.DockUI.FinishHeaderFadeIn then ADT.DockUI.FinishHeaderFadeIn() end
                 end
+            end
+            -- 专家模式下：标题常亮，不受悬停影响
+            if InExpertMode() then
+                if ADT and ADT.DockUI and ADT.DockUI.SetSubPanelHeaderAlpha then ADT.DockUI.SetSubPanelHeaderAlpha(1) end
             end
         end
         if not info or not info.decorGUID then return end
@@ -849,10 +907,12 @@ do
     end
 
     function EL:OnHoveredTargetChanged(hasHoveredTarget, targetType)
+        -- 专家模式：直接忽略所有悬停变化（不驱动任何 UI）
+        if InExpertMode() then return end
         if hasHoveredTarget then
             -- 未选中时才切回“跟随悬停”；选中状态保持 Header 由专用 fader 管控
             if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then
-                ADT.DockUI.SetHeaderAlphaFollow(not (IsDecorSelected and IsDecorSelected()))
+                ADT.DockUI.SetHeaderAlphaFollow(not IsAnyDecorSelected())
             end
             if not self.isUpdating then
                 self.t = 0
@@ -870,7 +930,7 @@ do
             if DisplayFrame then
                 -- 如果此时用户发生“选中/切换模式”，立即隐藏以避免叠层；
                 -- 否则正常走淡出。
-                if IsDecorSelected() then
+                if IsAnyDecorSelected() then
                     -- 保留当前 Header Alpha：先退出跟随再隐藏组
                     if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then ADT.DockUI.SetHeaderAlphaFollow(false) end
                     if DisplayFrame.InstantHideGroup then DisplayFrame:InstantHideGroup() end
@@ -897,7 +957,7 @@ do
             local info = GetHoveredDecorInfo()
             if info then
                 -- 若处于“选中”状态：不启用 Header 跟随，也不重放悬停淡入；仅保留当前选中标题
-                if IsDecorSelected and IsDecorSelected() then
+                if IsAnyDecorSelected() then
                     if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then
                         ADT.DockUI.SetHeaderAlphaFollow(false)
                     end
@@ -994,7 +1054,7 @@ do
     function EL:TryDuplicateItem()
         if not self.dupeEnabled then return end
         if not IsHouseEditorActive() then return end
-        if IsDecorSelected() then return end
+        if IsAnyDecorSelected() then return end
 
         local entryID = self:GetHoveredDecorEntryID()
         if not entryID then return end

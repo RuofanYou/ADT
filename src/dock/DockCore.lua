@@ -239,6 +239,19 @@ local function buildModules()
         end
     end
     
+    -- 进入编辑模式自动打开 Dock（控制中心）
+    local moduleEditorAutoOpen = {
+        name = (L and L["Auto Open Dock in Editor"]) or "Open Dock on entering editor",
+        dbKey = 'EnableDockAutoOpenInEditor',
+        description = (L and L["Auto Open Dock in Editor tooltip"]) or "Open ADT Dock automatically when entering the editor; manual Ctrl+Q or /adt unaffected.",
+        toggleFunc = function(state)
+            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableDockAutoOpenInEditor', state) end
+            if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("[Toggle] %s=%s", 'EnableDockAutoOpenInEditor', tostring(state))) end
+        end,
+        categoryKeys = { 'Housing' },
+        uiOrder = 0,
+    }
+
     -- 住宅快捷键设置模块（4 个独立开关）
     local moduleRepeat = {
         name = (L and L["Enable Duplicate"]) or "启用复制",
@@ -426,8 +439,8 @@ local function buildModules()
         key = 'Housing',
         categoryName = (L and L['SC Housing']) or '通用',
         categoryType = 'settings', -- 设置类分类
-        modules = { moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace, moduleResetT, moduleResetAll, moduleLock, moduleLanguage },
-        numModules = 9,
+        modules = { moduleEditorAutoOpen, moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace, moduleResetT, moduleResetAll, moduleLock, moduleLanguage },
+        numModules = 10,
     }
 
     -- 临时板分类（装饰列表类）

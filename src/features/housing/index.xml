@@ -6,6 +6,7 @@
     <Script file="Housing_BatchPlace.lua"/>
     <Script file="Housing_AutoRotate.lua"/>
     <Script file="Housing_Recent.lua"/>
+    <Script file="Housing_VisitAssistant.lua"/>
     <!-- 移除历史弹窗（已整合到 Dock 分类 History） -->
     <Script file="Housing_CatalogBrowser.lua"/>
     <Script file="Housing_AdvancedTools.lua"/>

@@ -45,11 +45,12 @@ local CFG = {
         -- 为了让“视觉上的右侧留白”与左侧文本留白一致，这里额外收回 4px。
         rightEdgeBias = 12,
     },
-    -- 字体缩放
+    -- 字体（像素级，单一权威）
+    -- 说明：弃用“缩放系数”写法，改为显式像素值，便于美术/策划直接按像素调整。
     Typography = {
-        instructionScale = 0.78, -- 左列说明文字缩放
-        controlScaleBase = 0.78, -- 右列按钮文字基础缩放（在 Fit 中可能继续变小）
-        minFontSize      = 9,    -- 任何字体的最小像素
+        instructionFontPx = 16, -- 左列信息文字字号（像素）
+        controlFontPx     = 13, -- 右列键帽文字字号（像素）
+        minFontSize       = 9,  -- 任意字体允许的最小像素（用于自动收缩下限）
     },
     -- 暴雪“放置的装饰清单”对齐 DockUI 的配置（单一权威）
     PlacedList = {
@@ -59,6 +60,16 @@ local CFG = {
         anchorRightCompensation = -6,  -- 清单锚到 SubPanel 时，RIGHT 方向的 -像素偏移
         -- 清单顶部与 SubPanel 底部之间的垂直间距（像素，正值=向下留白）
         verticalGap = 6,
+    },
+    -- 悬停提示淡入/淡出节奏（配置驱动，单一权威）
+    Fading = {
+        -- 悬停开始：立即满不透明，避免“刚出现半透明”的错觉
+        fadeInInstant = true,
+        -- 如需动画淡入，将 fadeInInstant 设为 false，并用下列速率（每秒增量）
+        fadeInRate  = 10,
+        -- 淡出速度（每秒衰减量），与上面独立可配
+        fadeOutRate = 3,
+        -- 注意：淡出延时由调用方传入，不在此固化固定秒数
     },
 }
 

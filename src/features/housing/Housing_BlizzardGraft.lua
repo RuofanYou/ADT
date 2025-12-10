@@ -303,15 +303,15 @@ end
 -- 说明面板排版：字体缩放（让暴雪信息文字更“秀气”，适配下方面板宽度）
 --
 
-local function _ADT_ScaleFont(fs, scale)
+local function _ADT_SetFontPx(fs, px)
     if not (fs and fs.GetFont and fs.SetFont) then return end
     local path, size, flags = fs:GetFont()
     if not size or size <= 0 then return end
     if not fs._ADTOrigFont then
         fs._ADTOrigFont = {path=path, size=size, flags=flags}
     end
-    local newSize = math.max(CFG.Typography.minFontSize, math.floor(size * scale + 0.5))
-    if newSize ~= size then fs:SetFont(path, newSize, flags) end
+    local target = math.max(CFG.Typography.minFontSize, math.floor(px or size))
+    if target ~= size then fs:SetFont(path, target, flags) end
 end
 
 -- 前置声明，避免调用顺序问题
@@ -336,7 +336,9 @@ end
 local function _ADT_ApplyTypographyToRow(row)
     if not row then return end
     -- 行最小高度与左右列间距 + 行内上下内边距
-    row.minimumHeight = CFG.Row.minHeight
+    -- 行高需要能容纳“按键气泡”的高度；因此取 Row.minHeight 与 Control.height 的较大者。
+    local minRowH = math.max(tonumber(CFG.Row.minHeight or 0) or 0, tonumber(CFG.Control and CFG.Control.height or 0) or 0)
+    row.minimumHeight = minRowH
     row.spacing = CFG.Row.hSpacing
     row.topPadding = CFG.Row.vPadEach
     row.bottomPadding = CFG.Row.vPadEach
@@ -359,13 +361,13 @@ local function _ADT_ApplyTypographyToRow(row)
     if fs then
         -- 右向左布局下，将文本放在第二列，靠左展开
         fs.layoutIndex = 2
-        _ADT_ScaleFont(fs, CFG.Typography.instructionScale)
+        _ADT_SetFontPx(fs, CFG.Typography.instructionFontPx)
         if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
         if fs.SetJustifyH then fs:SetJustifyH("LEFT") end
     end
     local ctext = row.Control and row.Control.Text
     if ctext then
-        _ADT_ScaleFont(ctext, CFG.Typography.controlScaleBase)
+        _ADT_SetFontPx(ctext, CFG.Typography.controlFontPx)
         if ctext.SetJustifyV then ctext:SetJustifyV("MIDDLE") end
     end
     -- 控件高度与背景高度
@@ -539,7 +541,9 @@ function _ADT_AlignControl(row)
     if not (row and row.Control) then return end
     local ctrl = row.Control
     -- 让 Control 容器高度与行最小高度一致，以获得稳定的纵向定位
-    ctrl:SetHeight(CFG.Row.minHeight)
+    -- 改为遵循配置的“气泡高度”（Control.height）。行本身的最小高度已在
+    -- _ADT_ApplyTypographyToRow 中与 Control.height 取最大，保证不压扁气泡。
+    ctrl:SetHeight((CFG.Control and CFG.Control.height) or CFG.Row.minHeight)
     ctrl.align = "center"
     if row.InstructionText then row.InstructionText.align = "center" end
 
@@ -935,6 +939,9 @@ local function AdoptInstructionsIntoDock()
     -- 改为跟随父容器缩放，避免与 Dock 子面板产生坐标系不一致导致右侧越界
     if instr.SetIgnoreParentScale then instr:SetIgnoreParentScale(false) end
     instr:Show()
+    -- 防御：/reload 首帧偶发被父层级或其它淡入逻辑带着低 Alpha，
+    -- 这里强制把暴雪 Instructions 容器复位为完全不透明，避免“整体发灰”。
+    if instr.SetAlpha then instr:SetAlpha(1) end
     -- 尺寸变化：仅排队重新计算高度，避免递归
     if instr.HookScript then
         instr:HookScript("OnSizeChanged", function()
@@ -945,6 +952,7 @@ local function AdoptInstructionsIntoDock()
             end
         end)
         instr:HookScript("OnShow", function()
+            if self and self.SetAlpha then pcall(self.SetAlpha, self, 1) end
             if AdoptState and AdoptState.instr then _ADT_ApplyTypography(AdoptState.instr); _ADT_QueueResize() end
         end)
     end
@@ -1028,7 +1036,7 @@ local function TrySetupHooks()
     -- 钩住显示/隐藏与模式切换
     pcall(function()
         hooksecurefunc(HouseEditorFrameMixin, "OnShow", function()
-            -- 先就位按钮与清单锚点，避免首次出现的跳动
+            -- 直接隐藏官方按钮并在 Header 放置代理按钮（避免任何重挂跳动）
             pcall(function() if ADT and ADT.DockUI and ADT.DockUI.AttachPlacedListButton then ADT.DockUI.AttachPlacedListButton() end end)
             EnsurePlacedListHooks();
             AnchorPlacedList();
