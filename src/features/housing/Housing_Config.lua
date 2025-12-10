@@ -52,6 +52,20 @@ local CFG = {
         controlFontPx     = 13, -- 右列键帽文字字号（像素）
         minFontSize       = 9,  -- 任意字体允许的最小像素（用于自动收缩下限）
     },
+    -- 颜色（单一权威）：用于 HoverHUD 信息行的语义配色
+    -- 说明：统一提供 ARGB Hex（|cAARRGGBB）的 8 位十六进制，不带前缀 |c。
+    -- 设计准则（2025 UI）：
+    -- - Label 使用“柔和中性色”；
+    -- - 数值使用语义色：好=绿、警告=琥珀、危险/不可用=红；
+    -- - 次要分隔符使用更淡的中性灰以降低竞争；
+    Colors = {
+        labelMuted     = "FFCCCCCC", -- 次要标签/说明
+        separatorMuted = "FFAAAAAA", -- 分隔符，如 “|”、“/”、“：”
+        valueGood      = "FF2AD46F", -- 良好/可用（库存>0、染色已满）
+        valueWarn      = "FFFFC233", -- 部分/进行中（染色部分已用）
+        valueBad       = "FFFF6B6B", -- 不可用/告警（库存=0）
+        valueNeutral   = "FFB8C0CC", -- 中性数值（如 0/0、未染色）
+    },
     -- 子面板展开/收起动画（配置驱动，单一权威）
     SubPanelAnim = {
         -- 展开/收起的总时长（秒）
@@ -82,6 +96,15 @@ local CFG = {
         -- 淡出速度（每秒衰减量），与上面独立可配
         fadeOutRate = 3,
         -- 注意：淡出延时由调用方传入，不在此固化固定秒数
+    },
+    -- 染料弹窗（DyeSelectionPopout）锚点与边界（单一权威）
+    DyePopout = {
+        -- 与“自定义面板”左侧相切时的水平留白：0 表示严丝合缝；大于 0 则留出间距
+        horizontalGap = 0,
+        -- 顶部对齐的额外 Y 微调（正值向下，负值向上）
+        verticalTopNudge = 0,
+        -- 防止越出屏幕底部的安全边距
+        safetyBottomPad = 8,
     },
 }
 

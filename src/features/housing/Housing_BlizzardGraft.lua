@@ -48,6 +48,7 @@ local HeaderTitleBackup
 --（Lua 的词法作用域要求在首次使用前声明局部变量，否则将解析为全局）
 local IsHouseEditorShown
 local GetActiveModeFrame -- 前向声明，供早期函数引用
+local GetCustomizePanes   -- 前向声明：供 AnchorDyePopout 提前调用
 
 -- 更新：按需微调“放置的装饰”官方面板（仅布局/交互禁用），不改其数据与刷新逻辑。
 
@@ -320,15 +321,24 @@ local _ADT_AnchorRowColumns
 local _ADT_UpdateLeftTextAnchors
 local function _ADT_SetRowFixedWidth(row)
     if not row then return end
-    local dock = GetDock()
-    local sub = dock and (dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()))
-    local content = sub and sub.Content
-    local w = content and content:GetWidth()
-    if w and w > 0 then
+    local width
+    do
+        local dock = GetDock()
+        local sub = dock and (dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()))
+        local content = sub and sub.Content
+        width = content and content:GetWidth()
+        if not width or width <= 1 then
+            -- 兜底：在 Dock/SubPanel 尚未完成布局的首帧，回退到父容器的当前宽度，
+            -- 避免行宽为 0 导致左列被压缩成“ … ”且出现越界。
+            local p = row:GetParent()
+            width = (p and p.GetWidth and p:GetWidth()) or width
+        end
+    end
+    if width and width > 1 then
         if row.SetFixedWidth then
-            row:SetFixedWidth(w)
+            row:SetFixedWidth(width)
         elseif row.SetWidth then
-            row:SetWidth(w)
+            row:SetWidth(width)
         end
     end
 end
@@ -376,7 +386,9 @@ local function _ADT_ApplyTypographyToRow(row)
         if row.Control then row.Control.layoutIndex = 1 end
         _ADT_AlignControl(row)
     end
-    -- 统一锚点：左列贴左、右列贴右
+    -- 统一锚点：左列贴左、右列贴右；
+    -- 但允许特例（如 HoverHUD 的 InfoLine）保留 HorizontalLayout 的定位，
+    -- 以避免在首帧没有可用宽度时出现“文本被压缩为 …”。
     _ADT_AnchorRowColumns(row)
     -- 行宽固定为内容区宽度，确保右对齐时贴到 SubPanel 右缘
     _ADT_SetRowFixedWidth(row)
@@ -761,10 +773,49 @@ local function GetDyePopoutFrame()
     return _G.DyeSelectionPopout
 end
 
+-- 统一：从某个“屏幕上的 Y 基准（通常是目标框体的顶/底）”向下可用高度，
+-- 将 frame 的高度压缩到不超过该可用空间。
+local function _ADT_ClampHeightFromTop(frame, topY)
+    if not (frame and topY) then return end
+    frame:SetClampedToScreen(true)
+    local uiBottom = UIParent and (UIParent.GetBottom and UIParent:GetBottom()) or 0
+    local safePad = (CFG and CFG.DyePopout and CFG.DyePopout.safetyBottomPad) or 8
+    local available = math.max(120, (topY - uiBottom) - safePad)
+    local curH = frame:GetHeight() or 300
+    if curH > available + 0.5 then frame:SetHeight(available) end
+end
+
 local function AnchorDyePopout()
     local pop = GetDyePopoutFrame()
     if not pop then return end
-    -- 复用与“放置清单”一致的对齐与宽度策略
+
+    -- 优先：贴在“当前显示的自定义面板”的左侧；无法获取时退化到 Dock 下沿策略
+    local paneDecor, paneRoom = GetCustomizePanes()
+    local pane = (paneDecor and paneDecor:IsShown()) and paneDecor
+              or (paneRoom and paneRoom:IsShown()) and paneRoom
+              or nil
+
+    if pane then
+        -- 顶部对齐 + 左侧相切
+        local dx = -((CFG and CFG.DyePopout and CFG.DyePopout.horizontalGap) or 0) -- 以“相切”为 0，正值向内留白
+        local dy = (CFG and CFG.DyePopout and CFG.DyePopout.verticalTopNudge) or 0
+        pop:ClearAllPoints()
+        pop:SetPoint("TOPRIGHT", pane, "TOPLEFT", dx, dy)
+
+        -- 置于自定义面板之上，避免被遮挡
+        pcall(function()
+            local strata = pane:GetFrameStrata() or "DIALOG"
+            pop:SetFrameStrata(strata)
+            pop:SetFrameLevel((pane:GetFrameLevel() or 10) + 20)
+        end)
+
+        -- 自顶向下压缩，避免越出屏幕底部
+        local topY = pane.GetTop and pane:GetTop()
+        if topY then _ADT_ClampHeightFromTop(pop, topY) end
+        return
+    end
+
+    -- 回落（无自定义面板显示时）：仍采用 Dock.SubPanel 下沿定位
     AnchorFrameBelowDock(pop, CFG.PlacedList)
 end
 
@@ -802,7 +853,7 @@ end
 --
 -- 五、定制面板（DecorCustomizationsPane/RoomComponentCustomizationsPane）：同样贴合 Dock.SubPanel 下方
 --
-local function GetCustomizePanes()
+GetCustomizePanes = function()
     local hf = _G.HouseEditorFrame
     local customize = hf and hf.CustomizeModeFrame
     local decorPane = customize and customize.DecorCustomizationsPane
@@ -824,7 +875,10 @@ local function _ADT_SyncPaneFixedWidthToDock(p)
         local cw = math.max(1, targetContentW)
         if math.abs((p.fixedWidth or 0) - cw) > 0.5 then
             p:SetFixedWidth(cw)
-            if p.UpdateLayout then pcall(p.UpdateLayout, p) end
+            -- 关键修复：SetRoomComponentInfo 在 :Show() 之前会先调用 :Layout()，
+            -- 这里必须在同步 fixedWidth 后主动触发布局，
+            -- 而 VerticalLayoutFrame 使用的是 :Layout()（无 UpdateLayout）。
+            if p.Layout then pcall(p.Layout, p) end
         end
     end
     -- 优先在“已锚定后”的时序直接以面板自身宽度为准（最稳妥）。

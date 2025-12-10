@@ -88,7 +88,7 @@ ADT.L = ADT.L or {}
     -- Hover InfoLine（室内/外 + 库存 + 染色）
     ["Indoor"] = "Indoor",
     ["Outdoor"] = "Outdoor",
-    ["Indoor & Outdoor"] = "Indoor & Outdoor",
+    ["Indoor & Outdoor"] = "In/Outdoor",
     ["Stock"] = "Stock",
     ["Category Colon"] = "Category: ",
     
@@ -253,7 +253,7 @@ ADT.L = ADT.L or {}
     -- 悬停“信息行”
     ["Indoor"] = "室内",
     ["Outdoor"] = "室外",
-    ["Indoor & Outdoor"] = "室内外",
+    ["Indoor & Outdoor"] = "室内/外",
     ["Stock"] = "库存",
     ["Category Colon"] = "分类：",
 

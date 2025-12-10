@@ -42,6 +42,15 @@ end
 local EL = CreateFrame("Frame")
 ADT.Housing = EL
 
+-- 语义着色工具（单一权威：颜色定义见 ADT.HousingInstrCFG.Colors）
+local function Colorize(key, text)
+    local cfg = ADT and ADT.HousingInstrCFG
+    local colors = cfg and cfg.Colors
+    local hex = colors and colors[key]
+    if not hex then return tostring(text or "") end
+    return "|c" .. hex .. tostring(text or "") .. "|r"
+end
+
 -- 顶层：按 recordID 进入放置（供多处复用；单一权威）
 function EL:StartPlacingByRecordID(recordID)
     if not recordID then return false end
@@ -250,6 +259,13 @@ do
     -- 统一样式访问（单一权威）：强制从 Housing_Config.lua 暴露的 ADT.HousingInstrCFG 读取
     local function GetCFG()
         return assert(ADT and ADT.HousingInstrCFG, "ADT.HousingInstrCFG 缺失：请确认 Housing_Config.lua 已加载")
+    end
+
+    -- Dock 子面板的内容区域（用于第一行的安全锚点，避免贴到弹窗外）
+    local function GetSubContent()
+        local dock = ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel
+        local sub  = dock and (dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()))
+        return sub and sub.Content
     end
 
     -- 计算并设置顶层 DisplayFrame 的高度，使其完整包裹自建的子行
@@ -607,6 +623,8 @@ local function Blizzard_HouseEditor_OnLoaded()
             DisplayFrame.InfoLine = infoLine
             Mixin(infoLine, DisplayFrameMixin)
             infoLine:OnLoad()
+            -- 保持与其他行同样的列锚点规则，确保左列与右侧键帽互不压缩
+            infoLine._ADT_NoManualAnchor = nil
             -- 右侧只显示纯文本，不使用键帽背景
             pcall(function()
                 if infoLine.Control and infoLine.Control.Background then infoLine.Control.Background:Hide() end
@@ -803,10 +821,7 @@ do
         if ADT and ADT.DebugPrint and event ~= "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" then
             ADT.DebugPrint("[Housing] OnEvent: "..tostring(event))
         end
-        -- 专家模式下完全忽略悬停事件
-        if InExpertMode() and (event == "HOUSING_EXPERT_MODE_HOVERED_TARGET_CHANGED" or event == "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED") then
-            return
-        end
+        -- 需求变更：基础/专家模式均允许悬停驱动 HoverHUD（不再屏蔽）。
         if event == "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" or event == "HOUSING_EXPERT_MODE_HOVERED_TARGET_CHANGED" then
             self:OnHoveredTargetChanged(...)
         elseif event == "HOUSE_EDITOR_MODE_CHANGED" then
@@ -959,8 +974,7 @@ do
     end
 
     function EL:OnHoveredTargetChanged(hasHoveredTarget, targetType)
-        -- 专家模式：直接忽略所有悬停变化（不驱动任何 UI）
-        if InExpertMode() then return end
+        -- 基础/专家模式通用：允许悬停驱动 HoverHUD 与标题联动
         if hasHoveredTarget then
             -- 未选中时才切回“跟随悬停”；选中状态保持 Header 由专用 fader 管控
             if ADT and ADT.DockUI and ADT.DockUI.SetHeaderAlphaFollow then
@@ -1070,7 +1084,15 @@ do
                                 or (outdoor and ((L["Outdoor"]) or "Outdoor"))
                                 or ((L["Indoor"]) or "Indoor")
                             local stockLabel = (L["Stock"]) or "Stock"
-                            leftText = string.format("%s | %s:%d", placeText, stockLabel, stored)
+                            -- 语义上色（2025 UI）：标签=柔和中性；库存数=语义色
+                            local labelSep = Colorize('separatorMuted', ' | ')
+                            local colon    = Colorize('separatorMuted', ":")
+                            local placeC   = Colorize('labelMuted', placeText)
+                            local stockLbl = Colorize('labelMuted', stockLabel)
+                            local stockVal = (stored and stored > 0)
+                                and Colorize('valueGood', tostring(stored))
+                                or  Colorize('valueBad',  tostring(stored or 0))
+                            leftText = placeC .. labelSep .. stockLbl .. colon .. stockVal
                         end
                         local rightText = ""
                         do
@@ -1082,7 +1104,15 @@ do
                                     local s = slots[i]
                                     if s and s.dyeColorID then used = used + 1 end
                                 end
-                                rightText = string.format("🎨%d/%d", used, total)
+                                -- 使用内置 Atlas 图标：catalog-palette-icon
+                                -- 说明：采用 FontString 内联图标，避免单独 Texture 带来的额外对齐与测宽问题
+                                local usedKey = (used <= 0) and 'valueNeutral' or ((used < total) and 'valueWarn' or 'valueGood')
+                                local slash  = Colorize('separatorMuted', "/")
+                                rightText = string.format("|A:catalog-palette-icon:16:16|a %s%s%s",
+                                    Colorize(usedKey, tostring(used)),
+                                    slash,
+                                    Colorize('labelMuted', tostring(total))
+                                )
                             else
                                 rightText = ""
                             end
@@ -1090,9 +1120,19 @@ do
                         if DisplayFrame.InfoLine.InstructionText then
                             DisplayFrame.InfoLine.InstructionText:SetText(leftText)
                         end
-                        if DisplayFrame.InfoLine.Control and DisplayFrame.InfoLine.Control.Text then
-                            DisplayFrame.InfoLine.Control.Text:SetText(rightText)
-                            DisplayFrame.InfoLine.Control.Text:SetShown(rightText ~= "")
+                        -- 修复：当“染色插槽”不存在时，必须隐藏整块 Control，
+                        -- 而不是只隐藏 Control.Text。否则行布局仍为右侧预留统一键帽宽度，
+                        -- 导致仅显示“室内/外 + 库存”两段时左侧文本被不合理压缩/错位。
+                        if DisplayFrame.InfoLine.Control then
+                            local ctrl = DisplayFrame.InfoLine.Control
+                            local hasDyeInfo = rightText ~= "" and rightText ~= nil
+                            if ctrl.Text then
+                                ctrl.Text:SetText(hasDyeInfo and rightText or "")
+                                ctrl.Text:SetShown(hasDyeInfo)
+                            end
+                            -- 关键：同步显示状态到 Control 本体，让锚点/测宽逻辑
+                            -- (_ADT_UpdateLeftTextAnchors/_ADT_FitControlText) 正确感知可见性。
+                            ctrl:SetShown(hasDyeInfo)
                         end
                         if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame.InfoLine) end
                         -- 再下一帧根据最终可用宽度复算一次，避免初次宽度=0 造成省略号
@@ -1305,9 +1345,26 @@ do
                     frame:SetPoint("TOPLEFT",  prevVisible, "BOTTOMLEFT",  0, -ygap)
                 end
                 -- 同帧补一把：若样式器已加载，立即按“单一权威”应用一次，确保键帽贴右。
-                if ADT and ADT.ApplyHousingInstructionStyle then
-                    ADT.ApplyHousingInstructionStyle(frame)
+                if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(frame) end
+                -- InfoLine：强制用父容器当前宽度兜底一次，避免首帧内容区宽度未知
+                if DisplayFrame and frame == DisplayFrame.InfoLine then
+                    local pw = DisplayFrame.GetWidth and DisplayFrame:GetWidth() or 0
+                    if pw and pw > 1 then
+                        if frame.SetFixedWidth then frame:SetFixedWidth(pw) else frame:SetWidth(pw) end
+                    end
                 end
+                -- 再下一帧复核一次尺寸与左右留白，防止首帧父容器宽度为 0
+                C_Timer.After(0, function()
+                    if ADT and ADT.ApplyHousingInstructionStyle and frame and frame:IsShown() then
+                        ADT.ApplyHousingInstructionStyle(frame)
+                        if DisplayFrame and frame == DisplayFrame.InfoLine then
+                            local pw = DisplayFrame.GetWidth and DisplayFrame:GetWidth() or 0
+                            if pw and pw > 1 then
+                                if frame.SetFixedWidth then frame:SetFixedWidth(pw) else frame:SetWidth(pw) end
+                            end
+                        end
+                    end
+                end)
                 prevVisible = frame
             end
         end
