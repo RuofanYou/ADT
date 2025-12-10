@@ -16,21 +16,20 @@
         <KeyValues>
             <KeyValue key="minimumHeight" value="45" type="number"/>
             <KeyValue key="spacing" value="10" type="number"/>
-            <KeyValue key="align" value="center" type="string"/>
+            <!-- 行在父容器中的水平对齐：贴左，与官方保持一致 -->
+            <KeyValue key="align" value="left" type="string"/>
         </KeyValues>
         <Size x="45" y="45"/>
         <Layers>
             <Layer level="ARTWORK">
-                <!-- 与官方 HouseEditorInstructionTemplate 保持一致的基准字体（再由样式缩放） -->
-                <FontString parentKey="InstructionText" inherits="GameFontHighlightLarge" justifyH="RIGHT" wordwrap="false">
+                <!-- 与官方 HouseEditorInstructionTemplate 保持一致的基准字体（再由样式缩放）。
+                     注意：不再绑定固定锚点，交由 HorizontalLayout 布局；默认左对齐。 -->
+                <FontString parentKey="InstructionText" inherits="GameFontHighlightLarge" justifyH="LEFT" wordwrap="false">
                     <KeyValues>
                         <KeyValue key="expand" value="true" type="boolean"/>
                         <KeyValue key="layoutIndex" value="1" type="number"/>
                     </KeyValues>
                     <Size x="0" y="0"/>
-                    <Anchors>
-                        <Anchor point="RIGHT" x="-55"/>
-                    </Anchors>
                 </FontString>
                 <FontString parentKey="ItemCountText" inherits="GameFontHighlight" justifyH="CENTER">
                     <Size x="0" y="0"/>

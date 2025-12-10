@@ -331,6 +331,7 @@ end
 -- 前置声明，避免调用顺序问题
 local _ADT_AlignControl
 local _ADT_AnchorRowColumns
+local _ADT_UpdateLeftTextAnchors
 local function _ADT_SetRowFixedWidth(row)
     if not row then return end
     local dock = GetDock()
@@ -498,6 +499,8 @@ function _ADT_FitControlText(row)
         text:ClearAllPoints()
         text:SetPoint("RIGHT", row.Control.Background, "RIGHT", -half, 0)
         if text.SetJustifyH then text:SetJustifyH("RIGHT") end
+        -- 右侧尺寸稳定后，重新设置左侧文本的右锚，保证不与键帽重叠
+        if _ADT_UpdateLeftTextAnchors then _ADT_UpdateLeftTextAnchors(row) end
         return
     end
 
@@ -519,6 +522,7 @@ function _ADT_FitControlText(row)
         text:SetPoint("RIGHT", row.Control.Background, "RIGHT", -half, 0)
         if text.SetJustifyH then text:SetJustifyH("RIGHT") end
         row._ADT_lastScale = targetScale
+        if _ADT_UpdateLeftTextAnchors then _ADT_UpdateLeftTextAnchors(row) end
     else
         -- 仍需同步背景宽度，避免因先前缩放造成错位
         local w = math.ceil(text:GetStringWidth() or 0) + pad
@@ -529,6 +533,7 @@ function _ADT_FitControlText(row)
         text:ClearAllPoints()
         text:SetPoint("RIGHT", row.Control.Background, "RIGHT", -half, 0)
         if text.SetJustifyH then text:SetJustifyH("RIGHT") end
+        if _ADT_UpdateLeftTextAnchors then _ADT_UpdateLeftTextAnchors(row) end
     end
 end
 
@@ -571,30 +576,45 @@ function _ADT_AnchorRowColumns(row)
     local xNudge  = CFG.Row.textLeftNudge or 0
     local yNudge  = CFG.Row.textYOffset or 0
 
-    -- 锚点解耦（仅信息文字）：
-    -- - 使用“行自身(row)”作为参照，确保与文本相同的有效缩放，避免跨层级缩放差异带来的坐标偏移；
-    -- - 左锚点：row 左缘 + 行左内边距；
-    -- - 右锚点：若有键帽则吸到键帽左侧，否则用 row 右缘 - 行右内边距；
-    -- - 不再显式 SetWidth(0)，由左右锚点推导宽度，避免首帧 0 宽导致的挤压。
-    fs:ClearAllPoints(); fs.ignoreInLayout = true
-    do
-        local leftAnchor  = row
-        local rightAnchor = row
-        local rightPad = (row.rightPadding ~= nil) and row.rightPadding or GetUnifiedRightPad()
-
-        fs:SetPoint("LEFT",  leftAnchor,  "LEFT",  leftPad + xNudge, yNudge)
-        if ctrl and ctrl:IsShown() and (ctrl:GetWidth() or 0) > 0 then
-            fs:SetPoint("RIGHT", ctrl, "LEFT", -spacing, yNudge)
-        else
-            fs:SetPoint("RIGHT", rightAnchor, "RIGHT", -rightPad, yNudge)
-        end
-        -- 不设置 SetWidth；让系统根据左右锚点确定宽度。
-    end
+    -- 锚点解耦（仅信息文字）。保持在布局之外，由我们按照“从左向右生长”的方式限定左右边界。
+    fs.ignoreInLayout = true
+    _ADT_UpdateLeftTextAnchors(row)
 
     -- 单行展示，过长自动截断（不换行）。注意此处宽度已由左右锚点保证为“行内剩余宽度”，
     -- 不需要再用 SetWidth 干预，避免被 HorizontalLayout 尚未完成时序影响。
     if fs.SetWordWrap then fs:SetWordWrap(false) end
     if fs.SetMaxLines then fs:SetMaxLines(1) end
+end
+
+-- 仅修改“信息文字”的左右锚点，使其：
+-- - 左起对齐到内容区左缘 + 统一左留白；
+-- - 右侧为 内容区右缘 − (统一右留白 + 键帽宽度 + 列间距)，保证不与键帽重叠；
+-- 任何时候都不设置宽度，由左右锚点推导，确保“左起向右生长”。
+_ADT_UpdateLeftTextAnchors = function(row)
+    if not row or not row.InstructionText then return end
+    local fs, ctrl = row.InstructionText, row.Control
+    -- 垂直坐标必须参考本行(row)，否则所有行会贴到同一Y导致“挤成一团”。
+    local anchor = row
+
+    local leftPad  = (row.leftPadding  ~= nil) and row.leftPadding  or GetUnifiedRightPad()
+    local rightPad = (row.rightPadding ~= nil) and row.rightPadding or GetUnifiedRightPad()
+    local spacing  = (row.spacing ~= nil) and row.spacing or (CFG.Row.hSpacing or 8)
+    local xNudge   = CFG.Row.textLeftNudge or 0
+    local yNudge   = CFG.Row.textYOffset or 0
+
+    local reserveRight = rightPad
+    if ctrl and ctrl.IsShown and ctrl:IsShown() then
+        local w = (ctrl.GetWidth and ctrl:GetWidth()) or 0
+        if w and w > 0 then reserveRight = reserveRight + spacing + w end
+    end
+
+    fs:ClearAllPoints()
+    if fs.SetJustifyH then fs:SetJustifyH("LEFT") end
+    if fs.SetJustifyV then fs:SetJustifyV("MIDDLE") end
+    if fs.SetWordWrap then fs:SetWordWrap(false) end
+    if fs.SetMaxLines then fs:SetMaxLines(1) end
+    fs:SetPoint("LEFT",  anchor, "LEFT",  leftPad + xNudge, yNudge)
+    fs:SetPoint("RIGHT", anchor, "RIGHT", -reserveRight, yNudge)
 end
 
 local function _ADT_RestoreTypography(instr)

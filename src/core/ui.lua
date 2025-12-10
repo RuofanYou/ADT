@@ -16,11 +16,13 @@ function ADT.ToggleMainUI()
         Main:Hide()
     else
         -- 根据是否处于住宅编辑模式，选择更合适的父级与层级
+        -- 统一层级策略：主面板始终使用 FULLSCREEN_DIALOG；左侧栏在 TOOLTIP。
+        -- 避免在编辑器中将主面板抬到 TOOLTIP 与左侧竞争
         local parent, strata
         if HouseEditorFrame and HouseEditorFrame:IsShown() then
-            parent, strata = HouseEditorFrame, "TOOLTIP"
+            parent, strata = HouseEditorFrame, "FULLSCREEN_DIALOG"
         else
-            parent, strata = UIParent, "DIALOG"
+            parent, strata = UIParent, "FULLSCREEN_DIALOG"
         end
         Main:ClearAllPoints()
         Main:SetParent(parent)
@@ -104,12 +106,12 @@ do
             if Main:GetParent() ~= HouseEditorFrame then
                 Main:SetParent(HouseEditorFrame)
             end
-            if Main.SetFrameStrata then Main:SetFrameStrata("TOOLTIP") end
+            if Main.SetFrameStrata then Main:SetFrameStrata("FULLSCREEN_DIALOG") end
         else
             if Main:GetParent() ~= UIParent then
                 Main:SetParent(UIParent)
             end
-            if Main.SetFrameStrata then Main:SetFrameStrata("DIALOG") end
+            if Main.SetFrameStrata then Main:SetFrameStrata("FULLSCREEN_DIALOG") end
         end
     end
 

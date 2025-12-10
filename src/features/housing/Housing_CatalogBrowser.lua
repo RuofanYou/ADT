@@ -20,6 +20,7 @@ ADT.DecorBrowser = DecorBrowser
 local decorCache = {}
 local lastHoveredGUID = nil
 
+
 -- 获取目录信息（与 DecorHover 共用逻辑）
 local function GetCatalogDecorInfo(decorID)
     return GetCatalogEntryInfoByRecordID(1, decorID, true)
@@ -29,14 +30,10 @@ end
 function DecorBrowser:RefreshCache()
     wipe(decorCache)
     
-    if not IsHouseEditorActive() then
-        return decorCache
-    end
+    if not IsHouseEditorActive() then return decorCache end
     
     local placedDecor = GetAllPlacedDecor()
-    if not placedDecor then
-        return decorCache
-    end
+    if not placedDecor then return decorCache end
     
     for i, entry in ipairs(placedDecor) do
         local guid = entry.decorGUID
@@ -69,6 +66,7 @@ function DecorBrowser:GetDecorList()
     return decorCache
 end
 
+-- 依据 recordID 查找任意一个已放置实例的 GUID（优先使用已缓存数据；必要时刷新一次缓存）
 -- 高亮指定装饰物
 function DecorBrowser:HighlightDecor(guid)
     -- 先取消之前的高亮
@@ -79,9 +77,7 @@ function DecorBrowser:HighlightDecor(guid)
     end
     
     if guid then
-        pcall(function()
-            SetPlacedDecorEntryHovered(guid, true)
-        end)
+        pcall(function() SetPlacedDecorEntryHovered(guid, true) end)
         lastHoveredGUID = guid
     else
         lastHoveredGUID = nil

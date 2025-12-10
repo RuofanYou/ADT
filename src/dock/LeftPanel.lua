@@ -21,6 +21,11 @@ function DockLeft.IsStatic()
     return USE_STATIC_LEFT_PANEL
 end
 
+-- 临时排障：将左侧面板整体左移的像素值。
+-- 验证思路：若移动后可点击，说明原位置上有透明可点层覆盖；若仍不可点，问题在层级/代理或父子关系。
+-- 调试偏移（静态左窗已定位正确，恢复为 0；如需再次排障可暂改为负值）
+local DEBUG_LEFT_SHIFT_X = 0
+
 -- 依据“实际分类文本宽度”动态计算左侧栏目标宽度（单一权威）
 function DockLeft.ComputeSideSectionWidth()
     local d = Def()
@@ -197,12 +202,17 @@ function DockLeft.Build(MainFrame, sideSectionWidth)
     MainFrame.LeftSlideContainer = LeftSlide
     LeftSlide:ClearAllPoints()
     -- 顶部贴合到 Header 底部，小窗高度不占满父面板
+    -- 临时排障：整体左移 DEBUG_LEFT_SHIFT_X 像素
     if MainFrame.Header then
-        LeftSlide:SetPoint("TOPRIGHT", MainFrame.Header, "BOTTOMLEFT", (d.StaticRightAttachOffset or 0), -2)
+        LeftSlide:SetPoint("TOPRIGHT", MainFrame.Header, "BOTTOMLEFT", (d.StaticRightAttachOffset or 0) + DEBUG_LEFT_SHIFT_X, -2)
     else
-        LeftSlide:SetPoint("TOPRIGHT", MainFrame, "TOPLEFT", (d.StaticRightAttachOffset or 0), 0)
+        LeftSlide:SetPoint("TOPRIGHT", MainFrame, "TOPLEFT", (d.StaticRightAttachOffset or 0) + DEBUG_LEFT_SHIFT_X, 0)
     end
     LeftSlide:SetWidth(sideSectionWidth)
+    -- 层级策略（稳定可点）：
+    -- 1) 左窗必须永远压在 Dock 右侧各容器之上，避免被无意的背景/占位层拦截。
+    -- 2) 但又不能影响游戏其他顶层 UI，因此仅抬升到 TOOLTIP strata；
+    --    右侧主面板统一处于 FULLSCREEN_DIALOG（见 DockUI），两者不会互相遮挡。
     LeftSlide:SetFrameStrata("TOOLTIP")
     LeftSlide:SetFrameLevel((MainFrame:GetFrameLevel() or 0) + 600)
     LeftSlide:SetToplevel(true)
@@ -234,35 +244,13 @@ function DockLeft.Build(MainFrame, sideSectionWidth)
         obj._main = MainFrame
         local base = (LeftSlide and LeftSlide.GetFrameLevel and LeftSlide:GetFrameLevel()) or 10000
         pcall(obj.SetFrameLevel, obj, base + 10)
-        pcall(obj.SetToplevel, obj, true)
-        -- 顶层点击代理：防止被右侧面板或其他透明层拦截
-        if not obj._proxy then
-            local p = CreateFrame('Button', nil, UIParent)
-            p:SetAllPoints(obj)
-            p:SetFrameStrata('TOOLTIP')
-            p:SetFrameLevel(base + 20)
-            p:SetToplevel(true)
-            p:EnableMouse(true)
-            p:EnableMouseMotion(true)
-            if p.RegisterForClicks then p:RegisterForClicks('AnyUp') end
-            -- 关键：给代理一个近乎透明的命中面，避免某些版本“无贴图按钮”不接收点击
-            if not p._cover then
-                local cover = p:CreateTexture(nil, 'BACKGROUND')
-                cover:SetAllPoints(true)
-                cover:SetColorTexture(0,0,0,0.01)
-                p._cover = cover
-            end
-            p:SetScript('OnEnter', function() if obj.OnEnter then obj:OnEnter() end end)
-            p:SetScript('OnLeave', function() if obj.OnLeave then obj:OnLeave() end end)
-            p:SetScript('OnClick', function(_, btn)
-                if obj.OnClick then obj:OnClick(btn) end
-            end)
-            obj._proxy = p
-        else
-            obj._proxy:ClearAllPoints()
-            obj._proxy:SetAllPoints(obj)
-            obj._proxy:SetFrameLevel(base + 20)
-            obj._proxy:Show()
+        pcall(obj.SetToplevel, obj, false)
+        -- 移除顶层点击代理（会造成越界覆盖）；保持按钮自身命中即可
+        if obj._proxy then
+            obj._proxy:Hide()
+            obj._proxy:SetScript('OnEnter', nil)
+            obj._proxy:SetScript('OnLeave', nil)
+            obj._proxy:SetScript('OnClick', nil)
         end
         -- 移除调试背景，避免出现“文本背后绿色矩形”
         -- 安全注入：旧对象池的遗留对象可能缺少方法，这里兜底补齐
@@ -340,10 +328,11 @@ function DockLeft.Build(MainFrame, sideSectionWidth)
         end
         local d2 = Def()
         LeftSlide:ClearAllPoints()
+        -- 与 Build 中保持一致：左移 DEBUG_LEFT_SHIFT_X 的排障偏移
         if self.Header then
-            LeftSlide:SetPoint("TOPRIGHT", self.Header, "BOTTOMLEFT", (d2.StaticRightAttachOffset or 0), -2)
+            LeftSlide:SetPoint("TOPRIGHT", self.Header, "BOTTOMLEFT", (d2.StaticRightAttachOffset or 0) + DEBUG_LEFT_SHIFT_X, -2)
         else
-            LeftSlide:SetPoint("TOPRIGHT", self, "TOPLEFT", (d2.StaticRightAttachOffset or 0), 0)
+            LeftSlide:SetPoint("TOPRIGHT", self, "TOPLEFT", (d2.StaticRightAttachOffset or 0) + DEBUG_LEFT_SHIFT_X, 0)
         end
         -- 依据分类数量重算高度，避免小窗拉满
         local n = 0

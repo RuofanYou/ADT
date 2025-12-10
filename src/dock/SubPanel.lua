@@ -22,6 +22,7 @@ local function AttachTo(main)
         self.SubPanel = sub
 
         -- 与主面板下边无缝拼接；宽度与右侧区域一致
+        -- 子面板左偏移与左侧分类栏宽度保持一致
         local leftOffset = tonumber(self.sideSectionWidth) or ComputeSideSectionWidth() or 180
         sub:SetPoint("TOPLEFT", self, "BOTTOMLEFT", leftOffset, 0)
         sub:SetPoint("TOPRIGHT", self, "BOTTOMRIGHT", 0, 0)
@@ -60,7 +61,8 @@ local function AttachTo(main)
         header:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -10)
         header:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -10)
         header:SetHeight((Def.ButtonSize or 28) + 2)
-        header:SetText("扩展面板（占位标题）")
+        -- 默认不显示任何占位文本，便于“无正文时自动隐藏”
+        header:SetText("")
 
         -- 分隔条：下移并左右对称以居中
         if header.Divider then
@@ -101,6 +103,35 @@ local function AttachTo(main)
             local INSET_BOTTOM = 10 -- content 与 sub 底边的内边距
             local pendingTicker
             local lastApplied
+            
+            -- 判空：除 Header 外是否存在“可见且占据面积”的子节点
+            local function AnyNonHeaderVisible(frame, header)
+                if not frame then return false end
+                for _, ch in ipairs({frame:GetChildren()}) do
+                    if ch and ch ~= header and (not ch.IsShown or ch:IsShown()) then
+                        -- 若存在可见后代，则认为“正文存在”
+                        if AnyNonHeaderVisible(ch, header) then return true end
+                        -- 无后代或后代不可见时，仅在自己具备有效绘制面积且非透明时才算可见
+                        local alphaOK = (not ch.GetAlpha) or (ch:GetAlpha() or 0) > 0.01
+                        local w = (ch.GetWidth and ch:GetWidth()) or 0
+                        local h = (ch.GetHeight and ch:GetHeight()) or 0
+                        local hasArea = (w or 0) > 2 and (h or 0) > 2
+                        if alphaOK and hasArea and (not ch.GetChildren or select('#', ch:GetChildren()) == 0) then
+                            return true
+                        end
+                    end
+                end
+                return false
+            end
+
+            local function HeaderHasMeaningfulText(header)
+                if not (header and header.Label) then return false end
+                if not (header.Label.IsShown and header.Label:IsShown()) then return false end
+                local a = header.Label.GetAlpha and header.Label:GetAlpha() or 1
+                if a <= 0.01 then return false end
+                local t = header.Label.GetText and header.Label:GetText() or nil
+                return type(t) == 'string' and t:match('%S') ~= nil
+            end
 
             local function DeepestBottom(frame)
                 if not (frame and frame.GetBottom) then return nil end
@@ -149,6 +180,16 @@ local function AttachTo(main)
                 return false
             end
 
+            local function EvaluateAutoHide()
+                -- 仅当“没有有效正文 + 标题也无意义”时隐藏，并把高度压到 0 以消除与下方清单之间的空隙。
+                local noBody = not AnyNonHeaderVisible(sub.Content, sub.Header)
+                local noHeader = not HeaderHasMeaningfulText(sub.Header)
+                if noBody and noHeader then
+                    sub:SetHeight(0)
+                    sub:Hide()
+                end
+            end
+
             local function RequestAutoResize()
                 if pendingTicker then return end
                 -- 短期采样多次以等待暴雪 VerticalLayout 完成排版（字体缩放/行隐藏等）
@@ -158,6 +199,8 @@ local function AttachTo(main)
                     local stable = ApplyAutoHeightOnce()
                     if stable or count >= maxSample then
                         t:Cancel(); pendingTicker = nil
+                        -- 排版稳定后判空一次
+                        EvaluateAutoHide()
                     end
                 end)
             end
@@ -169,10 +212,17 @@ local function AttachTo(main)
             end
 
             -- 尺寸/可见性变动时触发一次
-            sub:HookScript("OnShow", RequestAutoResize)
+            sub:HookScript("OnShow", function()
+                RequestAutoResize()
+                -- 次帧再判一次，覆盖“先显示后刷新”的时序
+                C_Timer.After(0.05, EvaluateAutoHide)
+            end)
             if sub.Content.HookScript then
                 sub.Content:HookScript("OnSizeChanged", function() RequestAutoResize() end)
             end
+            
+            -- 对外暴露：允许业务侧在特殊时点主动触发判空
+            ADT.DockUI.EvaluateSubPanelAutoHide = EvaluateAutoHide
         end
         sub:Hide()
         return sub
