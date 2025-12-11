@@ -116,6 +116,35 @@ local CFG = {
         -- 防止越出屏幕底部的安全边距
         safetyBottomPad = 8,
     },
+
+    -- 住宅“库存/上限”计数（暴雪 DecorCount）在 Dock.Header 内的定位与尺寸（单一权威）
+    DecorCount = {
+        -- 锚点：将官方 DecorCount 贴到 Dock.Header 的哪个点位
+        point    = "RIGHT",
+        relPoint = "RIGHT",
+        offsetX  = -50,
+        offsetY  = -2,
+        -- 缩放：整体缩放比（不改变父级/显隐）
+        scale    = 0.65,
+        -- 层级：为避免被木框/背景半透明影响，默认提升到最前层
+        strata   = "TOOLTIP",      -- 可选：FULLSCREEN_DIALOG / DIALOG / TOOLTIP ...
+        levelBias = 10,            -- 在 Header 基础上额外提升的 FrameLevel
+        -- 是否忽略父级透明/缩放（避免被父级 alpha/scale 影响视觉）
+        ignoreParentAlpha = true,
+        ignoreParentScale = true,
+    },
+
+    -- 暴雪“放置的装饰清单”按钮（PlacedDecorListButton）在 Dock.Header 内的定位（单一权威）
+    PlacedListButton = {
+        point    = "LEFT",
+        relPoint = "LEFT",
+        offsetX  = 40,
+        offsetY  = -5,
+        scale    = 1.0,
+        strata   = nil,      -- nil=跟随 Dock 主体；也可指定 "FULLSCREEN_DIALOG" 等
+        levelBias = 0,       -- 基于 Header 的提升量
+        levelBiasOverBorder = 1, -- 若存在 Dock.BorderFrame，则在其之上再提升的量
+    },
     -- Dock 列表（Clipboard/Recent）的库存数字与名称间距（配置驱动，分类可独立）
     DockDecorList = {
         -- 通用默认（各分类未覆写则继承本组）

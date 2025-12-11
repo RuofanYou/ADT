@@ -70,6 +70,7 @@ local Def = {
 
     -- ================= Header/顶部区域可调参数（统一权威） =================
     HeaderHeight = 68,                 -- Header 高度
+    ShowHeaderTitle = false,           -- 是否显示标题文本（默认不显示，遵循KISS）
     HeaderTitleOffsetX = 22,           -- Header 标题 X 偏移
     HeaderTitleOffsetY = -10,          -- Header 标题 Y 偏移（负值为向下）
     -- 关闭按钮（UIPanelCloseButton）位置（锚到整体右上角，负值向内收）
@@ -82,6 +83,8 @@ local Def = {
     PlacedListBtnOffsetX = 40,         -- X 偏移
     PlacedListBtnOffsetY = -1,          -- Y 偏移
     PlacedListBtnRaiseAboveBorder = 1, -- 提升到边框之上的 FrameLevel 偏移（0 表示不提升）
+
+    -- 库存计数（DecorCount）配置已迁移到 Housing_Config.lua（单一权威）。
 
     -- ================= 中央滚动区域边距 =================
     -- 修复说明：内容区与背景的语义要分离。
@@ -465,14 +468,26 @@ do
         if not btn then return end
         SaveOriginal(btn)
         btn:ClearAllPoints()
-        btn:SetParent(MainFrame.Header)
-        btn:SetPoint(Def.PlacedListBtnPoint or "LEFT", MainFrame.Header, Def.PlacedListBtnRelPoint or (Def.PlacedListBtnPoint or "LEFT"), Def.PlacedListBtnOffsetX or 40, Def.PlacedListBtnOffsetY or 0)
-        -- 提升层级避免被边框覆盖
-        local strata = MainFrame:GetFrameStrata() or "FULLSCREEN_DIALOG"
-        btn:SetFrameStrata(strata)
-        if MainFrame.BorderFrame and Def.PlacedListBtnRaiseAboveBorder and Def.PlacedListBtnRaiseAboveBorder > 0 then
-            btn:SetFrameLevel((MainFrame.BorderFrame:GetFrameLevel() or 0) + Def.PlacedListBtnRaiseAboveBorder)
-        end
+        -- 关键：不改父级，只以 Header 作为锚点移动位置（KISS）
+        local cfg = (ADT and ADT.HousingInstrCFG and ADT.HousingInstrCFG.PlacedListButton) or {}
+        local p  = cfg.point or "LEFT"
+        local rp = cfg.relPoint or p
+        local x  = tonumber(cfg.offsetX) or 40
+        local y  = tonumber(cfg.offsetY) or 0
+        btn:SetPoint(p, MainFrame.Header, rp, x, y)
+        -- 尺寸/层级（可选）
+        pcall(function()
+            if cfg.scale and btn.SetScale then btn:SetScale(cfg.scale) end
+            local strata = cfg.strata or (MainFrame:GetFrameStrata() or "FULLSCREEN_DIALOG")
+            btn:SetFrameStrata(strata)
+            local lvl
+            if MainFrame.BorderFrame and tonumber(cfg.levelBiasOverBorder or 0) > 0 then
+                lvl = (MainFrame.BorderFrame:GetFrameLevel() or 0) + tonumber(cfg.levelBiasOverBorder or 0)
+            else
+                lvl = (MainFrame:GetFrameLevel() or 0) + tonumber(cfg.levelBias or 0)
+            end
+            btn:SetFrameLevel(lvl)
+        end)
         btn:Show()
         Attached = true
     end
@@ -2481,7 +2496,13 @@ local function CreateUI()
         MainFrame.HeaderTitle = title
         title:SetPoint("LEFT", Header, "LEFT", Def.HeaderTitleOffsetX or 22, Def.HeaderTitleOffsetY or -10)
         title:SetJustifyH("LEFT")
-        title:SetText((ADT.L and ADT.L['Addon Full Name']) or '高级装修工具')
+        if Def.ShowHeaderTitle then
+            title:SetText((ADT.L and ADT.L['Addon Full Name']) or '高级装修工具')
+            title:Show()
+        else
+            title:SetText("")
+            title:Hide()
+        end
 
         -- 向下顺延主体区域：将左右分栏的顶部锚到 Header 底部
         if MainFrame.LeftSection then

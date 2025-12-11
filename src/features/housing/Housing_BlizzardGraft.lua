@@ -45,6 +45,7 @@ end
 -- 一、Dock Header 的装饰计数控件
 --
 local BudgetWidget
+local BudgetAnchorHeader -- 仅用于定位的锚点（不作为父级）
 local HeaderTitleBackup
 -- 前向声明：避免在闭包中捕获到全局未定义的 IsHouseEditorShown
 --（Lua 的词法作用域要求在首次使用前声明局部变量，否则将解析为全局）
@@ -77,7 +78,7 @@ end
 -- 计算并设置“从 Header 顶边”向下的像素，使 BudgetWidget 的垂直中心与 Header 垂直中心重合。
 local function RepositionBudgetVertically()
     if not BudgetWidget then return end
-    local header = BudgetWidget:GetParent()
+    local header = BudgetAnchorHeader or (GetDock() and GetDock().Header)
     if not header or not header.GetHeight then return end
     local h = header:GetHeight() or 68
     local selfH = BudgetWidget:GetHeight() or 36
@@ -120,12 +121,15 @@ local function EnsureBudgetWidget()
     if BudgetWidget then return end
 
     local Header = dock.Header
+    BudgetAnchorHeader = Header
     -- 备份标题，以便离开编辑器时恢复
     if dock.HeaderTitle and not HeaderTitleBackup then
         HeaderTitleBackup = dock.HeaderTitle:GetText()
     end
 
-    BudgetWidget = CreateFrame("Frame", nil, Header)
+    -- 重要：不把预算控件设为 Header 的子级，避免 Dock 隐藏时一同隐藏。
+    -- 仅以 Header 作为锚点进行定位；父级改为 UIParent。
+    BudgetWidget = CreateFrame("Frame", nil, UIParent)
     -- 初始化锚点，后续用 RepositionBudgetVertically() 精确垂直居中
     BudgetWidget:ClearAllPoints()
     BudgetWidget:SetPoint("CENTER", Header, "CENTER", 0, 0)
@@ -192,72 +196,103 @@ local function EnsureBudgetWidget()
 
 end
 
+-- KISS：不再自绘 BudgetWidget，直接使用暴雪官方 DecorCount，
+-- 仅做“位置 + 缩放 + 层级”处理，且不改变其 parent 与显隐逻辑。
+local function _GetAnyDecorCount()
+    local active = GetActiveModeFrame()
+    if active and active.DecorCount then return active.DecorCount end
+    local hf = _G.HouseEditorFrame
+    if not hf then return nil end
+    for _, key in ipairs({"ExpertDecorModeFrame","BasicDecorModeFrame","CustomizeModeFrame","CleanupModeFrame","LayoutModeFrame"}) do
+        local frm = hf[key]
+        if frm and frm.DecorCount then return frm.DecorCount end
+    end
+    return nil
+end
+
+-- 对齐函数：必须位于任何使用它的钩子之前（避免前向引用为 nil）
+local function _AnchorDecorCount(dc, header)
+    if not (dc and header) then return end
+    local cfg = (ADT and ADT.HousingInstrCFG and ADT.HousingInstrCFG.DecorCount) or {}
+    local p  = cfg.point or "RIGHT"
+    local rp = cfg.relPoint or p
+    local x  = tonumber(cfg.offsetX) or -12
+    local y  = tonumber(cfg.offsetY) or 0
+    dc:ClearAllPoints()
+    dc:SetPoint(p, header, rp, x, y)
+    pcall(function()
+        if dc.SetScale then dc:SetScale(tonumber(cfg.scale) or 1.0) end
+        if dc.SetIgnoreParentAlpha then dc:SetIgnoreParentAlpha(cfg.ignoreParentAlpha ~= false) end
+        if dc.SetIgnoreParentScale then dc:SetIgnoreParentScale(cfg.ignoreParentScale ~= false) end
+        local strata = (type(cfg.strata)=="string" and cfg.strata) or (header:GetFrameStrata() or "FULLSCREEN_DIALOG")
+        dc:SetFrameStrata(strata)
+        local bias = tonumber(cfg.levelBias) or 10
+        dc:SetFrameLevel((header:GetFrameLevel() or 10) + bias)
+        if dc.SetAlpha then dc:SetAlpha(1) end
+    end)
+end
+
+-- 钩住所有子模式的 DecorCount：无论当前激活哪种模式，出现就对齐一次
+local ALL_MODE_KEYS = {"ExpertDecorModeFrame","BasicDecorModeFrame","CustomizeModeFrame","CleanupModeFrame","LayoutModeFrame","ExteriorCustomizationModeFrame"}
+
+-- 提前定义对齐函数，保证在任何调用发生前已经就绪
+-- 上方已定义 _AnchorDecorCount；此处删除重复定义，避免覆盖时序问题。
+
+local function EnsureDecorCountHooks()
+    local hf = _G.HouseEditorFrame; if not hf then return end
+    local dock = GetDock(); if not (dock and dock.Header) then return end
+    for _, key in ipairs(ALL_MODE_KEYS) do
+        local frm = hf[key]
+        local dc = frm and frm.DecorCount
+        if dc and not dc._ADT_AnchorInstalled then
+            dc._ADT_AnchorInstalled = true
+            -- 首次与每次显示都贴合到 Header
+            dc:HookScript("OnShow", function(self) _AnchorDecorCount(self, dock.Header) end)
+            -- 暴雪模板在 Layout/UpdateCount 后也可能调整尺寸/位置；这里跟进一次
+            if hooksecurefunc then
+                pcall(function() hooksecurefunc(dc, "Layout", function(self) _AnchorDecorCount(self, dock.Header) end) end)
+                pcall(function() hooksecurefunc(dc, "UpdateCount", function(self) _AnchorDecorCount(self, dock.Header) end) end)
+            end
+            if dc:IsShown() then _AnchorDecorCount(dc, dock.Header) end
+        end
+    end
+end
+
+-- （已提前定义 _AnchorDecorCount ）
+
 local function ShowBudgetInHeader()
     local dock = GetDock()
-    if not dock then return end
-    EnsureBudgetWidget()
-    if dock.HeaderTitle then
-        dock.HeaderTitle:Hide()
-    end
-    if BudgetWidget then
-        if BudgetWidget.SetAlpha then BudgetWidget:SetAlpha(0) end
-        BudgetWidget:ClearAllPoints()
-        BudgetWidget:SetPoint("CENTER", dock.Header, "CENTER", 0, 0)
-        LayoutBudgetWidget(); RepositionBudgetVertically(); UpdateBudgetText()
-        BudgetWidget:Show()
-        C_Timer.After(0, function()
-            if BudgetWidget and BudgetWidget:IsShown() and BudgetWidget.SetAlpha then
-                BudgetWidget:SetAlpha(1)
-            end
+    if not dock or not dock.Header then return end
+    EnsureDecorCountHooks()
+    local dc = _GetAnyDecorCount()
+    if not dc then return end
+    if dc._ADTForceHidden then dc._ADTForceHidden = nil end
+    _AnchorDecorCount(dc, dock.Header)
+    if dc.Show then dc:Show() end
+    -- 首帧和后续尺寸变化都再对齐一次（不加循环，仅一次性延后）
+    C_Timer.After(0, function() if dc and dock and dock.Header then _AnchorDecorCount(dc, dock.Header) end end)
+    -- 一次性挂钩：当 DecorCount 再次 Show 时，重新对齐
+    if not dc._ADT_AnchorHooked then
+        dc._ADT_AnchorHooked = true
+        dc:HookScript("OnShow", function(self)
+            local d = GetDock(); if d and d.Header then _AnchorDecorCount(self, d.Header) end
         end)
     end
-    Debug("Header 计数已显示到 Dock")
-    -- 维护计数刷新与可见性
-    if not BudgetWidget._ticker then
-        BudgetWidget._ticker = C_Timer.NewTicker(1.0, function(t)
-            if not IsHouseEditorShown() then t:Cancel(); BudgetWidget._ticker=nil; return end
-            UpdateBudgetText()
-            if dock.HeaderTitle and dock.HeaderTitle:IsShown() then
-                dock.HeaderTitle:Hide()
-            end
-            if BudgetWidget and not BudgetWidget:IsShown() then
-                BudgetWidget:Show()
-            end
-        end)
-    end
+    Debug("已定位官方 DecorCount 到 Dock.Header")
 end
 
 local function RestoreHeaderTitle()
     local dock = GetDock()
     if not dock then return end
-    if BudgetWidget then
-        BudgetWidget:Hide()
-        if BudgetWidget._ticker then BudgetWidget._ticker:Cancel(); BudgetWidget._ticker=nil end
-    end
+    -- 不再隐藏/替换 Header 标题；保持原始行为
     if dock.HeaderTitle and HeaderTitleBackup then
         dock.HeaderTitle:SetText(HeaderTitleBackup)
-        dock.HeaderTitle:Show()
     end
 end
 
--- 立刻隐藏官方右上角 DecorCount，避免与我们 Header 计数“先出现后消失”的跳动观感
+-- 不再隐藏官方 DecorCount；若可用，直接定位并显示
 local function HideOfficialDecorCountNow()
-    local active = GetActiveModeFrame()
-    local dc = active and active.DecorCount
-    if not dc then return end
-    -- 先把 alpha 置 0，再调用 Hide，避免任何一帧的闪现
-    if dc.SetAlpha then dc:SetAlpha(0) end
-    if dc.Hide then dc:Hide() end
-    dc._ADTForceHidden = true
-    if not dc._ADT_HideHooked then
-        dc._ADT_HideHooked = true
-        hooksecurefunc(dc, "Show", function(self)
-            if self._ADTForceHidden then
-                if self.SetAlpha then self:SetAlpha(0) end
-                self:Hide()
-            end
-        end)
-    end
+    ShowBudgetInHeader()
 end
 
 --
@@ -1329,11 +1364,7 @@ local function AdoptInstructionsIntoDock()
         end)
     end
 
-    -- 同时隐藏右上角官方 DecorCount（我们已在 Header 重绘计数）
-    if active and active.DecorCount and active.DecorCount:IsShown() then
-        active.DecorCount:Hide()
-    end
-    -- 确保头部计数常驻
+    -- 仅定位官方 DecorCount（不再隐藏）。
     ShowBudgetInHeader()
     Debug("已重挂 Instructions 到 Dock 下方面板（不再镜像/不再隐藏官方容器）")
 end
@@ -1507,7 +1538,7 @@ EL:RegisterEvent("ADDON_LOADED")
 EL:RegisterEvent("PLAYER_LOGIN")
 EL:SetScript("OnEvent", function(_, event, arg1)
     if event == "HOUSE_EDITOR_MODE_CHANGED" then
-        EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow();
+        EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow(); EnsureDecorCountHooks();
         C_Timer.After(0, AdoptInstructionsIntoDock)
         C_Timer.After(0.1, AdoptInstructionsIntoDock)
         C_Timer.After(0.05, ShowPlacedListIfExpertActive)
@@ -1521,13 +1552,13 @@ EL:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "ADDON_LOADED" and (arg1 == "Blizzard_HouseEditor" or arg1 == ADDON_NAME) then
         TrySetupHooks()
         if IsHouseEditorShown() then
-            EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+            EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow(); EnsureDecorCountHooks(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
         end
     elseif event == "PLAYER_LOGIN" then
         TrySetupHooks()
         C_Timer.After(0.5, function()
             if IsHouseEditorShown() then
-                EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+                EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow(); EnsureDecorCountHooks(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
             end
         end)
     end
@@ -1537,6 +1568,6 @@ end)
 C_Timer.After(1.0, function()
     TrySetupHooks()
     if IsHouseEditorShown() then
-        EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
+        EnsurePlacedListHooks(); AnchorPlacedList(); EnsureDyePopoutHooks(); AnchorDyePopout(); EnsureCustomizePaneHooks(); AnchorCustomizePane(); HideOfficialDecorCountNow(); EnsureDecorCountHooks(); ShowBudgetInHeader(); C_Timer.After(0, AdoptInstructionsIntoDock); C_Timer.After(0.05, ShowPlacedListIfExpertActive)
     end
 end)
