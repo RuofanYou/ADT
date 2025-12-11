@@ -120,9 +120,9 @@ local CFG = {
     -- 住宅“库存/上限”计数（暴雪 DecorCount）在 Dock.Header 内的定位与尺寸（单一权威）
     DecorCount = {
         -- 锚点：将官方 DecorCount 贴到 Dock.Header 的哪个点位
-        point    = "RIGHT",
-        relPoint = "RIGHT",
-        offsetX  = -60,
+        point    = "CENTER",
+        relPoint = "CENTER",
+        offsetX  = -0,
         offsetY  = -2,
         -- 缩放：整体缩放比（不改变父级/显隐）
         scale    = 0.65,
@@ -230,6 +230,26 @@ local CFG = {
         -- Header 提示文本颜色（悬停 / 录制中）
         hintHover     = { r = 0.6, g = 0.8, b = 1 },       -- 浅蓝色
         hintRecording = { r = 1, g = 0.82, b = 0 },        -- 金色
+    },
+    -- 快捷栏 QuickbarUI 的定位与间距（配置驱动，单一权威）
+    QuickbarUI = {
+        -- 说明：Quickbar 始终相对 UIParent 定位；不在配置中暴露“父级 Frame”。
+        -- 锚点：通常贴底（BOTTOM/BOTTOM），如需靠上/居中可改为其他点位。
+        anchor = {
+            point    = "BOTTOM",  -- Quickbar 自身锚点
+            relPoint = "BOTTOM",  -- 相对 UIParent 的锚点
+            x        = 0,          -- 水平偏移（像素；正值→向右）
+            bottomMargin = 0,      -- 底边距（像素；正值→向上）。当 point/relPoint 不是 BOTTOM 时同样作为 Y 偏移使用
+        },
+        -- 暴雪 ModesBar 与 Quickbar 之间的垂直间距（Quickbar 顶到 ModesBar 底）
+        modeBarGap = 1,
+        -- 槽位内文本（右上角按键、右下角库存）内收像素：统一权威
+        SlotTextInsets = {
+            keyRight  = 6,  -- 按键文本距右侧内收
+            keyTop    = 6,  -- 按键文本距顶部内收
+            qtyRight  = 6,  -- 库存数字距右侧内收
+            qtyBottom = 6,  -- 库存数字距底部内收
+        },
     },
 }
 

@@ -26,6 +26,15 @@ local DEFAULTS = {
     -- 根据玩家反馈：Q=顺时针(+90)，E=逆时针(-90)
     RotateCCW90  = "E",          -- 逆时针旋转90°（默认 E）
     RotateCW90   = "Q",          -- 顺时针旋转90°（默认 Q）
+    -- 快捷栏（Quickbar）默认键位
+    Quickbar1    = "F1",
+    Quickbar2    = "F2",
+    Quickbar3    = "F3",
+    Quickbar4    = "F4",
+    Quickbar5    = "F5",
+    Quickbar6    = "F6",
+    Quickbar7    = "F7",
+    Quickbar8    = "F8",
 }
 
 -- 动作定义（每个动作对应一个功能）
@@ -80,6 +89,47 @@ local ACTIONS = {
         name = "顺时针旋转90°",
         nameEN = "Rotate CW 90°",
         callback = function() if ADT.RotateHotkey and ADT.RotateHotkey.RotateSelectedByDegrees then ADT.RotateHotkey:RotateSelectedByDegrees(90) end end,
+    },
+    -- 快捷栏（Quickbar）槽位 1-8：回调统一委托给 Quickbar 模块
+    Quickbar1 = {
+        name = "快捷栏 1",
+        nameEN = "Quickbar 1",
+        callback = function() if ADT.Quickbar and ADT.Quickbar.OnQuickbarKeyPressed then ADT.Quickbar:OnQuickbarKeyPressed(1) end end,
+    },
+    Quickbar2 = {
+        name = "快捷栏 2",
+        nameEN = "Quickbar 2",
+        callback = function() if ADT.Quickbar and ADT.Quickbar.OnQuickbarKeyPressed then ADT.Quickbar:OnQuickbarKeyPressed(2) end end,
+    },
+    Quickbar3 = {
+        name = "快捷栏 3",
+        nameEN = "Quickbar 3",
+        callback = function() if ADT.Quickbar and ADT.Quickbar.OnQuickbarKeyPressed then ADT.Quickbar:OnQuickbarKeyPressed(3) end end,
+    },
+    Quickbar4 = {
+        name = "快捷栏 4",
+        nameEN = "Quickbar 4",
+        callback = function() if ADT.Quickbar and ADT.Quickbar.OnQuickbarKeyPressed then ADT.Quickbar:OnQuickbarKeyPressed(4) end end,
+    },
+    Quickbar5 = {
+        name = "快捷栏 5",
+        nameEN = "Quickbar 5",
+        callback = function() if ADT.Quickbar and ADT.Quickbar.OnQuickbarKeyPressed then ADT.Quickbar:OnQuickbarKeyPressed(5) end end,
+    },
+    Quickbar6 = {
+        name = "快捷栏 6",
+        nameEN = "Quickbar 6",
+        callback = function() if ADT.Quickbar and ADT.Quickbar.OnQuickbarKeyPressed then ADT.Quickbar:OnQuickbarKeyPressed(6) end end,
+    },
+    Quickbar7 = {
+        name = "快捷栏 7",
+        nameEN = "Quickbar 7",
+        callback = function() if ADT.Quickbar and ADT.Quickbar.OnQuickbarKeyPressed then ADT.Quickbar:OnQuickbarKeyPressed(7) end end,
+    },
+    Quickbar8 = {
+        name = "快捷栏 8",
+        nameEN = "Quickbar 8",
+        callback = function() if ADT.Quickbar and ADT.Quickbar.OnQuickbarKeyPressed then ADT.Quickbar:OnQuickbarKeyPressed(8) end end,
     },
 }
 
@@ -136,6 +186,10 @@ function M:SetKeybind(actionName, key)
     if ADT.Housing and ADT.Housing.RefreshKeycaps then
         ADT.Housing:RefreshKeycaps()
     end
+    -- 若存在快捷栏 UI，立即刷新其键帽文本
+    if ADT.Quickbar and ADT.Quickbar.RefreshUI then
+        ADT.Quickbar:RefreshUI()
+    end
 end
 
 -- 获取动作的显示名称
@@ -163,8 +217,51 @@ end
 
 -- 获取所有动作
 function M:GetAllActions()
+    -- 将 Quickbar 动作单独分组，避免被名称排序打散
+    local normals, quickbars = {}, {}
+    for name in pairs(ACTIONS) do
+        local idx = string.match(name, '^Quickbar(%d+)$')
+        if idx then
+            table.insert(quickbars, { name = name, idx = tonumber(idx) })
+        else
+            table.insert(normals, { name = name })
+        end
+    end
+
+    table.sort(normals, function(a, b) return a.name < b.name end)
+
+    -- 规则：RotateCW90 在 RotateCCW90 前
+    do
+        local idxCW, idxCCW
+        for i, v in ipairs(normals) do
+            if v.name == 'RotateCW90' then idxCW = i end
+            if v.name == 'RotateCCW90' then idxCCW = i end
+        end
+        if idxCW and idxCCW and idxCW > idxCCW then
+            local cw = table.remove(normals, idxCW)
+            if idxCW < idxCCW then idxCCW = idxCCW - 1 end
+            table.insert(normals, idxCCW, cw)
+        end
+    end
+
+    -- 规则：Store 紧邻 Recall 之上
+    do
+        local idxStore, idxRecall
+        for i, v in ipairs(normals) do
+            if v.name == 'Store' then idxStore = i end
+            if v.name == 'Recall' then idxRecall = i end
+        end
+        if idxStore and idxRecall and idxStore ~= (idxRecall - 1) then
+            local storeEntry = table.remove(normals, idxStore)
+            if idxStore < idxRecall then idxRecall = idxRecall - 1 end
+            table.insert(normals, idxRecall, storeEntry)
+        end
+    end
+
+    table.sort(quickbars, function(a, b) return (a.idx or 0) < (b.idx or 0) end)
+
     local result = {}
-    for name, info in pairs(ACTIONS) do
+    local function push(name)
         table.insert(result, {
             name = name,
             displayName = self:GetActionDisplayName(name),
@@ -172,32 +269,8 @@ function M:GetAllActions()
             keyDisplay = self:GetKeyDisplayName(self:GetKeybind(name)),
         })
     end
-    -- 先按名称排序（保持原有稳定顺序）
-    table.sort(result, function(a, b) return a.name < b.name end)
-    -- 特别规则1：让 RotateCW90 排在 RotateCCW90 之前（Q 在 E 之前）
-    do
-        local idxCW, idxCCW
-        for i, v in ipairs(result) do
-            if v.name == 'RotateCW90' then idxCW = i end
-            if v.name == 'RotateCCW90' then idxCCW = i end
-        end
-        if idxCW and idxCCW and idxCW > idxCCW then
-            local cw = table.remove(result, idxCW)
-            if idxCW < idxCCW then idxCCW = idxCCW - 1 end
-            table.insert(result, idxCCW, cw)
-        end
-    end
-    -- 特别规则2：确保“存入临时板”在“取出临时板”之上且相邻
-    local idxStore, idxRecall
-    for i, v in ipairs(result) do
-        if v.name == 'Store' then idxStore = i end
-        if v.name == 'Recall' then idxRecall = i end
-    end
-    if idxStore and idxRecall and idxStore ~= (idxRecall - 1) then
-        local storeEntry = table.remove(result, idxStore)
-        if idxStore < idxRecall then idxRecall = idxRecall - 1 end
-        table.insert(result, idxRecall, storeEntry)
-    end
+    for _, v in ipairs(normals) do push(v.name) end
+    for _, v in ipairs(quickbars) do push(v.name) end
     return result
 end
 
@@ -340,6 +413,10 @@ function M:ResetAllToDefaults()
     -- 键帽文本也需要同步刷新
     if ADT.Housing and ADT.Housing.RefreshKeycaps then
         ADT.Housing:RefreshKeycaps()
+    end
+    -- 同步刷新快捷栏 UI 的键帽文本
+    if ADT.Quickbar and ADT.Quickbar.RefreshUI then
+        ADT.Quickbar:RefreshUI()
     end
 end
 
