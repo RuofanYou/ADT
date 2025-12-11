@@ -431,8 +431,17 @@ local function buildModules()
         numModules = 0,
     }
 
-    -- 信息分类（关于插件的信息）
+    -- 快捷键分类（设置类）——自定义按键绑定
     modules[5] = {
+        key = 'Keybinds',
+        categoryName = (L and L['SC Keybinds']) or '快捷键',
+        categoryType = 'keybinds', -- 快捷键专用分类类型
+        modules = {},
+        numModules = 0,
+    }
+
+    -- 信息分类（关于插件的信息）
+    modules[6] = {
         key = 'About',
         categoryName = (L and L['SC About']) or '信息',
         categoryType = 'about', -- 关于信息类分类
@@ -521,6 +530,8 @@ local function getCategoryDisplayName(key)
         return (L and L['SC History']) or '最近放置'
     elseif key == 'AutoRotate' then
         return (L and L['SC AutoRotate']) or '自动旋转'
+    elseif key == 'Keybinds' then
+        return (L and L['SC Keybinds']) or '快捷键'
     elseif key == 'About' then
         return (L and L['SC About']) or '信息'
     end

@@ -1886,27 +1886,25 @@ do
         end)
     end
 
+    -- 获取用户设置的快捷键（若 Keybinds 模块未加载则返回 nil，跳过该绑定）
+    local function GetUserKeybind(actionName, fallback)
+        if ADT.Keybinds and ADT.Keybinds.GetKeybind then
+            local key = ADT.Keybinds:GetKeybind(actionName)
+            return (key and key ~= "") and key or nil
+        end
+        return fallback
+    end
+
+    -- 仅注册不由 Keybinds 模块管理的固定绑定
+    -- 所有动态快捷键（Copy、Paste、Cut、Store 等）由 Keybinds.lua 统一管理
     local OVERRIDE_KEYS = {
-        -- 仅强制覆盖这六大类：S/R/X/C/V/D + Q
-        -- 临时板：存入/取出
-        { key = "CTRL-S", button = function() return btnTempStore end },
-        { key = "CTRL-R", button = function() return btnTempRecall end },
-        -- 住宅剪切板：复制/粘贴/剪切
-        { key = "CTRL-C", button = function() return btnCopy end },
-        { key = "CTRL-V", button = function() return btnPaste end },
-        { key = "CTRL-X", button = function() return btnCut end },
-        -- 住宅：悬停复制同款（新的默认：CTRL-D）
-        { key = "CTRL-D", button = function() return btnDuplicate end },
-        -- 设置面板：开关（等价 /adt）
-        { key = "CTRL-Q", button = function() return btnToggleUI end },
-        -- 一键重置变换
-        { key = "T", button = function() return btnResetSubmode end },
-        { key = "CTRL-T", button = function() return btnResetAll end },
-        -- 误操作保护：锁定/解锁
-        { key = "L", button = function() return btnToggleLock end },
-        -- 旋转 90°（Q/E）：仅在房屋编辑器内生效
-        { key = "Q", button = function() return btnRotateQ end },
-        { key = "E", button = function() return btnRotateE end },
+        -- 设置面板切换（不在 Keybinds 中管理，始终固定）
+        { key = "CTRL-Q", button = function() return btnToggleUI end, fixed = true },
+        -- 误操作保护锁定/解锁（可由设置开关控制）
+        { key = "L", button = function() return btnToggleLock end, fixed = true, dbKey = "EnableLock" },
+        -- 旋转 90°（可由设置开关控制）
+        { key = "Q", button = function() return btnRotateQ end, fixed = true, dbKey = "EnableQERotate" },
+        { key = "E", button = function() return btnRotateE end, fixed = true, dbKey = "EnableQERotate" },
     }
 
     function EL:ClearOverrides()
@@ -1917,29 +1915,20 @@ do
     function EL:ApplyOverrides()
         EnsureOwner()
         ClearOverrideBindings(owner)
-        -- 注意：优先级覆盖，确保高于默认与其他非优先覆盖
+        -- 仅注册固定绑定（动态快捷键由 Keybinds.lua 统一管理）
         for _, cfg in ipairs(OVERRIDE_KEYS) do
             local btn = cfg.button()
             local allowed = true
-            if cfg.key == "T" then
-                local en = ADT.GetDBValue("EnableResetT")
+            local key = cfg.key
+            
+            if cfg.dbKey then
+                local en = ADT.GetDBValue(cfg.dbKey)
                 if en == nil then en = true end
                 allowed = en
-            elseif cfg.key == "CTRL-T" then
-                local en2 = ADT.GetDBValue("EnableResetAll")
-                if en2 == nil then en2 = true end
-                allowed = en2
-            elseif cfg.key == "L" then
-                local en3 = ADT.GetDBValue("EnableLock")
-                if en3 == nil then en3 = true end
-                allowed = en3
-            elseif cfg.key == "Q" or cfg.key == "E" then
-                local en4 = ADT.GetDBValue("EnableQERotate")
-                if en4 == nil then en4 = true end
-                allowed = en4
             end
-            if btn and allowed then
-                SetOverrideBindingClick(owner, true, cfg.key, btn:GetName())
+            
+            if btn and allowed and key and key ~= "" then
+                SetOverrideBindingClick(owner, true, key, btn:GetName())
             end
         end
     end

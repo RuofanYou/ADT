@@ -2445,6 +2445,168 @@ do  -- Central
         self.ModuleTab.ScrollView:SetContent(content, false)
         if self.UpdateAutoWidth then self:UpdateAutoWidth() end
     end
+
+    -- 显示快捷键分类
+    function MainFrame:ShowKeybindsCategory(categoryKey)
+        if ADT and ADT.DebugPrint then
+            ADT.DebugPrint("[ShowKeybindsCategory] called with key=" .. tostring(categoryKey))
+        end
+        if not (self.ModuleTab and self.ModuleTab.ScrollView) then
+            if ADT and ADT.DebugPrint then
+                ADT.DebugPrint("[ShowKeybindsCategory] RETURN: ModuleTab/ScrollView not ready")
+            end
+            self.__pendingTabKey = categoryKey
+            return
+        end
+        local cat = CommandDock:GetCategoryByKey(categoryKey)
+        if ADT and ADT.DebugPrint then
+            ADT.DebugPrint("[ShowKeybindsCategory] cat=" .. tostring(cat and "found" or "nil") .. ", categoryType=" .. tostring(cat and cat.categoryType or "nil"))
+        end
+        if not cat or cat.categoryType ~= 'keybinds' then
+            if ADT and ADT.DebugPrint then
+                ADT.DebugPrint("[ShowKeybindsCategory] RETURN: not keybinds type")
+            end
+            return
+        end
+        
+        self.currentDecorCategory = nil
+        self.currentAboutCategory = nil
+        self.currentKeybindsCategory = categoryKey
+        self.currentSettingsCategory = nil
+        if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', categoryKey) end
+        
+        local content = {}
+        local n = 0
+        local buttonHeight = Def.ButtonSize
+        local fromOffsetY = Def.ButtonSize
+        local offsetY = fromOffsetY
+        local offsetX = GetRightPadding()
+        
+        -- 添加标题
+        n = n + 1
+        content[n] = {
+            dataIndex = n,
+            templateKey = "Header",
+            setupFunc = function(obj)
+                obj:SetText(cat.categoryName)
+                if obj.Left then obj.Left:Hide() end
+                if obj.Right then obj.Right:Hide() end
+                if obj.Divider then obj.Divider:Show() end
+                obj.Label:SetJustifyH("LEFT")
+            end,
+            point = "TOPLEFT",
+            relativePoint = "TOPLEFT",
+            top = offsetY,
+            bottom = offsetY + Def.ButtonSize,
+            offsetX = GetRightPadding(),
+        }
+        offsetY = offsetY + Def.ButtonSize
+        
+        -- 获取所有快捷键动作
+        local actions = ADT.Keybinds and ADT.Keybinds.GetAllActions and ADT.Keybinds:GetAllActions() or {}
+        
+        if ADT and ADT.DebugPrint then
+            ADT.DebugPrint("[ShowKeybindsCategory] ADT.Keybinds exists=" .. tostring(ADT.Keybinds ~= nil) .. ", actions count=" .. tostring(#actions))
+        end
+        
+        if #actions == 0 then
+            -- 快捷键模块未加载
+            n = n + 1
+            content[n] = {
+                dataIndex = n,
+                templateKey = "Header",
+                setupFunc = function(obj)
+                    obj:SetText((ADT.L and ADT.L['Keybinds Module Not Loaded']) or "快捷键模块未加载")
+                    SetTextColor(obj.Label, Def.TextColorDisabled)
+                    if obj.Left then obj.Left:Hide() end
+                    if obj.Right then obj.Right:Hide() end
+                    if obj.Divider then obj.Divider:Hide() end
+                    obj.Label:SetJustifyH("LEFT")
+                end,
+                point = "TOPLEFT",
+                relativePoint = "TOPLEFT",
+                top = offsetY,
+                bottom = offsetY + buttonHeight,
+                offsetX = offsetX,
+            }
+        else
+            -- 渲染快捷键列表
+            for _, actionInfo in ipairs(actions) do
+                n = n + 1
+                local top = offsetY
+                local bottom = offsetY + buttonHeight + 2
+                local capAction = actionInfo  -- 捕获
+                content[n] = {
+                    dataIndex = n,
+                    templateKey = "KeybindEntry",
+                    setupFunc = function(obj)
+                        obj:SetKeybindData(capAction)
+                    end,
+                    point = "TOPLEFT",
+                    relativePoint = "TOPLEFT",
+                    top = top,
+                    bottom = bottom,
+                    offsetX = offsetX,
+                }
+                offsetY = bottom
+            end
+            
+            -- 底部提示
+            offsetY = offsetY + Def.ButtonSize
+            n = n + 1
+            content[n] = {
+                dataIndex = n,
+                templateKey = "Header",
+                setupFunc = function(obj)
+                    obj:SetText((ADT.L and ADT.L['Keybinds Housing Only Hint']) or "⚠️ 这些快捷键仅在住宅编辑模式下生效")
+                    SetTextColor(obj.Label, Def.TextColorWarn or {1, 0.82, 0})
+                    if obj.Left then obj.Left:Hide() end
+                    if obj.Right then obj.Right:Hide() end
+                    if obj.Divider then obj.Divider:Hide() end
+                    obj.Label:SetJustifyH("LEFT")
+                end,
+                point = "TOPLEFT",
+                relativePoint = "TOPLEFT",
+                top = offsetY,
+                bottom = offsetY + buttonHeight,
+                offsetX = offsetX,
+            }
+            
+            -- 恢复默认按钮
+            offsetY = offsetY + buttonHeight + 8
+            n = n + 1
+            content[n] = {
+                dataIndex = n,
+                templateKey = "Header",
+                setupFunc = function(obj)
+                    obj:SetText((ADT.L and ADT.L['Reset All Keybinds']) or "[ 恢复默认 ]")
+                    SetTextColor(obj.Label, {0.6, 0.8, 1})
+                    if obj.Left then obj.Left:Hide() end
+                    if obj.Right then obj.Right:Hide() end
+                    if obj.Divider then obj.Divider:Hide() end
+                    obj.Label:SetJustifyH("CENTER")
+                    -- 可点击恢复默认
+                    obj:SetScript("OnMouseDown", function()
+                        if ADT.Keybinds and ADT.Keybinds.ResetAllToDefaults then
+                            ADT.Keybinds:ResetAllToDefaults()
+                            if ADT.Notify then ADT.Notify((ADT.L and ADT.L['Keybinds Reset Done']) or "快捷键已恢复默认") end
+                            -- 刷新列表
+                            MainFrame:ShowKeybindsCategory(categoryKey)
+                        end
+                    end)
+                    obj:EnableMouse(true)
+                end,
+                point = "TOPLEFT",
+                relativePoint = "TOPLEFT",
+                top = offsetY,
+                bottom = offsetY + buttonHeight,
+                offsetX = offsetX,
+            }
+        end
+        
+        self.ModuleTab.ScrollView:SetContent(content, false)
+        if self.UpdateAutoWidth then self:UpdateAutoWidth() end
+    end
 end
 
 
@@ -2602,6 +2764,7 @@ local function CreateUI()
             accumulate("Entry")
             accumulate("DecorItem")
             accumulate("Header")
+            accumulate("KeybindEntry")
         end
 
         -- 合并 SubPanel 的宽度需求（由 SubPanel 自行测量并上报）
@@ -2818,6 +2981,237 @@ local function CreateUI()
         end
 
         ScrollView:AddTemplate("DecorItem", DecorItem_Create)
+
+        -- 快捷键条目模板（用于快捷键分类）
+        local KeybindEntryMixin = {}
+        
+        function KeybindEntryMixin:SetKeybindData(actionInfo)
+            self.actionInfo = actionInfo
+            self.actionName = actionInfo.name
+            
+            -- 更新显示
+            if self.ActionLabel then
+                self.ActionLabel:SetText(actionInfo.displayName or actionInfo.name)
+            end
+            if self.KeyLabel then
+                local keyText = actionInfo.keyDisplay or ""
+                if keyText == "" then
+                    keyText = (ADT.L and ADT.L['Not Set']) or "未设置"
+                    SetTextColor(self.KeyLabel, Def.TextColorDisabled or {0.5, 0.5, 0.5})
+                else
+                    SetTextColor(self.KeyLabel, {1, 0.82, 0}) -- 金色
+                end
+                self.KeyLabel:SetText(keyText)
+            end
+            self:UpdateRecordingState(false)
+        end
+        
+        function KeybindEntryMixin:UpdateRecordingState(isRecording)
+            self.isRecording = isRecording
+            if isRecording then
+                -- 录制中状态
+                if self.KeyLabel then
+                    self.KeyLabel:SetText((ADT.L and ADT.L['Press Key']) or "按下按键...")
+                    SetTextColor(self.KeyLabel, {1, 0.82, 0}) -- 金色
+                end
+                if self.KeyBorder then
+                    self.KeyBorder:SetColorTexture(1, 0.82, 0, 1)  -- 金色边框
+                end
+                if self.HintLabel then
+                    self.HintLabel:SetText((ADT.L and ADT.L['ESC Cancel']) or "或按 Escape 取消")
+                    self.HintLabel:SetTextColor(1, 0.82, 0, 1)  -- 金色
+                end
+            else
+                -- 恢复正常状态
+                if self.KeyBorder then
+                    self.KeyBorder:SetColorTexture(0.3, 0.3, 0.3, 1)  -- 灰色边框
+                end
+                if self.HintLabel then
+                    self.HintLabel:SetText("")
+                end
+            end
+        end
+        
+        function KeybindEntryMixin:OnRecordButtonClick()
+            if self.isRecording then
+                -- 取消录制
+                self:UpdateRecordingState(false)
+                self:SetKeybindData(self.actionInfo)  -- 恢复原显示
+                MainFrame._recordingKeybindEntry = nil
+            else
+                -- 开始录制
+                -- 先取消其他正在录制的条目
+                if MainFrame._recordingKeybindEntry and MainFrame._recordingKeybindEntry ~= self then
+                    MainFrame._recordingKeybindEntry:UpdateRecordingState(false)
+                    MainFrame._recordingKeybindEntry:SetKeybindData(MainFrame._recordingKeybindEntry.actionInfo)
+                end
+                MainFrame._recordingKeybindEntry = self
+                self:UpdateRecordingState(true)
+            end
+        end
+        
+        function KeybindEntryMixin:OnClearButtonClick()
+            if self.actionName and ADT.Keybinds then
+                ADT.Keybinds:SetKeybind(self.actionName, "")
+                -- 刷新显示
+                local newInfo = {
+                    name = self.actionName,
+                    displayName = ADT.Keybinds:GetActionDisplayName(self.actionName),
+                    key = "",
+                    keyDisplay = "",
+                }
+                self:SetKeybindData(newInfo)
+            end
+        end
+        
+        function KeybindEntryMixin:OnKeyDown(key)
+            if not self.isRecording then return end
+            
+            -- 忽略单独的修饰键
+            if key == "LSHIFT" or key == "RSHIFT" or key == "SHIFT" then return end
+            if key == "LCTRL" or key == "RCTRL" or key == "CTRL" then return end
+            if key == "LALT" or key == "RALT" or key == "ALT" then return end
+            if key == "ESCAPE" then
+                -- ESC 取消录制
+                self:UpdateRecordingState(false)
+                self:SetKeybindData(self.actionInfo)
+                MainFrame._recordingKeybindEntry = nil
+                return
+            end
+            
+            -- 构建按键字符串
+            local modifiers = ""
+            if IsControlKeyDown() then modifiers = modifiers .. "CTRL-" end
+            if IsShiftKeyDown() then modifiers = modifiers .. "SHIFT-" end
+            if IsAltKeyDown() then modifiers = modifiers .. "ALT-" end
+            
+            local finalKey = modifiers .. key
+            
+            -- 保存按键
+            if self.actionName and ADT.Keybinds then
+                ADT.Keybinds:SetKeybind(self.actionName, finalKey)
+                
+                -- 刷新显示
+                local newInfo = {
+                    name = self.actionName,
+                    displayName = ADT.Keybinds:GetActionDisplayName(self.actionName),
+                    key = finalKey,
+                    keyDisplay = ADT.Keybinds:GetKeyDisplayName(finalKey),
+                }
+                self:SetKeybindData(newInfo)
+            end
+            
+            self:UpdateRecordingState(false)
+            MainFrame._recordingKeybindEntry = nil
+        end
+
+        function KeybindEntryMixin:GetDesiredWidth()
+            -- 计算所需宽度：动作名(140) + 间距(8) + 按键框(100) + 间距(8) + 提示文本(120) + 右边距(16)
+            -- = 140 + 8 + 100 + 8 + 120 + 16 = 392
+            return 400
+        end
+
+        local function KeybindEntry_Create()
+            local f = CreateFrame("Button", nil, ScrollView)
+            Mixin(f, KeybindEntryMixin)
+            f:SetSize(MainFrame.centerButtonWidth or Def.centerButtonWidth, Def.ButtonSize)
+            f:EnableMouse(true)
+            f:EnableKeyboard(true)
+            f:SetPropagateKeyboardInput(true)
+            f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+            
+            -- 背景
+            local bg = f:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            bg:SetColorTexture(0, 0, 0, 0.1)
+            f.Background = bg
+            
+            -- 动作名称标签（左侧）
+            local actionLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            actionLabel:SetPoint("LEFT", f, "LEFT", 8, 0)
+            actionLabel:SetWidth(140)
+            actionLabel:SetJustifyH("LEFT")
+            f.ActionLabel = actionLabel
+            
+            -- 按键框容器（模拟魔兽原生样式）
+            local keyBox = CreateFrame("Button", nil, f)
+            keyBox:SetSize(100, 22)
+            keyBox:SetPoint("LEFT", actionLabel, "RIGHT", 8, 0)
+            keyBox:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+            f.KeyBox = keyBox
+            
+            -- 按键框背景（深色边框）
+            local keyBg = keyBox:CreateTexture(nil, "BACKGROUND")
+            keyBg:SetAllPoints()
+            keyBg:SetColorTexture(0.05, 0.05, 0.05, 0.9)
+            f.KeyBackground = keyBg
+            
+            -- 按键框边框
+            local keyBorder = keyBox:CreateTexture(nil, "BORDER")
+            keyBorder:SetAllPoints()
+            keyBorder:SetColorTexture(0.3, 0.3, 0.3, 1)
+            keyBorder:SetDrawLayer("BORDER", -1)
+            f.KeyBorder = keyBorder
+            
+            -- 内边框（让背景看起来有边框）
+            local keyInner = keyBox:CreateTexture(nil, "ARTWORK")
+            keyInner:SetPoint("TOPLEFT", 1, -1)
+            keyInner:SetPoint("BOTTOMRIGHT", -1, 1)
+            keyInner:SetColorTexture(0.08, 0.08, 0.08, 1)
+            f.KeyInner = keyInner
+            
+            -- 按键文本
+            local keyLabel = keyBox:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            keyLabel:SetPoint("CENTER", keyBox, "CENTER", 0, 0)
+            f.KeyLabel = keyLabel
+            
+            -- 提示文本（右侧，魔兽原生风格）
+            local hintLabel = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            hintLabel:SetPoint("LEFT", keyBox, "RIGHT", 8, 0)
+            hintLabel:SetWidth(120)
+            hintLabel:SetJustifyH("LEFT")
+            hintLabel:SetTextColor(0.5, 0.5, 0.5, 1)
+            f.HintLabel = hintLabel
+            
+            -- 按键框点击：左键录制，右键清除
+            keyBox:SetScript("OnClick", function(self, button)
+                if button == "RightButton" then
+                    f:OnClearButtonClick()
+                else
+                    f:OnRecordButtonClick()
+                end
+            end)
+            
+            -- 按键框悬停效果
+            keyBox:SetScript("OnEnter", function(self)
+                if not f.isRecording then
+                    keyBorder:SetColorTexture(0.8, 0.6, 0, 1)  -- 金色边框
+                    f.HintLabel:SetText((ADT.L and ADT.L['Right Click Clear']) or "<右键解除键位>")
+                    f.HintLabel:SetTextColor(0.6, 0.8, 1, 1)  -- 浅蓝色
+                end
+            end)
+            
+            keyBox:SetScript("OnLeave", function(self)
+                if not f.isRecording then
+                    keyBorder:SetColorTexture(0.3, 0.3, 0.3, 1)  -- 恢复灰色
+                    f.HintLabel:SetText("")
+                end
+            end)
+            
+            -- 键盘监听
+            f:SetScript("OnKeyDown", function(self, key)
+                if self.isRecording then
+                    self:SetPropagateKeyboardInput(false)
+                    self:OnKeyDown(key)
+                else
+                    self:SetPropagateKeyboardInput(true)
+                end
+            end)
+            
+            return f
+        end
+        
+        ScrollView:AddTemplate("KeybindEntry", KeybindEntry_Create)
     end
 
 
@@ -2871,6 +3265,9 @@ local function CreateUI()
             MainFrame:HighlightCategoryByKey(key)
         elseif cat and cat.categoryType == 'about' then
             MainFrame:ShowAboutCategory(key)
+            MainFrame:HighlightCategoryByKey(key)
+        elseif cat and cat.categoryType == 'keybinds' then
+            MainFrame:ShowKeybindsCategory(key)
             MainFrame:HighlightCategoryByKey(key)
         elseif cat and cat.categoryType == 'settings' then
             MainFrame:ShowSettingsCategory(key)
@@ -3084,8 +3481,25 @@ do
                 local shouldAutoOpen = (v ~= false)
                 if shouldAutoOpen then
                     C_Timer.After(0, function()
-                        MainFrame:ShowSettingsCategory('Housing')
-                        if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', 'Housing') end
+                        -- 优先恢复上次停留的分类；若无记录再回退到“通用”。
+                        local key = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or 'Housing'
+                        local cat = CommandDock and CommandDock.GetCategoryByKey and CommandDock:GetCategoryByKey(key)
+                        if not cat then
+                            key = 'Housing'
+                            cat = CommandDock and CommandDock.GetCategoryByKey and CommandDock:GetCategoryByKey(key)
+                        end
+                        if cat then
+                            if cat.categoryType == 'decorList' and MainFrame.ShowDecorListCategory then
+                                MainFrame:ShowDecorListCategory(key)
+                            elseif cat.categoryType == 'about' and MainFrame.ShowAboutCategory then
+                                MainFrame:ShowAboutCategory(key)
+                            elseif cat.categoryType == 'keybinds' and MainFrame.ShowKeybindsCategory then
+                                MainFrame:ShowKeybindsCategory(key)
+                            elseif MainFrame.ShowSettingsCategory then
+                                MainFrame:ShowSettingsCategory(key)
+                            end
+                            if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', key) end
+                        end
                     end)
                 end
                 -- 应用默认显隐（只影响 Dock 主体，不影响 SubPanel）

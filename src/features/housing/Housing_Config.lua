@@ -25,7 +25,7 @@ local CFG = {
         dockMinCenterWidth = 300,
         -- Dock 主体“总宽度”相对当前视口宽度的最大占比（0~1）。
         -- 设为 0 或 nil 表示不以比例限制，仅受屏幕边距与内容驱动。
-        dockMaxTotalWidthRatio = 0.4,
+        dockMaxTotalWidthRatio = 0.5,
         -- 子面板在计算“所需中心宽度”时的硬上限占比（防极端超长 token 拉爆）。
         -- 仅用于 SubPanel 内部测量，不直接决定 Dock 总宽。
         subPanelMaxViewportRatio = 0.80,

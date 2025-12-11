@@ -45,10 +45,16 @@ function ADT.ToggleMainUI()
     else
         -- 无论默认开关如何，手动打开应当强制显示主体
         if UI and UI.SetMainPanelsVisible then UI.SetMainPanelsVisible(true) end
-        -- 首次手动打开时，若没有当前分类，则聚焦“通用”
+        -- 首次手动打开时，若没有当前分类，则聚焦“通用”（但不覆盖已有的 LastCategoryKey）
         if Main.ShowSettingsCategory and not (Main.currentSettingsCategory or Main.currentDecorCategory or Main.currentAboutCategory) then
-            Main:ShowSettingsCategory('Housing')
-            if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', 'Housing') end
+            local saved = ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')
+            if saved and type(saved) == 'string' then
+                -- 交由 DockUI 的 OnShow 统一根据分类类型展示（单一权威）
+                Main:ShowUI(inEditor and "editor" or "standalone")
+            else
+                Main:ShowSettingsCategory('Housing')
+                if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', 'Housing') end
+            end
         end
     end
 end

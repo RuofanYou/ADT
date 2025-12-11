@@ -136,6 +136,8 @@ local function CreateCategoryButton(parent)
             main:ShowDecorListCategory(self.categoryKey)
         elseif cat and cat.categoryType == 'about' and main.ShowAboutCategory then
             main:ShowAboutCategory(self.categoryKey)
+        elseif cat and cat.categoryType == 'keybinds' and main.ShowKeybindsCategory then
+            main:ShowKeybindsCategory(self.categoryKey)
         elseif main.ShowSettingsCategory then
             main:ShowSettingsCategory(self.categoryKey)
         end
