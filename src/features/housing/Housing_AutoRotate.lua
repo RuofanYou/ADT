@@ -612,10 +612,7 @@ local function RegisterSettings()
         name = L["Enable Auto Rotate on CTRL"] or "Enable Auto Rotate (Batch)",
         dbKey = 'EnableAutoRotateOnCtrlPlace',
         description = L["Enable Auto Rotate on CTRL tooltip"] or "When holding CTRL to batch place, the decor will be auto-rotated at grab time.",
-        toggleFunc = function(state)
-            ADT.SetDBValue('EnableAutoRotateOnCtrlPlace', state)
-            if ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then ADT.AutoRotate:LoadSettings() end
-        end,
+        -- 无需 toggleFunc：由 Settings 总线刷新模块
         categoryKeys = { 'AutoRotate' },
         uiOrder = uiOrderBase,
     })
@@ -631,10 +628,6 @@ local function RegisterSettings()
             { value = 'sequence',text = L["Mode Sequence"] or "Sequence" },
         },
         description = L["Auto Rotate Mode tooltip"] or "Preset: always rotate by the specified degrees. Learn: reuse the last rotation you used before placing. Sequence: cycle through configured angles.",
-        toggleFunc = function(value)
-            ADT.SetDBValue('AutoRotateMode', value)
-            if ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then ADT.AutoRotate:LoadSettings() end
-        end,
         categoryKeys = { 'AutoRotate' },
         uiOrder = uiOrderBase + 1,
     })
@@ -651,10 +644,6 @@ local function RegisterSettings()
             return t
         end)(),
         description = L["Preset Angle tooltip"] or "Used when Mode=Preset.",
-        toggleFunc = function(value)
-            ADT.SetDBValue('AutoRotatePresetDegrees', value)
-            if ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then ADT.AutoRotate:LoadSettings() end
-        end,
         categoryKeys = { 'AutoRotate' },
         uiOrder = uiOrderBase + 2,
     })
@@ -696,11 +685,6 @@ local function RegisterSettings()
                     if #list > 0 then
                         local norm = table.concat(list, ",")
                         ADT.SetDBValue('AutoRotateSequence', norm)
-                        if owner and owner.data and owner.data.toggleFunc then
-                            owner.data.toggleFunc(norm)
-                        elseif ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then
-                            ADT.AutoRotate:LoadSettings()
-                        end
                         if owner and owner.UpdateDropdownLabel then
                             owner:UpdateDropdownLabel()
                         end
@@ -734,10 +718,7 @@ local function RegisterSettings()
             { value = "0,60,120,180",     text = "0°,60°,120°,180°" },
         },
         description = L["Sequence Angles tooltip"] or "Used when Mode=Sequence. Will cycle each time you grab a preview.",
-        toggleFunc = function(value)
-            ADT.SetDBValue('AutoRotateSequence', value)
-            if ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then ADT.AutoRotate:LoadSettings() end
-        end,
+        -- 无需 toggleFunc：由 Settings 总线刷新模块
         -- 自定义：在下拉菜单尾部追加“自定义…”按钮
         dropdownBuilder = function(owner, root)
             -- 注意：此处由 SettingsPanel 传入 owner（即条目按钮本体）。
@@ -746,16 +727,9 @@ local function RegisterSettings()
                 return ADT.GetDBValue('AutoRotateSequence') == value
             end
             local function SetSelected(value)
-                -- 1) 更新配置（silent=true 防止重复刷新）
+                -- 更新配置（silent=true 防止重复刷新）
                 ADT.SetDBValue('AutoRotateSequence', value, true)
-                -- 2) 复用模块的 toggleFunc 以保持单一权威（而不是在此复制逻辑）
-                if owner and owner.data and owner.data.toggleFunc then
-                    owner.data.toggleFunc(value)
-                elseif ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then
-                    -- 兜底：旧结构兼容（仍然调一次加载）
-                    ADT.AutoRotate:LoadSettings()
-                end
-                -- 3) 立刻刷新该条目的标签文本，使用户看到实时变更
+                -- 立刻刷新该条目的标签文本，使用户看到实时变更
                 if owner and owner.UpdateDropdownLabel then
                     owner:UpdateDropdownLabel()
                 end
@@ -793,10 +767,6 @@ local function RegisterSettings()
             { value = 'all',       text = L["Scope All Starts"] or "All Start Paths" },
         },
         description = L["Apply Scope tooltip"] or "Only CTRL Batch Place: apply when CTRL is held. All Start Paths: also apply to catalog/history/clipboard/duplicate.",
-        toggleFunc = function(value)
-            ADT.SetDBValue('AutoRotateApplyScope', value)
-            if ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then ADT.AutoRotate:LoadSettings() end
-        end,
         categoryKeys = { 'AutoRotate' },
         uiOrder = uiOrderBase + 4,
     })
@@ -815,10 +785,6 @@ local function RegisterSettings()
             { value = 30,  text = "30°" },
         },
         description = L["Rotation Step tooltip"] or "One unit sent to RotateDecor() equals this many degrees in Basic Mode. Adjust to match your client feel.",
-        toggleFunc = function(value)
-            ADT.SetDBValue('AutoRotateStepDegrees', tonumber(value))
-            if ADT and ADT.AutoRotate and ADT.AutoRotate.LoadSettings then ADT.AutoRotate:LoadSettings() end
-        end,
         categoryKeys = { 'AutoRotate' },
         uiOrder = uiOrderBase + 5,
     })

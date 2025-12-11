@@ -44,7 +44,8 @@ local DEFAULTS = {
     -- 语言选择（nil=跟随客户端）
     SelectedLanguage = nil,
     -- 自动旋转（批量放置增强）默认配置（顶层仅放“显式可见的用户选项”）
-    EnableAutoRotateOnCtrlPlace = true,
+    -- 默认关闭：仅当用户主动开启时才生效
+    EnableAutoRotateOnCtrlPlace = false,
     AutoRotateMode = "preset",         -- 可选："preset" | "learn" | "sequence"
     AutoRotatePresetDegrees = 90,       -- 预设角度（度）
     AutoRotateSequence = "0,90",       -- 序列（逗号分隔），仅在 mode=sequence 生效
@@ -370,6 +371,38 @@ f:SetScript("OnEvent", function(self, event, addonName)
         -- 广播当前所有设置值，驱动已注册的 on-change 监听者（例如模块自身加载刷新）
         if ADT.Settings and ADT.Settings.ApplyAll then
             ADT.Settings.ApplyAll()
+        end
+        -- 语言选择订阅：当 SelectedLanguage 变化时，重建模块并刷新 UI 文案
+        if ADT.Settings and ADT.Settings.On then
+            ADT.Settings.On('SelectedLanguage', function(newValue)
+                if ADT and ADT.ApplyLocale then
+                    local locale = newValue or (ADT.GetActiveLocale and ADT.GetActiveLocale())
+                    ADT.ApplyLocale(locale)
+                end
+                if ADT and ADT.CommandDock then
+                    local CC = ADT.CommandDock
+                    if CC and CC.RebuildModules then CC:RebuildModules() end
+                    local Main = CC and CC.SettingsPanel
+                    local canRefresh = Main and Main.ModuleTab and Main.ModuleTab.ScrollView
+                    if canRefresh then
+                        if Main.RefreshCategoryList then Main:RefreshCategoryList() end
+                        local key = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or Main.currentSettingsCategory or Main.currentDecorCategory or Main.currentAboutCategory
+                        if key and CC and CC.GetCategoryByKey then
+                            local cat = CC:GetCategoryByKey(key)
+                            if cat and cat.categoryType == 'decorList' and Main.ShowDecorListCategory then
+                                Main:ShowDecorListCategory(key)
+                            elseif cat and cat.categoryType == 'about' and Main.ShowAboutCategory then
+                                Main:ShowAboutCategory(key)
+                            elseif Main.ShowSettingsCategory then
+                                Main:ShowSettingsCategory((cat and cat.categoryType=='settings') and key or 'Housing')
+                            end
+                        end
+                        if Main.RefreshLanguageLayout then Main:RefreshLanguageLayout(true) end
+                    end
+                end
+                if ADT and ADT.Housing and ADT.Housing.OnLocaleChanged then ADT.Housing:OnLocaleChanged() end
+                if ADT and ADT.Favorites and ADT.Favorites.OnLocaleChanged then ADT.Favorites:OnLocaleChanged() end
+            end)
         end
         -- 若控制中心已构建，刷新一次分类与条目（避免语言切换后残留旧文案）
         if ADT.CommandDock and ADT.CommandDock.SettingsPanel then

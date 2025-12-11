@@ -1195,7 +1195,7 @@ do
         self:UpdateVisual()
     end
 
-    function EntryButtonMixin:OnClick()
+    function EntryButtonMixin:OnClick(button)
         if ADT and ADT.DebugPrint then
             ADT.DebugPrint("[SettingsPanel] OnClick dbKey=" .. tostring(self.dbKey)
                 .." focus="..tostring(GetMouseFocus and (GetMouseFocus():GetName() or "<anon>") or "?"))
@@ -1238,15 +1238,13 @@ do
                 end)
                 return  -- 不需要执行后续的 UpdateSettingsEntries
             -- 普通复选框类型
-            elseif self.data.toggleFunc then
+            else
+                -- 通用复选框：无 toggleFunc 也能持久化并广播
                 local newState = not GetDBBool(self.dbKey)
                 ADT.SetDBValue(self.dbKey, newState, true)
-                self.data.toggleFunc(newState)
-                if newState then
-                    if ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.checkbox.on') end
-                else
-                    if ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.checkbox.off') end
-                end
+                if self.data.toggleFunc then self.data.toggleFunc(newState) end
+                if newState then if ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.checkbox.on') end
+                else if ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.checkbox.off') end end
             end
         end
 
@@ -1277,6 +1275,44 @@ do
             return
         end
         
+        -- 只读项
+        if self.data and self.data.type == 'readonly' then
+            if self.Box then self.Box:Hide() end
+            if self.Check then self.Check:Hide() end
+            self.OptionToggle:Hide()
+            self:Disable()
+            SetTextColor(self.Label, Def.TextColorDisabled)
+            return
+        end
+
+        -- 数值微调器：以 Name：value 形式显示，左键+step，右键-step
+        if self.data and self.data.type == 'number' then
+            if self.Box then self.Box:Hide() end
+            if self.Check then self.Check:Hide() end
+            self.OptionToggle:Hide()
+            self:Enable()
+            local v = tonumber(ADT.GetDBValue(self.dbKey)) or tonumber(self.data.default) or 0
+            local fmt = self.data.format or "%s：%s"
+            self.Label:SetText(string.format(fmt, self.data.name, tostring(v)))
+            -- 覆写点击：左加右减
+            self:SetScript("OnClick", function(_, btn)
+                local minv = tonumber(self.data.min) or -math.huge
+                local maxv = tonumber(self.data.max) or math.huge
+                local step = tonumber(self.data.step) or 1
+                if IsShiftKeyDown and IsShiftKeyDown() then
+                    local mul = tonumber(self.data.shiftStepMul) or 5
+                    step = step * mul
+                end
+                local nv = v
+                if btn == "RightButton" then nv = v - step else nv = v + step end
+                if nv < minv then nv = minv elseif nv > maxv then nv = maxv end
+                v = nv
+                ADT.SetDBValue(self.dbKey, v, true)
+                self.Label:SetText(string.format(fmt, self.data.name, tostring(v)))
+            end)
+            return
+        end
+
         -- 下拉菜单类型：显示下拉箭头，使用柔和金色文字
         if self.data and self.data.type == 'dropdown' then
             -- 下拉项不显示左侧复选框/对勾，也不显示右侧更多按钮图标
@@ -1341,6 +1377,7 @@ do
     function CreateSettingsEntry(parent)
         local f = CreateFrame("Button", nil, parent, "ADTSettingsPanelEntryTemplate")
         Mixin(f, EntryButtonMixin)
+        if f.RegisterForClicks then f:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
         f:SetMotionScriptsWhileDisabled(true)
         f:SetScript("OnEnter", f.OnEnter)
         f:SetScript("OnLeave", f.OnLeave)
@@ -2930,6 +2967,15 @@ local function CreateUI()
             MainFrame:RefreshCategoryList()
         end
     end
+end
+
+-- 订阅“进入编辑器自动打开 Dock”设置，实时应用默认显隐
+if ADT and ADT.Settings and ADT.Settings.On then
+    ADT.Settings.On('EnableDockAutoOpenInEditor', function()
+        if ADT and ADT.DockUI and ADT.DockUI.ApplyPanelsDefaultVisibility then
+            ADT.DockUI.ApplyPanelsDefaultVisibility()
+        end
+    end)
 end
 
 function MainFrame:UpdateLayout()

@@ -244,16 +244,7 @@ local function buildModules()
         name = (L and L["Auto Open Dock in Editor"]) or "Open Dock on entering editor",
         dbKey = 'EnableDockAutoOpenInEditor',
         description = (L and L["Auto Open Dock in Editor tooltip"]) or "Open ADT Dock automatically when entering the editor; manual Ctrl+Q or /adt unaffected.",
-        toggleFunc = function(state)
-            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableDockAutoOpenInEditor', state) end
-            if ADT and ADT.DebugPrint then ADT.DebugPrint(string.format("[Toggle] %s=%s", 'EnableDockAutoOpenInEditor', tostring(state))) end
-            -- 选项语义修正：仅影响“Dock 主体”默认显隐，不影响 SubPanel/清单。
-            -- 运行时切换时，立刻应用到当前编辑器会话。
-            if ADT and ADT.DockUI and ADT.DockUI.ApplyPanelsDefaultVisibility then
-                ADT.DockUI.ApplyPanelsDefaultVisibility()
-            end
-            -- 若用户是在非编辑器环境下切换，不做额外动作；在编辑器中切换，只调整主体显隐。
-        end,
+        -- 无需 toggleFunc：改为订阅 ADT.Settings（见 DockUI 绑定）
         categoryKeys = { 'Housing' },
         uiOrder = 0,
     }
@@ -263,12 +254,7 @@ local function buildModules()
         name = (L and L["Enable Duplicate"]) or "启用复制",
         dbKey = 'EnableDupe',
         description = (L and L["Enable Duplicate tooltip"]) or "悬停装饰时按 CTRL+D 可快速放置相同装饰",
-        toggleFunc = function(state)
-            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableDupe', state) end
-            dbgToggle('EnableDupe', state)
-            if ADT and ADT.Housing and ADT.Housing.LoadSettings then ADT.Housing:LoadSettings() end
-            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
-        end,
+        -- 统一持久化 + 模块订阅，无需 toggleFunc
         categoryKeys = { 'Housing' },
         uiOrder = 1,
     }
@@ -277,11 +263,6 @@ local function buildModules()
         name = (L and L["Enable Copy"]) or "启用复制",
         dbKey = 'EnableCopy',
         description = (L and L["Enable Copy tooltip"]) or "悬停或选中装饰时按 CTRL+C 可复制到剪切板",
-        toggleFunc = function(state)
-            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableCopy', state) end
-            dbgToggle('EnableCopy', state)
-            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
-        end,
         categoryKeys = { 'Housing' },
         uiOrder = 2,
     }
@@ -290,11 +271,6 @@ local function buildModules()
         name = (L and L["Enable Cut"]) or "启用剪切",
         dbKey = 'EnableCut',
         description = (L and L["Enable Cut tooltip"]) or "选中装饰时按 CTRL+X 可剪切（移除并复制到剪切板）",
-        toggleFunc = function(state)
-            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableCut', state) end
-            dbgToggle('EnableCut', state)
-            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
-        end,
         categoryKeys = { 'Housing' },
         uiOrder = 3,
     }
@@ -303,11 +279,6 @@ local function buildModules()
         name = (L and L["Enable Paste"]) or "启用粘贴",
         dbKey = 'EnablePaste',
         description = (L and L["Enable Paste tooltip"]) or "按 CTRL+V 可从剪切板粘贴装饰",
-        toggleFunc = function(state)
-            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnablePaste', state) end
-            dbgToggle('EnablePaste', state)
-            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
-        end,
         categoryKeys = { 'Housing' },
         uiOrder = 4,
     }
@@ -316,12 +287,6 @@ local function buildModules()
         name = (L and L["Enable Batch Place"]) or "启用批量放置",
         dbKey = 'EnableBatchPlace',
         description = (L and L["Enable Batch Place tooltip"]) or "选中装饰后按住 CTRL 点击可连续放置多个相同装饰",
-        toggleFunc = function(state)
-            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableBatchPlace', state) end
-            dbgToggle('EnableBatchPlace', state)
-            -- 和其他热键选项保持一致：切换时刷新提示行显隐
-            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
-        end,
         categoryKeys = { 'Housing' },
         uiOrder = 5,
     }
@@ -332,13 +297,6 @@ local function buildModules()
         name = (L and L["Enable T Reset"]) or "启用 T 重置默认属性",
         dbKey = 'EnableResetT',
         description = (L and L["Enable T Reset tooltip"]) or "在专家模式下按 T 将重置当前子模式的变换；关闭后仅保留 Ctrl+T 的全部重置。",
-        toggleFunc = function(state)
-            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableResetT', state) end
-            dbgToggle('EnableResetT', state)
-            -- 切换后：刷新右侧提示显隐与热键覆盖
-            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
-            if ADT and ADT.Housing and ADT.Housing.RefreshOverrides then ADT.Housing:RefreshOverrides() end
-        end,
         categoryKeys = { 'Housing' },
         uiOrder = 6,
     }
@@ -348,12 +306,6 @@ local function buildModules()
         name = (L and L["Enable CTRL+T Reset All"]) or "启用 CTRL+T 全部重置",
         dbKey = 'EnableResetAll',
         description = (L and L["Enable CTRL+T Reset All tooltip"]) or "在专家模式下按 Ctrl+T 将重置所有变换；关闭后不再显示提示且禁用该热键。",
-        toggleFunc = function(state)
-            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableResetAll', state) end
-            dbgToggle('EnableResetAll', state)
-            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
-            if ADT and ADT.Housing and ADT.Housing.RefreshOverrides then ADT.Housing:RefreshOverrides() end
-        end,
         categoryKeys = { 'Housing' },
         uiOrder = 7,
     }
@@ -363,12 +315,7 @@ local function buildModules()
         name = (L and L["Enable L Lock"]) or "启用 L 以锁定装饰",
         dbKey = 'EnableLock',
         description = (L and L["Enable L Lock tooltip"]) or "按 L 锁定/解锁当前悬停的装饰；关闭后隐藏提示并禁用该热键。",
-        toggleFunc = function(state)
-            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableLock', state) end
-            dbgToggle('EnableLock', state)
-            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
-            if ADT and ADT.Housing and ADT.Housing.RefreshOverrides then ADT.Housing:RefreshOverrides() end
-        end,
+        -- 统一由模块端订阅处理
         categoryKeys = { 'Housing' },
         uiOrder = 8,
     }
@@ -378,12 +325,7 @@ local function buildModules()
         name = (L and L["Enable Q/E Rotate"]) or "启用 Q/E 旋转",
         dbKey = 'EnableQERotate',
         description = (L and L["Enable Q/E Rotate tooltip"]) or "在住宅编辑器内按 Q / E 将当前抓起/选中的装饰旋转 -90° / +90°；关闭后禁用该热键并隐藏相关提示。",
-        toggleFunc = function(state)
-            if ADT and ADT.SetDBValue then ADT.SetDBValue('EnableQERotate', state) end
-            dbgToggle('EnableQERotate', state)
-            if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
-            if ADT and ADT.Housing and ADT.Housing.RefreshOverrides then ADT.Housing:RefreshOverrides() end
-        end,
+        -- 统一由模块端订阅处理
         categoryKeys = { 'Housing' },
         uiOrder = 9,
     }
@@ -399,63 +341,7 @@ local function buildModules()
             { value = "enUS", text = "English" },
         },
         description = (L and L["Language Reload Hint"]) or "部分文字可能需要 /reload 后更新",
-        toggleFunc = function(newValue)
-            if ADT and ADT.SetDBValue then ADT.SetDBValue('SelectedLanguage', newValue) end
-            -- 立即应用新语言
-            if ADT and ADT.ApplyLocale then
-                local locale = newValue or ADT.GetActiveLocale()
-                ADT.ApplyLocale(locale)
-            end
-            -- 重新构建设置模块并刷新当前 UI
-            if ADT and ADT.CommandDock then
-                local CC = ADT.CommandDock
-                if CC and CC.RebuildModules then
-                    CC:RebuildModules()
-                else
-                    -- 旧版本兜底：直接清空，下次访问会重建
-                    CC._sorted = nil
-                    CC._dbKeyMap = nil
-                    CC._providersApplied = nil
-                end
-                local Main = CC.SettingsPanel
-                local canRefresh = Main and Main.ModuleTab and Main.ModuleTab.ScrollView
-                if canRefresh then
-                    if Main.RefreshCategoryList then Main:RefreshCategoryList() end
-                    -- 避免切到“混排视图”，保持当前分类的“单分类渲染”
-                    local key = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or Main.currentSettingsCategory or Main.currentDecorCategory or Main.currentAboutCategory
-                    local cat = key and CC:GetCategoryByKey(key) or nil
-                    if cat and cat.categoryType == 'decorList' and Main.ShowDecorListCategory then
-                        Main:ShowDecorListCategory(key)
-                    elseif cat and cat.categoryType == 'about' and Main.ShowAboutCategory then
-                        Main:ShowAboutCategory(key)
-                    else
-                        -- 默认/设置类：采用单分类渲染
-                        local targetKey = key
-                        if not (cat and cat.categoryType == 'settings') then
-                            -- 找到第一个设置类分类作为回退
-                            for _, info in ipairs(CC:GetSortedModules()) do
-                                if info.categoryType == 'settings' then targetKey = info.key break end
-                            end
-                        end
-                        if targetKey and Main.ShowSettingsCategory then
-                            Main:ShowSettingsCategory(targetKey)
-                        elseif Main.RefreshFeatureList then
-                            -- 极端兜底：仍可用混排视图
-                            Main:RefreshFeatureList()
-                        end
-                    end
-                    if Main.RefreshLanguageLayout then Main:RefreshLanguageLayout(true) end
-                end
-            end
-            -- 通知 Housing 模块刷新右侧提示文本
-            if ADT and ADT.Housing and ADT.Housing.OnLocaleChanged then
-                ADT.Housing:OnLocaleChanged()
-            end
-            -- 通知 Favorites 同步标题/下拉文案
-            if ADT and ADT.Favorites and ADT.Favorites.OnLocaleChanged then
-                ADT.Favorites:OnLocaleChanged()
-            end
-        end,
+        -- 下拉选择只需写入；应用逻辑由 Settings 订阅统一处理
         categoryKeys = { 'Housing' },
         uiOrder = 100,  -- 放在最后
     }

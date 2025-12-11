@@ -38,6 +38,28 @@ end
 local EL = CreateFrame("Frame")
 ADT.Housing = EL
 
+-- 统一：订阅设置变更以刷新提示/热键覆盖
+if ADT and ADT.Settings and ADT.Settings.On then
+    local function refreshHints()
+        if ADT and ADT.Housing and ADT.Housing.UpdateHintVisibility then ADT.Housing:UpdateHintVisibility() end
+    end
+    local function refreshOverrides()
+        if ADT and ADT.Housing and ADT.Housing.RefreshOverrides then ADT.Housing:RefreshOverrides() end
+    end
+    for _, k in ipairs({'EnableDupe','EnableCopy','EnableCut','EnablePaste','EnableBatchPlace'}) do
+        ADT.Settings.On(k, refreshHints)
+    end
+    for _, k in ipairs({'EnableResetT','EnableResetAll','EnableQERotate','EnableLock'}) do
+        ADT.Settings.On(k, function()
+            refreshHints(); refreshOverrides()
+        end)
+    end
+    -- 悬停高亮显隐依赖 LoadSettings 的本地缓存，订阅后即时刷新
+    ADT.Settings.On('EnableHoverHighlight', function()
+        if ADT and ADT.Housing and ADT.Housing.LoadSettings then ADT.Housing:LoadSettings() end
+    end)
+end
+
 -- 语义着色工具（单一权威：颜色定义见 ADT.HousingInstrCFG.Colors）
 local function Colorize(key, text)
     local cfg = ADT and ADT.HousingInstrCFG
