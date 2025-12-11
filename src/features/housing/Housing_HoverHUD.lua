@@ -667,7 +667,7 @@ local function Blizzard_HouseEditor_OnLoaded()
             else
                 keyDisp = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or ((CTRL_KEY_TEXT and (CTRL_KEY_TEXT.."+D")) or "CTRL+D")
             end
-            SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", keyDisp)
+            SubFrame:SetHotkey(L["Duplicate"], keyDisp)
         end
         if SubFrame.LockStatusText then SubFrame.LockStatusText:Hide() end
         -- 新版将库存移动到 InfoLine 显示；隐藏旧的顶部数字
@@ -694,18 +694,18 @@ local function Blizzard_HouseEditor_OnLoaded()
             end
             return fallback
         end
-        prev = addHint(prev, L["Hotkey Cut"] or "Cut",   keyDisp('Cut',   CTRL.."+X"))
-        prev = addHint(prev, L["Hotkey Copy"] or "Copy",  keyDisp('Copy',  CTRL.."+C"))
-        prev = addHint(prev, L["Hotkey Paste"] or "Paste",keyDisp('Paste', CTRL.."+V"))
-        prev = addHint(prev, L["Hotkey Store"] or "Store",keyDisp('Store', CTRL.."+S"))
-        prev = addHint(prev, L["Hotkey Recall"] or "Recall",keyDisp('Recall', CTRL.."+R"))
+        prev = addHint(prev, L["Hotkey Cut"],   keyDisp('Cut',   CTRL.."+X"))
+        prev = addHint(prev, L["Hotkey Copy"],  keyDisp('Copy',  CTRL.."+C"))
+        prev = addHint(prev, L["Hotkey Paste"], keyDisp('Paste', CTRL.."+V"))
+        prev = addHint(prev, L["Hotkey Store"], keyDisp('Store', CTRL.."+S"))
+        prev = addHint(prev, L["Hotkey Recall"],keyDisp('Recall', CTRL.."+R"))
         -- 批量放置：按住 CTRL 连续放置
-        prev = addHint(prev, L["Hotkey BatchPlace"] or "Batch Place", CTRL)
+        prev = addHint(prev, L["Hotkey BatchPlace"], CTRL)
         -- 一键重置变换（专家模式）
-        prev = addHint(prev, L["Reset Current"] or "Reset", keyDisp('Reset', 'T'))
-        prev = addHint(prev, L["Reset All"] or "Reset All", keyDisp('ResetAll', CTRL.."+T"))
+        prev = addHint(prev, L["Reset Current"], keyDisp('Reset', 'T'))
+        prev = addHint(prev, L["Reset All"], keyDisp('ResetAll', CTRL.."+T"))
         -- 误操作保护：锁定/解锁
-        prev = addHint(prev, L["Lock/Unlock"] or "Lock", "L")
+        prev = addHint(prev, L["Lock/Unlock"], "L")
 
         -- Q/E 旋转（显示在 HUD 中；按设置 EnableQERotate 控制显隐）
         do
@@ -1472,7 +1472,7 @@ end
             else
                 disp = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or ((CTRL_KEY_TEXT and (CTRL_KEY_TEXT.."+D")) or "CTRL+D")
             end
-            DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", disp)
+            DisplayFrame.SubFrame:SetHotkey(L["Duplicate"], disp)
             if DisplayFrame.NormalizeKeycapWidth then DisplayFrame:NormalizeKeycapWidth() end
             if ADT and ADT.ApplyHousingInstructionStyle then
                 ADT.ApplyHousingInstructionStyle(DisplayFrame)
@@ -1623,7 +1623,7 @@ end
             else
                 keyDisp = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or (CTRL.."+D")
             end
-            DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", keyDisp)
+            DisplayFrame.SubFrame:SetHotkey(L["Duplicate"], keyDisp)
         end
     -- 信息行：语言切换后等待下一次悬停刷新
     if DisplayFrame.InfoLine and DisplayFrame.InfoLine.InstructionText then
@@ -1631,15 +1631,15 @@ end
     end
     -- 其他提示行
     local map = {
-        [1] = L["Hotkey Cut"]    or "Cut",
-        [2] = L["Hotkey Copy"]   or "Copy",
-        [3] = L["Hotkey Paste"]  or "Paste",
-        [4] = L["Hotkey Store"]  or "Store",
-        [5] = L["Hotkey Recall"] or "Recall",
-        [6] = L["Hotkey BatchPlace"] or "Batch Place",
-        [7] = L["Reset Current"] or "Reset",
-        [8] = L["Reset All"] or "Reset All",
-        [9] = L["Lock/Unlock"] or "Lock",
+        [1] = L["Hotkey Cut"],
+        [2] = L["Hotkey Copy"],
+        [3] = L["Hotkey Paste"],
+        [4] = L["Hotkey Store"],
+        [5] = L["Hotkey Recall"],
+        [6] = L["Hotkey BatchPlace"],
+        [7] = L["Reset Current"],
+        [8] = L["Reset All"],
+        [9] = L["Lock/Unlock"],
     }
     local keycaps = {
         [1] = (ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds.GetKeyDisplayName(ADT.Keybinds:GetKeybind('Cut'))) or (CTRL.."+X"),
@@ -1700,7 +1700,7 @@ end
             local dup = ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds:GetKeybind('Duplicate')
             local disp = (ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds:GetKeyDisplayName(dup))
                 or (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or (CTRL.."+D")
-            DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", disp)
+            DisplayFrame.SubFrame:SetHotkey(L["Duplicate"], disp)
         end
         -- 其他行
         if DisplayFrame.HintFrames then
@@ -1726,15 +1726,15 @@ end
             caps[11] = KD('RotateCCW90', 'E')
             for i, line in ipairs(DisplayFrame.HintFrames) do
                 local textMap = {
-                    [1] = L["Hotkey Cut"]    or "Cut",
-                    [2] = L["Hotkey Copy"]   or "Copy",
-                    [3] = L["Hotkey Paste"]  or "Paste",
-                    [4] = L["Hotkey Store"]  or "Store",
-                    [5] = L["Hotkey Recall"] or "Recall",
-                    [6] = L["Hotkey BatchPlace"] or "Batch Place",
-                    [7] = L["Reset Current"] or "Reset",
-                    [8] = L["Reset All"] or "Reset All",
-                    [9] = L["Lock/Unlock"] or "Lock",
+                    [1] = L["Hotkey Cut"],
+                    [2] = L["Hotkey Copy"],
+                    [3] = L["Hotkey Paste"],
+                    [4] = L["Hotkey Store"],
+                    [5] = L["Hotkey Recall"],
+                    [6] = L["Hotkey BatchPlace"],
+                    [7] = L["Reset Current"],
+                    [8] = L["Reset All"],
+                    [9] = L["Lock/Unlock"],
                 }
                 -- 扩展：为旋转行设置本地化显示名
                 do

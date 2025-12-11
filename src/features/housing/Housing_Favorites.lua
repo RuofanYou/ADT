@@ -90,10 +90,8 @@ local function SetColor(tex, rgb)
     tex:SetVertexColor(rgb[1], rgb[2], rgb[3])
 end
 
--- 本地化包装：优先取 ADT.L，再回退英文
-local function Ls(key, fallback)
-    local L = ADT and ADT.L or nil
-    return (L and L[key]) or fallback
+local function Ls(key)
+    return ADT.L[key]
 end
 
 -- 为目录按钮附加/更新星标（不侵入按钮业务；完全独立）
@@ -130,7 +128,9 @@ local function EnsureStarOnButton(btn)
         local rid = ExtractRecordIDFromEntryFrame(btn)
         local fav = rid and IsFavoritedRID(rid)
         GameTooltip:SetOwner(hit, "ANCHOR_RIGHT")
-        GameTooltip:SetText(fav and Ls("Unfavorite", "Unfavorite") or Ls("Favorite", "Favorite"))
+        local text
+        if fav then text = Ls("Unfavorite") else text = Ls("Favorite") end
+        GameTooltip:SetText(text)
         GameTooltip:Show()
         -- 关键修复：进入星标命中区时显式 Show，避免父按钮 OnLeave 抢先隐藏
         star:Show()
@@ -167,8 +167,8 @@ local function EnsureStarOnButton(btn)
         Favorites:RefreshStar(btn)
         if star._ADTClickAG then star._ADTClickAG:Play() end
         PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-        if newState then ADT.Notify(Ls("Added to Favorites", "Added to favorites"), "info")
-        else ADT.Notify(Ls("Removed from Favorites", "Removed from favorites"), "info") end
+        if newState then ADT.Notify(Ls("Added to Favorites"), "info")
+        else ADT.Notify(Ls("Removed from Favorites"), "info") end
         -- 若“仅显示收藏”开启，则实时刷新列表
         if Favorites:IsFilterOn() then
             Favorites:RefreshCatalog()
@@ -263,7 +263,7 @@ function Favorites:RefreshCatalog()
         end
         local entries = CollectFavoriteEntries(sp)
         local retain = true
-        local header = Ls("Favorites", "Favorites")
+        local header = Ls("Favorites")
         -- 直接把“收藏 ∩ 当前筛选”的结果送入 OptionsContainer；不改动分类焦点与返回按钮状态。
         sp.OptionsContainer:SetCatalogData(entries, retain, header, nil)
         -- 在我们覆盖结果后，同步星标与计数显示（官方会在 UpdateCatalogData 里做；此处补齐一次以避免滞后）。
@@ -290,7 +290,7 @@ local function HookFilterDropdown(filters)
             origGen(dropdown, root)
         end
         root:CreateDivider()
-        root:CreateCheckbox(Ls("Show Favorites Only", "Show Favorites Only"), function() return Favorites:IsFilterOn() end, function()
+        root:CreateCheckbox(Ls("Show Favorites Only"), function() return Favorites:IsFilterOn() end, function()
             Favorites:ToggleFilter()
             -- 保持下拉菜单开启并刷新选中态
             return MenuResponse.Refresh

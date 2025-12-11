@@ -241,9 +241,9 @@ local function buildModules()
     
     -- 进入编辑模式自动打开 Dock（控制中心）
     local moduleEditorAutoOpen = {
-        name = (L and L["Auto Open Dock in Editor"]) or "Open Dock on entering editor",
+        name = L["Auto Open Dock in Editor"],
         dbKey = 'EnableDockAutoOpenInEditor',
-        description = (L and L["Auto Open Dock in Editor tooltip"]) or "Open ADT Dock automatically when entering the editor; use /adt to open manually.",
+        description = L["Auto Open Dock in Editor tooltip"],
         -- 无需 toggleFunc：改为订阅 ADT.Settings（见 DockUI 绑定）
         categoryKeys = { 'Housing' },
         uiOrder = 0,
@@ -251,42 +251,42 @@ local function buildModules()
 
     -- 住宅快捷键设置模块（4 个独立开关）
     local moduleRepeat = {
-        name = (L and L["Enable Duplicate"]) or "启用复制",
+        name = L["Enable Duplicate"],
         dbKey = 'EnableDupe',
-        description = (L and L["Enable Duplicate tooltip"]) or "悬停装饰时按 CTRL+D 可快速放置相同装饰",
+        description = L["Enable Duplicate tooltip"],
         -- 统一持久化 + 模块订阅，无需 toggleFunc
         categoryKeys = { 'Housing' },
         uiOrder = 1,
     }
     
     local moduleCopy = {
-        name = (L and L["Enable Copy"]) or "启用复制",
+        name = L["Enable Copy"],
         dbKey = 'EnableCopy',
-        description = (L and L["Enable Copy tooltip"]) or "悬停或选中装饰时按 CTRL+C 可复制到剪切板",
+        description = L["Enable Copy tooltip"],
         categoryKeys = { 'Housing' },
         uiOrder = 2,
     }
     
     local moduleCut = {
-        name = (L and L["Enable Cut"]) or "启用剪切",
+        name = L["Enable Cut"],
         dbKey = 'EnableCut',
-        description = (L and L["Enable Cut tooltip"]) or "选中装饰时按 CTRL+X 可剪切（移除并复制到剪切板）",
+        description = L["Enable Cut tooltip"],
         categoryKeys = { 'Housing' },
         uiOrder = 3,
     }
     
     local modulePaste = {
-        name = (L and L["Enable Paste"]) or "启用粘贴",
+        name = L["Enable Paste"],
         dbKey = 'EnablePaste',
-        description = (L and L["Enable Paste tooltip"]) or "按 CTRL+V 可从剪切板粘贴装饰",
+        description = L["Enable Paste tooltip"],
         categoryKeys = { 'Housing' },
         uiOrder = 4,
     }
     
     local moduleBatchPlace = {
-        name = (L and L["Enable Batch Place"]) or "启用批量放置",
+        name = L["Enable Batch Place"],
         dbKey = 'EnableBatchPlace',
-        description = (L and L["Enable Batch Place tooltip"]) or "选中装饰后按住 CTRL 点击可连续放置多个相同装饰",
+        description = L["Enable Batch Place tooltip"],
         categoryKeys = { 'Housing' },
         uiOrder = 5,
     }
@@ -294,27 +294,27 @@ local function buildModules()
 
     -- 启用 T 重置默认属性
     local moduleResetT = {
-        name = (L and L["Enable T Reset"]) or "启用 T 重置默认属性",
+        name = L["Enable T Reset"],
         dbKey = 'EnableResetT',
-        description = (L and L["Enable T Reset tooltip"]) or "在专家模式下按 T 将重置当前子模式的变换；关闭后仅保留 Ctrl+T 的全部重置。",
+        description = L["Enable T Reset tooltip"],
         categoryKeys = { 'Housing' },
         uiOrder = 6,
     }
 
     -- 启用 Ctrl+T 全部重置
     local moduleResetAll = {
-        name = (L and L["Enable CTRL+T Reset All"]) or "启用 CTRL+T 全部重置",
+        name = L["Enable CTRL+T Reset All"],
         dbKey = 'EnableResetAll',
-        description = (L and L["Enable CTRL+T Reset All tooltip"]) or "在专家模式下按 Ctrl+T 将重置所有变换；关闭后不再显示提示且禁用该热键。",
+        description = L["Enable CTRL+T Reset All tooltip"],
         categoryKeys = { 'Housing' },
         uiOrder = 7,
     }
 
     -- 启用 L 锁定/解锁
     local moduleLock = {
-        name = (L and L["Enable L Lock"]) or "启用 L 以锁定装饰",
+        name = L["Enable L Lock"],
         dbKey = 'EnableLock',
-        description = (L and L["Enable L Lock tooltip"]) or "按 L 锁定/解锁当前悬停的装饰；关闭后隐藏提示并禁用该热键。",
+        description = L["Enable L Lock tooltip"],
         -- 统一由模块端订阅处理
         categoryKeys = { 'Housing' },
         uiOrder = 8,
@@ -322,25 +322,36 @@ local function buildModules()
 
     -- 启用 Q/E 旋转 90°
     local moduleQERotate = {
-        name = (L and L["Enable Q/E Rotate"]) or "启用 Q/E 旋转",
+        name = L["Enable Q/E Rotate"],
         dbKey = 'EnableQERotate',
-        description = (L and L["Enable Q/E Rotate tooltip"]) or "在住宅编辑器内按 Q / E 将当前抓起/选中的装饰旋转 -90° / +90°；关闭后禁用该热键并隐藏相关提示。",
+        description = L["Enable Q/E Rotate tooltip"],
         -- 统一由模块端订阅处理
         categoryKeys = { 'Housing' },
         uiOrder = 9,
     }
     
     -- 语言选择下拉菜单模块
+    local function buildLanguageOptions()
+        local opts = {
+            { value = nil, text = L["Language Auto"] },
+        }
+        local list = ADT.SupportedLocales
+        if type(list) ~= "table" then return opts end
+        for _, localeKey in ipairs(list) do
+            opts[#opts + 1] = {
+                value = localeKey,
+                text = L["LocaleName " .. localeKey],
+            }
+        end
+        return opts
+    end
+
     local moduleLanguage = {
-        name = (L and L["Language"]) or "语言 / Language",
+        name = L["Language"],
         dbKey = 'SelectedLanguage',
         type = 'dropdown',  -- 下拉菜单类型
-        options = {
-            { value = nil, text = (L and L["Language Auto"]) or "自动 (跟随客户端)" },
-            { value = "zhCN", text = "中文" },
-            { value = "enUS", text = "English" },
-        },
-        description = (L and L["Language Reload Hint"]) or "部分文字可能需要 /reload 后更新",
+        options = buildLanguageOptions(),
+        description = L["Language Reload Hint"],
         -- 下拉选择只需写入；应用逻辑由 Settings 订阅统一处理
         categoryKeys = { 'Housing' },
         uiOrder = 100,  -- 放在最后
@@ -348,7 +359,7 @@ local function buildModules()
 
     modules[1] = {
         key = 'Housing',
-        categoryName = (L and L['SC Housing']) or '通用',
+        categoryName = L['SC Housing'],
         categoryType = 'settings', -- 设置类分类
         modules = { moduleEditorAutoOpen, moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace, moduleResetT, moduleResetAll, moduleLock, moduleQERotate, moduleLanguage },
         numModules = 11,
@@ -357,7 +368,7 @@ local function buildModules()
     -- 临时板分类（装饰列表类）
     modules[2] = {
         key = 'Clipboard',
-        categoryName = (L and L['SC Clipboard']) or '临时板',
+        categoryName = L['SC Clipboard'],
         categoryType = 'decorList', -- 装饰列表类分类
         modules = {},
         numModules = 0,
@@ -389,13 +400,13 @@ local function buildModules()
             end
         end,
         -- 空列表提示
-        emptyText = string.format("%s\n%s", (L and L['Clipboard Empty Line1']) or '临时板为空', (L and L['Clipboard Empty Line2']) or 'Ctrl+S 存入；Ctrl+R 取出'),
+        emptyText = string.format("%s\n%s", L['Clipboard Empty Line1'], L['Clipboard Empty Line2']),
     }
 
     -- 最近放置分类（装饰列表类）
     modules[3] = {
         key = 'History',
-        categoryName = (L and L['SC History']) or '最近放置',
+        categoryName = L['SC History'],
         categoryType = 'decorList', -- 装饰列表类分类
         modules = {},
         numModules = 0,
@@ -419,13 +430,13 @@ local function buildModules()
             end
         end,
         -- 空列表提示
-        emptyText = string.format("%s\n%s", (L and L['History Empty Line1']) or '暂无放置记录', (L and L['History Empty Line2']) or '放置装饰后会自动记录'),
+        emptyText = string.format("%s\n%s", L['History Empty Line1'], L['History Empty Line2']),
     }
 
     -- 自动旋转分类（设置类）——需位于“信息”之上
     modules[4] = {
         key = 'AutoRotate',
-        categoryName = (L and L['SC AutoRotate']) or '自动旋转',
+        categoryName = L['SC AutoRotate'],
         categoryType = 'settings', -- 设置类分类
         modules = {},
         numModules = 0,
@@ -434,7 +445,7 @@ local function buildModules()
     -- 快捷键分类（设置类）——自定义按键绑定
     modules[5] = {
         key = 'Keybinds',
-        categoryName = (L and L['SC Keybinds']) or '快捷键',
+        categoryName = L['SC Keybinds'],
         categoryType = 'keybinds', -- 快捷键专用分类类型
         modules = {},
         numModules = 0,
@@ -443,7 +454,7 @@ local function buildModules()
     -- 信息分类（关于插件的信息）
     modules[6] = {
         key = 'About',
-        categoryName = (L and L['SC About']) or '信息',
+        categoryName = L['SC About'],
         categoryType = 'about', -- 关于信息类分类
         modules = {},
         numModules = 0,
@@ -456,11 +467,11 @@ local function buildModules()
                 ver = GetAddOnMetadata("AdvancedDecorationTools", "Version") or ver
             end
             -- 文本本地化：除“瑟小瑟”保留中文外，其他均跟随语言表
-            local name = (L and L['Addon Full Name']) or '高级装修工具'
-            local versionLabelFmt = (L and L['Version Label']) or '版本：%s'
-            local creditsLabel = (L and L['Credits Label']) or '制作信息'
-            local biliLabel = (L and L['Bilibili Label']) or 'bilibili:'
-            local qqLabel = (L and L['QQ Group Label']) or 'QQ Group:'
+            local name = L['Addon Full Name']
+            local versionLabelFmt = L['Version Label']
+            local creditsLabel = L['Credits Label']
+            local biliLabel = L['Bilibili Label']
+            local qqLabel = L['QQ Group Label']
             -- 不使用空行，避免产生多余分隔符
             return string.format(
                 "|cffffcc00%s|r\n" ..
@@ -492,17 +503,17 @@ end
 -- 分类显示名：集中管理，避免散落重复（单一权威）
 local function getCategoryDisplayName(key)
     if key == 'Housing' then
-        return (L and L['SC Housing']) or '通用'
+        return L['SC Housing']
     elseif key == 'Clipboard' then
-        return (L and L['SC Clipboard']) or '临时板'
+        return L['SC Clipboard']
     elseif key == 'History' then
-        return (L and L['SC History']) or '最近放置'
+        return L['SC History']
     elseif key == 'AutoRotate' then
-        return (L and L['SC AutoRotate']) or '自动旋转'
+        return L['SC AutoRotate']
     elseif key == 'Keybinds' then
-        return (L and L['SC Keybinds']) or '快捷键'
+        return L['SC Keybinds']
     elseif key == 'About' then
-        return (L and L['SC About']) or '信息'
+        return L['SC About']
     end
     return tostring(key)
 end

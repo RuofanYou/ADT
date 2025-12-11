@@ -1621,7 +1621,7 @@ do
         local entryInfo = C_HousingCatalog and C_HousingCatalog.GetCatalogEntryInfoByRecordID 
             and C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, item.decorID, true)
         local available = 0
-        local displayName = item.name or (string.format((ADT.L and ADT.L['Decor #%d']) or '装饰 #%d', tonumber(item.decorID) or 0))
+        local displayName = item.name or string.format(ADT.L["Decor #%d"], tonumber(item.decorID) or 0)
         
         if entryInfo then
             available = (entryInfo.quantity or 0) + (entryInfo.remainingRedeemable or 0)
@@ -1702,14 +1702,14 @@ do
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(self.Name:GetText() or "", 1, 1, 1)
         if self.available > 0 then
-            GameTooltip:AddLine(string.format((ADT.L and ADT.L['Stock: %d']) or '库存：%d', self.available), 0, 1, 0)
+            GameTooltip:AddLine(string.format(ADT.L["Stock: %d"], self.available), 0, 1, 0)
         else
-            GameTooltip:AddLine((ADT.L and ADT.L['Stock: 0 (Unavailable)']) or '库存：0（不可放置）', 1, 0.2, 0.2)
+            GameTooltip:AddLine(ADT.L["Stock: 0 (Unavailable)"], 1, 0.2, 0.2)
         end
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine((ADT.L and ADT.L['Left Click: Place']) or '左键：开始放置', 0.8, 0.8, 0.8)
+        GameTooltip:AddLine(ADT.L["Left Click: Place"], 0.8, 0.8, 0.8)
         if self.categoryInfo and self.categoryInfo.key == 'Clipboard' then
-            GameTooltip:AddLine((ADT.L and ADT.L['Right Click: Remove from Clipboard']) or '右键：从临时板移除', 1, 0.4, 0.4)
+            GameTooltip:AddLine(ADT.L["Right Click: Remove from Clipboard"], 1, 0.4, 0.4)
         end
         GameTooltip:Show()
     end
@@ -2291,7 +2291,8 @@ do  -- Central
                 templateKey = "Header",
                 setupFunc = function(obj)
                     -- 注意：emptyText 可能包含换行符，这里只取第一行
-                    local text = cat.emptyText or (ADT.L and ADT.L['List Is Empty']) or "列表为空"
+                    local text = cat.emptyText
+                    if not text then text = ADT.L["List Is Empty"] end
                     local firstLine = text:match("^([^\n]*)")
                     obj:SetText(firstLine or text)
                     SetTextColor(obj.Label, Def.TextColorDisabled)
@@ -2372,7 +2373,11 @@ do  -- Central
         else
             -- 空列表时显示提示（已无右侧预览/说明）
             if self.FeaturePreview then self.FeaturePreview:SetTexture(134400) end
-            if self.FeatureDescription then self.FeatureDescription:SetText(cat.emptyText or (ADT.L and ADT.L['List Is Empty']) or "列表为空") end
+            if self.FeatureDescription then
+                local text = cat.emptyText
+                if not text then text = ADT.L["List Is Empty"] end
+                self.FeatureDescription:SetText(text)
+            end
         end
         if self.UpdateAutoWidth then self:UpdateAutoWidth() end
     end
@@ -2561,7 +2566,7 @@ do  -- Central
                 dataIndex = n,
                 templateKey = "Header",
                 setupFunc = function(obj)
-                    obj:SetText((ADT.L and ADT.L['Keybinds Module Not Loaded']) or "快捷键模块未加载")
+                    obj:SetText(ADT.L["Keybinds Module Not Loaded"])
                     SetTextColor(obj.Label, Def.TextColorDisabled)
                     if obj.Left then obj.Left:Hide() end
                     if obj.Right then obj.Right:Hide() end
@@ -2604,7 +2609,7 @@ do  -- Central
                 dataIndex = n,
                 templateKey = "Header",
                 setupFunc = function(obj)
-                    obj:SetText((ADT.L and ADT.L['Keybinds Housing Only Hint']) or "仅在住宅编辑模式下生效")
+                    obj:SetText(ADT.L["Keybinds Housing Only Hint"])
                     SetTextColor(obj.Label, Def.TextColorWarn or {1, 0.82, 0})
                     if obj.Left then obj.Left:Hide() end
                     if obj.Right then obj.Right:Hide() end
@@ -2628,11 +2633,11 @@ do  -- Central
                 templateKey = "CenterButton",
                 setupFunc = function(btn)
                     -- 统一文案（由 i18n 提供）；按钮样式更直观
-                    if btn.SetText then btn:SetText((ADT.L and ADT.L['Reset All Keybinds']) or "恢复默认") end
+                    if btn.SetText then btn:SetText(ADT.L["Reset All Keybinds"]) end
                     btn:SetScript("OnClick", function()
                         if ADT.Keybinds and ADT.Keybinds.ResetAllToDefaults then
                             ADT.Keybinds:ResetAllToDefaults()
-                            if ADT.Notify then ADT.Notify((ADT.L and ADT.L['Keybinds Reset Done']) or "快捷键已恢复默认") end
+                            if ADT.Notify then ADT.Notify(ADT.L["Keybinds Reset Done"]) end
                             MainFrame:ShowKeybindsCategory(categoryKey)
                         end
                     end)
@@ -2701,7 +2706,7 @@ local function CreateUI()
         title:SetPoint("LEFT", Header, "LEFT", Def.HeaderTitleOffsetX or 22, Def.HeaderTitleOffsetY or -10)
         title:SetJustifyH("LEFT")
         if Def.ShowHeaderTitle then
-            title:SetText((ADT.L and ADT.L['Addon Full Name']) or '高级装修工具')
+            title:SetText(ADT.L["Addon Full Name"])
             title:Show()
         else
             title:SetText("")
@@ -3052,7 +3057,7 @@ local function CreateUI()
             local keyText = ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds:GetKeyDisplayName(key) or ""
             if self.KeyLabel then
                 if keyText == "" then
-                    keyText = (ADT.L and ADT.L['Not Set']) or "Not Set"
+                    keyText = ADT.L["Not Set"]
                     SetTextColor(self.KeyLabel, Def.TextColorDisabled or {0.5, 0.5, 0.5})
                 else
                     SetTextColor(self.KeyLabel, {1, 0.82, 0}) -- 金色
@@ -3068,7 +3073,7 @@ local function CreateUI()
             if isRecording then
                 -- 录制中状态
                 if self.KeyLabel then
-                    self.KeyLabel:SetText((ADT.L and ADT.L['Press Key']) or "Press key...")
+                    self.KeyLabel:SetText(ADT.L["Press Key"])
                     SetTextColor(self.KeyLabel, {1, 0.82, 0}) -- 金色
                 end
                 if self.KeyBorder then
@@ -3076,7 +3081,7 @@ local function CreateUI()
                 end
                 -- 在 Header 区域显示提示
                 if headerHint then
-                    headerHint:SetText((ADT.L and ADT.L['ESC Cancel']) or "or press ESC to cancel")
+                    headerHint:SetText(ADT.L["ESC Cancel"])
                     headerHint:SetTextColor(1, 0.82, 0, 1)  -- 金色
                 end
             else
@@ -3260,7 +3265,7 @@ local function CreateUI()
                     local headerHint = MainFrame._keybindCategoryHint
                     if headerHint then
                         local hintColor = KCFG.hintHover or { r = 0.6, g = 0.8, b = 1 }
-                        local hintText = (ADT.L and ADT.L["Right Click Clear"]) or "<Right-click to clear>"
+                        local hintText = ADT.L["Right Click Clear"]
                         headerHint:SetText(hintText)
                         headerHint:SetTextColor(hintColor.r, hintColor.g, hintColor.b, 1)
                     end

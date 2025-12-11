@@ -46,7 +46,7 @@ end
 function M:RotateSelectedByDegrees(deg)
     if type(deg) ~= 'number' or deg == 0 then return end
     if not IsReady() then
-        if ADT and ADT.Notify then ADT.Notify(ADT.L and (ADT.L["Please select a decor to rotate"] or "请先抓起/选中一个装饰") or "请先抓起/选中一个装饰", 'info') end
+        if ADT and ADT.Notify then ADT.Notify(ADT.L["Please select a decor to rotate"], 'info') end
         return
     end
 
@@ -81,4 +81,3 @@ end
 -- 便捷别名（若后续需要直接调用）
 function M:RotateLeft90()  self:RotateSelectedByDegrees(-90) end
 function M:RotateRight90() self:RotateSelectedByDegrees(90)  end
-

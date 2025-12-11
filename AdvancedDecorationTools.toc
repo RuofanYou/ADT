@@ -2,8 +2,11 @@
 ## Title: AdvancedDecorationTools
 ## Notes: Housing – Hover name and duplicate (Ctrl+D default). 仅住宅：悬停显示名称与按键复制（默认 Ctrl+D）。
 ## Notes-zhCN: 住宅功能：悬停显示装饰名称与库存，并支持按键复制（默认 Ctrl+D）。
+## Category: Housing Enhancements
+## Category-zhCN: 住宅增强
+## IconTexture: Interface\AddOns\AdvancedDecorationTools\ADTicon.png
 ## Author: 瑟瑟
-## Version: 251212.78
+## Version: 251212.85
 ## SavedVariables: ADT_DB
 ## Bindings: Bindings.xml
 

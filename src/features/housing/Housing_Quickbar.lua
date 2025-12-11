@@ -256,7 +256,7 @@ end
 
 function M:ClearSlot(slotIndex)
     self:SetSlotData(slotIndex, nil)
-    Notify(string.format(L["Quickbar slot %s cleared"] or "快捷栏 %s 已清空", SLOT_KEYS[slotIndex]), 'info')
+    Notify(string.format(L["Quickbar slot %s cleared"], SLOT_KEYS[slotIndex]), 'info')
     PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
 end
 
@@ -308,8 +308,7 @@ function M:OnQuickbarKeyPressed(slotIndex)
                     local cancelled = CancelActiveEditing()
                     D("[Quickbar] CancelActiveEditing called after bind (preview or no selection), ok=" .. tostring(cancelled))
                 end
-                Notify(string.format(L["Decor bound to quickbar %s"] or "装饰已绑定到快捷栏 %s", 
-                    SLOT_KEYS[slotIndex]), 'success')
+                Notify(string.format(L["Decor bound to quickbar %s"], SLOT_KEYS[slotIndex]), 'success')
                 PlaySound(SOUNDKIT.UI_70_ARTIFACT_FORGE_APPEARANCE_LOCKED)
             end
         end
@@ -356,7 +355,7 @@ function M:DoPlaceFromSlot(slotIndex)
             D(string.format("[Quickbar] Placing from slot %d: %s", slotIndex, slotData.name or "?"))
             PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
         else
-            Notify(L["Cannot place decor"] or "无法放置装饰", 'warning')
+            Notify(L["Cannot place decor"], 'warning')
         end
     else
         D("[Quickbar] ADT.Housing.StartPlacingByRecordID not available")
@@ -435,7 +434,7 @@ SlashCmdList["ADTQUICKBAR"] = function(msg)
         end
         M:SaveSlots()
         M:RefreshUI()
-        Notify(L["All quickbar slots cleared"] or "所有快捷栏已清空", 'info')
+        Notify(L["All quickbar slots cleared"], 'info')
     elseif msg == "show" then
         for i = 1, NUM_SLOTS do
             local data = M.slots[i]

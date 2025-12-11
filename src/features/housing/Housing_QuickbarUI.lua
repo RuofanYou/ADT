@@ -206,15 +206,15 @@ function UI:CreateSlot(parent, slotIndex)
         local data = ADT.Quickbar and ADT.Quickbar:GetSlotData(self.slotIndex)
         if data then
             -- 装饰名称：优先使用真实名称，否则回退到“未知装饰”（本地化）
-            GameTooltip:SetText(data.name or (L and L["Unknown Decor"] or "未知装饰"))
+            GameTooltip:SetText(data.name or L["Unknown Decor"])
             -- 操作提示：统一走本地化（左键放置｜右键清空）
-            local left = (L and L["Left-click: Place"]) or "左键：放置"
-            local right = (L and L["Right-click: Clear"]) or "右键：清空"
+            local left = L["Left-click: Place"]
+            local right = L["Right-click: Clear"]
             GameTooltip:AddLine(string.format("%s | %s", left, right), 0.7, 0.7, 0.7)
         else
             -- 空槽位提示：采用占位符格式，保持多语言
-            GameTooltip:SetText(string.format((L and L["Empty slot %s"]) or "空槽位 %s", SLOT_KEYS[self.slotIndex]))
-            GameTooltip:AddLine((L and L["Quickbar bind hint"]) or "抓取装饰后按此键绑定", 0.6, 0.6, 0.6)
+            GameTooltip:SetText(string.format(L["Empty slot %s"], SLOT_KEYS[self.slotIndex]))
+            GameTooltip:AddLine(L["Quickbar bind hint"], 0.6, 0.6, 0.6)
         end
         GameTooltip:Show()
     end)

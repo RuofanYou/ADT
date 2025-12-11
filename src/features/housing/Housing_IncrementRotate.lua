@@ -99,7 +99,7 @@ end
 function M:Reset()
     M.count = 0
     if ADT.Notify then
-        ADT.Notify(L["Increment accumulator reset to 0"] or "递增计数器已重置", 'success')
+        ADT.Notify(L["Increment accumulator reset to 0"], 'success')
     end
     D("[IncRot] Reset")
 end
@@ -117,10 +117,10 @@ local function RegisterSettings()
     local CC = ADT.CommandDock
 
     CC:AddModule({
-        name = L["Enable Increment Rotate"] or "启用递增旋转",
+        name = L["Enable Increment Rotate"],
         dbKey = 'EnableIncrementRotate',
         type = 'toggle',
-        description = L["Enable Increment Rotate tooltip"] or "批量放置时自动递增旋转。",
+        description = L["Enable Increment Rotate tooltip"],
         categoryKeys = { 'AutoRotate' },
         uiOrder = 10,
     })
@@ -157,7 +157,7 @@ local function RegisterSettings()
         local DLG_KEY = "ADT_INPUT_INCREMENT_ROTATE_DEG"
         if not StaticPopupDialogs[DLG_KEY] then
             StaticPopupDialogs[DLG_KEY] = {
-                text = (L["Enter increment angle"] or "输入递增角度（度）"),
+                text = L["Enter increment angle"],
                 button1 = OKAY,
                 button2 = CANCEL,
                 hasEditBox = true,
@@ -187,7 +187,7 @@ local function RegisterSettings()
                     local v = ParseAngleInput(txt)
                     D("[IncRot][Popup] parsed=" .. tostring(v))
                     if not v then
-                        if ADT and ADT.Notify then ADT.Notify(L["Invalid number"] or "输入无效：请输入数字（支持小数/全角）", 'error') end
+                        if ADT and ADT.Notify then ADT.Notify(L["Invalid number"], 'error') end
                         return
                     end
                     ADT.SetDBValue('IncrementRotateDegrees', v, true)
@@ -196,7 +196,7 @@ local function RegisterSettings()
                         ADT.CommandDock.SettingsPanel:UpdateSettingsEntries()
                     end
                     if ADT and ADT.Notify then
-                        ADT.Notify(string.format((L["Increment angle set to"] or "已设置递增角度为").." %s°", tostring(v)), 'success')
+                        ADT.Notify(string.format(L["Increment angle set to"].." %s°", tostring(v)), 'success')
                     end
                 end,
             }
@@ -212,7 +212,7 @@ local function RegisterSettings()
     end
 
     CC:AddModule({
-        name = L["Increment Angle"] or "递增角度",
+        name = L["Increment Angle"],
         dbKey = 'IncrementRotateDegrees',
         type = 'dropdown',
         options = {
@@ -223,10 +223,10 @@ local function RegisterSettings()
             { value = 90,  text = "90°" },
             { value = 120, text = "120°" },
             { value = 180, text = "180°" },
-            { action = 'button', text = (L["Custom..."] or "自定义…"), onClick = OpenCustomAngleDialog },
+            { action = 'button', text = L["Custom..."], onClick = OpenCustomAngleDialog },
         },
         valueToText = valueToText, -- 当当前值不在预设项中时，用于标签展示
-        description = L["Increment Angle tooltip"] or "每个物品比上一个多转多少度。",
+        description = L["Increment Angle tooltip"],
         categoryKeys = { 'AutoRotate' },
         uiOrder = 11,
     })

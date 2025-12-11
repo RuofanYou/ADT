@@ -41,7 +41,7 @@ function API.CreateListView(parent)
     fs:SetPoint('RIGHT', f, 'RIGHT', -16, 16)
     fs:SetJustifyH('CENTER')
     fs:SetSpacing(4)
-    fs:SetText(ADT.L and ADT.L['List Is Empty'] or 'Empty')
+    fs:SetText(ADT.L["List Is Empty"] or "")
 
     -- 交互（滚轮与物理滚动由 ADT.Scroll 统一接管）
     f:EnableMouseWheel(true)

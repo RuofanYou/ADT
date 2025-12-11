@@ -231,10 +231,21 @@ local function AttachTo(main)
             end
 
             local function EvaluateAutoHide()
-                -- BUGFIX: 永不隐藏 SubPanel（编辑模式中必须常驻）。
-                -- KISS：无条件保持可见，不再因“正文/标题为空”而隐藏或收缩为 0 高度。
-                if not sub:IsShown() then
-                    sub:Show()
+                if not (sub and sub.Content and sub.Header) then return end
+                -- 判空单一权威：无正文且 Header 无意义文本 → 压缩为 0 高度（不 Hide，保持锚点语义）
+                local noBody = not AnyNonHeaderVisible(sub.Content, sub.Header)
+                local noHead = not HeaderHasMeaningfulText(sub.Header)
+                if noBody and noHead then
+                    sub:SetHeight(0)
+                    -- Frame 默认不裁剪子节点；用 alpha 让视觉上真正“消失”
+                    sub._ADT_AutoHidden = true
+                    sub:SetAlpha(0)
+                    return
+                end
+                -- 非空：恢复可见性（高度由自适应采样负责）
+                if sub._ADT_AutoHidden then
+                    sub._ADT_AutoHidden = nil
+                    sub:SetAlpha(1)
                 end
             end
 
@@ -261,7 +272,7 @@ local function AttachTo(main)
             -- 提供给外部的统一触发入口：以方法形式挂到 sub 本体，避免全局重复实现。
             sub._ADT_RequestAutoResize = function()
                 -- 移除“必须已可见才能自适应”的限制，
-                -- 以便在被误隐藏后也能通过内容变化自动恢复显示。
+                -- 以便在被压缩为 0 高度/Alpha 后也能通过内容变化自动恢复显示。
                 RequestAutoResize()
             end
 
@@ -371,7 +382,7 @@ local function AttachTo(main)
             -- 尺寸/可见性变动时触发一次
             sub:HookScript("OnShow", function()
                 RequestAutoResize()
-                -- 次帧保持常驻可见（不做隐藏判定）。
+                -- 次帧判空一次，保证“仅装饰/空正文”场景也能收敛
                 C_Timer.After(0.05, EvaluateAutoHide)
             end)
             if sub.Content.HookScript then
@@ -412,6 +423,10 @@ ADT.DockUI.SetSubPanelHeaderText = function(text)
     if not (sub and sub.Header and sub.Header.Label) then return end
     sub.Header:SetText(text or "")
     if text and text ~= "" then sub.Header.Label:Show() end
+    -- Header 变化也可能触发显隐/高度收敛，统一走自适应入口（单一权威）
+    if sub._ADT_RequestAutoResize then
+        sub._ADT_RequestAutoResize()
+    end
 end
 
 ADT.DockUI.SetSubPanelHeaderAlpha = function(alpha)
@@ -422,6 +437,10 @@ ADT.DockUI.SetSubPanelHeaderAlpha = function(alpha)
     a = math.max(0, math.min(1, a))
     label:SetAlpha(a)
     if a <= 0.001 then label:Hide() else label:Show() end
+    local sub = main.SubPanel
+    if sub and sub._ADT_RequestAutoResize then
+        sub._ADT_RequestAutoResize()
+    end
 end
 
 -- 统一：是否让 Header Alpha 跟随 HoverHUD 的 DisplayFrame OnUpdate
