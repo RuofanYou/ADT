@@ -243,7 +243,7 @@ local function buildModules()
     local moduleEditorAutoOpen = {
         name = (L and L["Auto Open Dock in Editor"]) or "Open Dock on entering editor",
         dbKey = 'EnableDockAutoOpenInEditor',
-        description = (L and L["Auto Open Dock in Editor tooltip"]) or "Open ADT Dock automatically when entering the editor; manual Ctrl+Q or /adt unaffected.",
+        description = (L and L["Auto Open Dock in Editor tooltip"]) or "Open ADT Dock automatically when entering the editor; use /adt to open manually.",
         -- 无需 toggleFunc：改为订阅 ADT.Settings（见 DockUI 绑定）
         categoryKeys = { 'Housing' },
         uiOrder = 0,

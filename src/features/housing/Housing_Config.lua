@@ -211,6 +211,9 @@ local CFG = {
         keyBoxHeight  = 22,
         -- 按键框与动作名之间的间距
         actionToKeyGap = 8,
+        -- 列表行内左右内边距（与行内视觉对称相关）
+        rowLeftPad  = 8,
+        rowRightPad = 8,
         -- Header 区域提示文本偏移（相对 Header 右侧）
         headerHintOffsetX = -50,   -- 负值向左
         headerHintOffsetY = 120,    -- 正值向上

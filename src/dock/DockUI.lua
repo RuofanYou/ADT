@@ -92,7 +92,7 @@ local Def = {
     --  - RightBGInsetBottom/CenterBGInsetBottom：背景应当铺满至边框内缘，取 0 贴边。
     ScrollViewInsetTop = 2,
     ScrollViewInsetBottom = 18,
-    RightBGInsetRight = -2,            -- 右侧统一背景右侧 inset
+    RightBGInsetRight = 0,             -- 右侧统一背景右侧 inset（0：背景对齐边框，避免右侧“更窄”错觉）
     RightBGInsetBottom = 0,            -- 背景贴边，避免出现可见空隙
     CenterBGInsetBottom = 0,           -- 背景贴边，避免出现可见空隙
 
@@ -1268,13 +1268,26 @@ do
     
     -- 更新下拉菜单的显示标签
     function EntryButtonMixin:UpdateDropdownLabel()
-        if not self.data or self.data.type ~= 'dropdown' or not self.data.options then return end
+        -- 仅处理下拉菜单型条目
+        if not self.data or self.data.type ~= 'dropdown' then return end
         local currentValue = ADT.GetDBValue(self.dbKey)
-        local displayText = self.data.name
-        for _, opt in ipairs(self.data.options) do
-            if opt.value == currentValue then
-                displayText = self.data.name .. "：" .. opt.text
-                break
+        local name = self.data.name or ""
+        local displayText = name
+        -- 先尝试在静态 options 中查找匹配项
+        if self.data.options then
+            for _, opt in ipairs(self.data.options) do
+                if opt and opt.value == currentValue then
+                    displayText = name .. "：" .. (opt.text or tostring(opt.value))
+                    break
+                end
+            end
+        end
+        -- 若未匹配到预设项，且提供了“值→文本”的格式化函数，则使用它作为兜底展示。
+        -- 这样可支持诸如“自定义序列角度（0,5 等任意组合）”的实时显示。
+        if displayText == name and type(self.data.valueToText) == 'function' then
+            local ok, txt = pcall(self.data.valueToText, currentValue)
+            if ok and txt and txt ~= "" then
+                displayText = name .. "：" .. tostring(txt)
             end
         end
         self.Label:SetText(displayText)
@@ -1847,15 +1860,16 @@ do  -- Left Section
         if self.CentralSection and self.ModuleTab and self.ModuleTab.ScrollView then
             local CentralSection = self.CentralSection
             -- 修正：条目左侧统一使用 offsetX = GetRightPadding() 进行缩进，
-            -- 因此条目真实可用宽度应为 CentralSection 宽度减去该缩进，
-            -- 否则右侧库存数字会越出 DeckUI 的右边框。
-            local newWidth = API.Round((CentralSection:GetWidth() or 0) - GetRightPadding())
+            -- 因此条目真实可用宽度应为 CentralSection 宽度减去“左右各一段缩进”。
+            -- 方案A：对称扣边，保证左右视觉留白一致，避免右侧顶边。
+            local newWidth = API.Round((CentralSection:GetWidth() or 0) - 2 * GetRightPadding())
             if newWidth > 0 then
                 self.centerButtonWidth = newWidth
                 local ScrollView = self.ModuleTab.ScrollView
                 ScrollView:CallObjectMethod("Entry", "SetWidth", newWidth)
                 ScrollView:CallObjectMethod("Header", "SetWidth", newWidth)
                 ScrollView:CallObjectMethod("DecorItem", "SetWidth", newWidth)
+                ScrollView:CallObjectMethod("KeybindEntry", "SetWidth", newWidth)
                 ScrollView:OnSizeChanged(true)
                 if self.ModuleTab.ScrollBar and self.ModuleTab.ScrollBar.UpdateThumbRange then
                     self.ModuleTab.ScrollBar:UpdateThumbRange()
@@ -2847,7 +2861,7 @@ local function CreateUI()
             local newWidth = tonumber(CentralSection:GetWidth()) or 0
             newWidth = math.floor(newWidth + 0.5)
             -- 按左侧统一缩进扣除可用宽度
-            newWidth = newWidth - GetRightPadding()
+            newWidth = newWidth - 2 * GetRightPadding()
             if newWidth > 0 then
                 self.centerButtonWidth = newWidth
                 local ScrollView = self.ModuleTab.ScrollView
@@ -2855,6 +2869,7 @@ local function CreateUI()
                     ScrollView:CallObjectMethod("Entry", "SetWidth", newWidth)
                     ScrollView:CallObjectMethod("Header", "SetWidth", newWidth)
                     ScrollView:CallObjectMethod("DecorItem", "SetWidth", newWidth)
+                    ScrollView:CallObjectMethod("KeybindEntry", "SetWidth", newWidth)
                 end
                 -- 触发一次强制重渲染，确保可见对象立即使用新宽度
                 if ScrollView.OnSizeChanged then ScrollView:OnSizeChanged(true) end
@@ -2982,7 +2997,7 @@ local function CreateUI()
         end
         -- 梳理：所有列表项在渲染时都会以 GetRightPadding() 作为左侧缩进，
         -- 因而条目真实宽度 = 容器宽度 - 该缩进。统一在此处扣除，确保对齐一致。
-        MainFrame.centerButtonWidth = ComputeCenterWidth() - GetRightPadding()
+        MainFrame.centerButtonWidth = ComputeCenterWidth() - 2 * GetRightPadding()
         Def.centerButtonWidth = MainFrame.centerButtonWidth
 
 
@@ -3133,22 +3148,22 @@ local function CreateUI()
         end
 
         function KeybindEntryMixin:GetDesiredWidth()
-            -- 动态计算所需宽度：基于实际文本宽度 + 按键框 + 边距
+            -- 动态计算所需宽度：基于实际文本宽度 + 按键框 + 左右内边距
             local KCFG = (ADT.HousingInstrCFG and ADT.HousingInstrCFG.KeybindUI) or {}
             local keyBoxWidth = KCFG.keyBoxWidth or 100
             local actionToKeyGap = KCFG.actionToKeyGap or 8
-            local leftPad = 8
-            local rightPad = 8
-            
-            -- 获取动作名文本实际宽度
-            local textWidth = 120  -- 默认最小宽度
-            if self.ActionLabel then
+            local leftPad  = KCFG.rowLeftPad or 8
+            local rightPad = KCFG.rowRightPad or 8
+
+            local minText = KCFG.actionLabelWidth or 120
+            local textWidth = minText
+            if self.ActionLabel and self.ActionLabel.GetStringWidth then
                 local actualWidth = self.ActionLabel:GetStringWidth()
                 if actualWidth and actualWidth > 0 then
-                    textWidth = math.max(textWidth, actualWidth + 10)  -- 额外留白
+                    textWidth = math.max(minText, actualWidth + 10) -- 额外留白
                 end
             end
-            
+
             return leftPad + textWidth + actionToKeyGap + keyBoxWidth + rightPad
         end
 
@@ -3159,6 +3174,8 @@ local function CreateUI()
             local keyBoxWidth = KCFG.keyBoxWidth or 100
             local keyBoxHeight = KCFG.keyBoxHeight or 22
             local actionToKeyGap = KCFG.actionToKeyGap or 8
+            local rowLeftPad  = KCFG.rowLeftPad or 8
+            local rowRightPad = KCFG.rowRightPad or 8
             local borderNormal = KCFG.borderNormal or { r = 0.3, g = 0.3, b = 0.3, a = 1 }
             local borderHover = KCFG.borderHover or { r = 0.8, g = 0.6, b = 0, a = 1 }
             local bgColor = KCFG.bgColor or { r = 0.08, g = 0.08, b = 0.08, a = 1 }
@@ -3177,19 +3194,25 @@ local function CreateUI()
             bg:SetColorTexture(0, 0, 0, 0.1)
             f.Background = bg
             
-            -- 动作名称标签（左侧）- 使用较大宽度适应多语言
+            -- 动作名称标签（左侧）
             local actionLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            actionLabel:SetPoint("LEFT", f, "LEFT", 8, 0)
-            actionLabel:SetWidth(160)  -- 增大到 160 以适应 "Rotate CCW 90°" 等英文
             actionLabel:SetJustifyH("LEFT")
             f.ActionLabel = actionLabel
-            
-            -- 按键框容器（相对 actionLabel 定位）
+
+            -- 按键框容器（右对齐，保证右侧留边对称）
             local keyBox = CreateFrame("Button", nil, f)
             keyBox:SetSize(keyBoxWidth, keyBoxHeight)
-            keyBox:SetPoint("LEFT", actionLabel, "RIGHT", actionToKeyGap, 0)
+            keyBox:ClearAllPoints()
+            keyBox:SetPoint("RIGHT", f, "RIGHT", -rowRightPad, 0)
             keyBox:RegisterForClicks("LeftButtonUp", "RightButtonUp")
             f.KeyBox = keyBox
+
+            -- 重新锚定动作名称标签：左贴父，右贴按键框左侧，留出间距
+            actionLabel:ClearAllPoints()
+            actionLabel:SetPoint("LEFT", f, "LEFT", rowLeftPad, 0)
+            actionLabel:SetPoint("RIGHT", keyBox, "LEFT", -actionToKeyGap, 0)
+            if actionLabel.SetMaxLines then actionLabel:SetMaxLines(1) end
+            if actionLabel.SetWordWrap then actionLabel:SetWordWrap(false) end
             
             -- 按键框背景（深色边框）
             local keyBg = keyBox:CreateTexture(nil, "BACKGROUND")
@@ -3359,7 +3382,7 @@ local function CreateUI()
         local w = tonumber(CentralSection:GetWidth()) or (total - leftw)
         -- 修正：列表项左侧存在统一缩进 offsetX = GetRightPadding()，
         -- 条目实际可用宽度应扣除该缩进，避免右侧对齐越界。
-        local newWidth = API.Round((w or 0)) - GetRightPadding()
+        local newWidth = API.Round((w or 0)) - 2 * GetRightPadding()
         if newWidth < 120 then newWidth = 120 end
         if newWidth <= 0 then return end
 
@@ -3384,6 +3407,7 @@ local function CreateUI()
             ScrollView:CallObjectMethod("Entry", "SetWidth", newWidth)
             ScrollView:CallObjectMethod("Header", "SetWidth", newWidth)
             ScrollView:CallObjectMethod("DecorItem", "SetWidth", newWidth)
+            ScrollView:CallObjectMethod("KeybindEntry", "SetWidth", newWidth)
             ScrollView:OnSizeChanged(true)
             if self.ModuleTab.ScrollBar and self.ModuleTab.ScrollBar.UpdateThumbRange then
                 self.ModuleTab.ScrollBar:UpdateThumbRange()

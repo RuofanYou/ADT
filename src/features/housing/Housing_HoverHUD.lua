@@ -1933,7 +1933,6 @@ end)
 do
     local owner
     local btnTempStore, btnTempRecall
-    local btnToggleUI
     local btnDuplicate
     -- 住宅剪切板：复制/粘贴/剪切（强制覆盖）
     local btnCopy, btnPaste, btnCut
@@ -1957,8 +1956,7 @@ do
         -- 创建“复制同款（Duplicate）”点击代理按钮（CTRL-D）
         btnDuplicate = CreateFrame("Button", "ADT_HousingOverride_Duplicate", owner, "SecureActionButtonTemplate")
 
-        -- 设置面板切换（/adt 同效）
-        btnToggleUI = CreateFrame("Button", "ADT_HousingOverride_ToggleUI", owner, "SecureActionButtonTemplate")
+        -- 删除：原“设置面板切换”键位代理按钮（CTRL+Q）
 
         -- 高级编辑按钮（调用 Bindings.lua 中的全局函数）
         btnAdvToggle = CreateFrame("Button", "ADT_HousingOverride_AdvToggle", owner, "SecureActionButtonTemplate")
@@ -1971,10 +1969,7 @@ do
         btnTempStore:SetScript("OnClick", function() if _G.ADT_Temp_StoreSelected then ADT_Temp_StoreSelected() end end)
         btnTempRecall:SetScript("OnClick", function() if _G.ADT_Temp_RecallTop then ADT_Temp_RecallTop() end end)
 
-        -- 设置面板切换（调用 UI.lua 中的集中逻辑）
-        btnToggleUI:SetScript("OnClick", function()
-            if ADT and ADT.ToggleMainUI then ADT.ToggleMainUI() end
-        end)
+        -- 删除：CTRL+Q 触发 Dock 显隐的点击代理
 
         -- 复制/粘贴/剪切 调用（调用当前文件中的实现）
         btnCopy:SetScript("OnClick", function()
@@ -2030,8 +2025,6 @@ do
     -- 仅注册不由 Keybinds 模块管理的固定绑定
     -- 所有动态快捷键（Copy、Paste、Cut、Store 等）由 Keybinds.lua 统一管理
     local OVERRIDE_KEYS = {
-        -- 设置面板切换（不在 Keybinds 中管理，始终固定）
-        { key = "CTRL-Q", button = function() return btnToggleUI end, fixed = true },
         -- 误操作保护锁定/解锁（可由设置开关控制）
         { key = "L", button = function() return btnToggleLock end, fixed = true, dbKey = "EnableLock" },
         -- 旋转 90°绑定移除：改由 Keybinds.lua 统一注册（并受 EnableQERotate 门控）。

@@ -707,6 +707,25 @@ local function RegisterSettings()
         name = L["Sequence Angles"] or "Sequence Angles",
         dbKey = 'AutoRotateSequence',
         type = 'dropdown',
+        -- 当 DB 中的值不在预设 options 列表内（例如用户通过“自定义…”输入了 0,5）时，
+        -- 使用该函数将实际值格式化为带 “°” 的展示文本，确保标签能实时反映自定义配置。
+        valueToText = function(v)
+            local s = tostring(v or "")
+            if s == "" then return s end
+            local out = {}
+            for token in string.gmatch(s, "[^,]+") do
+                token = token:gsub("%s+", "")
+                if token ~= "" then
+                    local num = tonumber(token)
+                    if num then
+                        table.insert(out, tostring(NormalizeDeg(num)) .. "°")
+                    else
+                        table.insert(out, token)
+                    end
+                end
+            end
+            return table.concat(out, ",")
+        end,
         options = {
             { value = "0,90",             text = "0°,90°" },
             { value = "0,-90",            text = "0°,-90°" },
