@@ -2618,34 +2618,30 @@ do  -- Central
                 offsetX = offsetX,
             }
             
-            -- 恢复默认按钮
+            -- 恢复默认：改为明确的按钮控件，避免整块区域可点
             offsetY = offsetY + buttonHeight + 8
             n = n + 1
+            local resetBtnH = 24
+            local resetBtnW = 120
             content[n] = {
                 dataIndex = n,
-                templateKey = "Header",
-                setupFunc = function(obj)
-                    obj:SetText((ADT.L and ADT.L['Reset All Keybinds']) or "[ 恢复默认 ]")
-                    SetTextColor(obj.Label, {0.6, 0.8, 1})
-                    if obj.Left then obj.Left:Hide() end
-                    if obj.Right then obj.Right:Hide() end
-                    if obj.Divider then obj.Divider:Hide() end
-                    obj.Label:SetJustifyH("CENTER")
-                    -- 可点击恢复默认
-                    obj:SetScript("OnMouseDown", function()
+                templateKey = "CenterButton",
+                setupFunc = function(btn)
+                    -- 统一文案（由 i18n 提供）；按钮样式更直观
+                    if btn.SetText then btn:SetText((ADT.L and ADT.L['Reset All Keybinds']) or "恢复默认") end
+                    btn:SetScript("OnClick", function()
                         if ADT.Keybinds and ADT.Keybinds.ResetAllToDefaults then
                             ADT.Keybinds:ResetAllToDefaults()
                             if ADT.Notify then ADT.Notify((ADT.L and ADT.L['Keybinds Reset Done']) or "快捷键已恢复默认") end
-                            -- 刷新列表
                             MainFrame:ShowKeybindsCategory(categoryKey)
                         end
                     end)
-                    obj:EnableMouse(true)
                 end,
                 point = "TOPLEFT",
                 relativePoint = "TOPLEFT",
                 top = offsetY,
-                bottom = offsetY + buttonHeight,
+                bottom = offsetY + resetBtnH,
+                -- 左侧对齐：不再占用整行点击区域
                 offsetX = offsetX,
             }
         end
@@ -3018,6 +3014,15 @@ local function CreateUI()
         end
 
         ScrollView:AddTemplate("Header", Header_Create)
+
+        -- 小型动作按钮模板（用于“恢复默认”）。
+        local function CenterButton_Create()
+            local btn = CreateFrame("Button", nil, ScrollView, "UIPanelButtonTemplate")
+            btn:SetSize(120, 24)
+            return btn
+        end
+
+        ScrollView:AddTemplate("CenterButton", CenterButton_Create)
 
 
         -- 装饰项模板（用于临时板和最近放置列表）
