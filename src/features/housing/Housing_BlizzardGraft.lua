@@ -1351,9 +1351,11 @@ local function RestoreInstructions()
     AdoptState.originalParent = nil
     AdoptState.restored = true
 
+    -- KISS：SubPanel 在编辑模式下必须常驻，不再在恢复官方 Instructions 时将其隐藏。
+    -- 若调用方需要变更内容，请仅更新正文，不要隐藏容器。
     local dock = GetDock()
     if dock and dock.SetSubPanelShown then
-        dock:SetSubPanelShown(false)
+        dock:SetSubPanelShown(true)
     end
     -- 不再使用镜像
     if AdoptState.mirror then AdoptState.mirror:Hide() end

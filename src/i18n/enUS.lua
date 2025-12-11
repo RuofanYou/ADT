@@ -152,6 +152,16 @@ ADT.L = ADT.L or {}
     -- Debug
     ["ADT Debug Enabled"] = "ADT Debug: Enabled",
     ["ADT Debug Disabled"] = "ADT Debug: Disabled",
+
+    -- Undo/Redo
+    ["Undo"] = "Undo",
+    ["Redo"] = "Redo",
+    ["No steps to undo"] = "Nothing to undo.",
+    ["No steps to redo"] = "Nothing to redo.",
+    ["Cannot select decor to undo"] = "Cannot select the decor to undo.",
+    ["Cannot select decor to redo"] = "Cannot select the decor to redo.",
+    ["Placement-level undo restricted"] = "Undo of placement not supported in this context; transform-only.",
+    ["Redo requires manual re-place"] = "Redo requires manual re-placement.",
     
     -- 语言选择
     ["Language"] = "Language",
@@ -335,6 +345,15 @@ ADT.L = ADT.L or {}
     -- 调试
     ["ADT Debug Enabled"] = "ADT 调试已开启",
     ["ADT Debug Disabled"] = "ADT 调试已关闭",
+    -- 撤销/重做
+    ["Undo"] = "撤销",
+    ["Redo"] = "重做",
+    ["No steps to undo"] = "无可撤销步骤。",
+    ["No steps to redo"] = "无可重做步骤。",
+    ["Cannot select decor to undo"] = "无法选中目标以执行撤销。",
+    ["Cannot select decor to redo"] = "无法选中目标以执行重做。",
+    ["Placement-level undo restricted"] = "当前环境不支持放置级撤销，仅可撤销变换。",
+    ["Redo requires manual re-place"] = "重做需手动再次放置该物品。",
 }
 
 -- 应用指定语言到 ADT.L

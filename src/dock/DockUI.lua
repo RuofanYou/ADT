@@ -3008,9 +3008,10 @@ function MainFrame:ShowUI(mode)
     -- 关闭按钮由 UIPanelCloseButton 提供，无需额外控制
     self:UpdateLayout()
     -- 固定停靠：不再恢复历史位置，统一由 ApplyDockPlacement 控制
-    -- 仅确保创建，不默认展示；需要时由业务侧显式打开
+    -- 规则调整（KISS）：进入编辑模式即确保 SubPanel 存在且可见；
+    -- 不再默认隐藏，避免“关闭 Dock / 退出编辑 / 重进”后子面板缺失。
     self:EnsureSubPanel()
-    self:SetSubPanelShown(false)
+    self:SetSubPanelShown(true)
     self:Show()
 end
 

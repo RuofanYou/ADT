@@ -231,18 +231,10 @@ local function AttachTo(main)
             end
 
             local function EvaluateAutoHide()
-                -- KISS：显示/隐藏的唯一权威在这里裁决。
-                -- 规则：只在“正文为空 且 标题无意义”时隐藏；否则必须显示。
-                local noBody = not AnyNonHeaderVisible(sub.Content, sub.Header)
-                local noHeader = not HeaderHasMeaningfulText(sub.Header)
-                if noBody and noHeader then
-                    sub:SetHeight(0)
-                    sub:Hide()
-                else
-                    if not sub:IsShown() then
-                        sub:Show()
-                        -- 显示后交由 OnShow 钩子触发一次自适应与再次判空
-                    end
+                -- BUGFIX: 永不隐藏 SubPanel（编辑模式中必须常驻）。
+                -- KISS：无条件保持可见，不再因“正文/标题为空”而隐藏或收缩为 0 高度。
+                if not sub:IsShown() then
+                    sub:Show()
                 end
             end
 
@@ -379,7 +371,7 @@ local function AttachTo(main)
             -- 尺寸/可见性变动时触发一次
             sub:HookScript("OnShow", function()
                 RequestAutoResize()
-                -- 次帧再判一次，覆盖“先显示后刷新”的时序
+                -- 次帧保持常驻可见（不做隐藏判定）。
                 C_Timer.After(0.05, EvaluateAutoHide)
             end)
             if sub.Content.HookScript then
@@ -389,7 +381,8 @@ local function AttachTo(main)
             -- 对外暴露：允许业务侧在特殊时点主动触发判空
             ADT.DockUI.EvaluateSubPanelAutoHide = EvaluateAutoHide
         end
-        sub:Hide()
+        -- 规则调整：创建即显示，避免调用方忘记显式打开导致“再入编辑模式后子面板缺失”。
+        sub:Show()
         return sub
     end
 
