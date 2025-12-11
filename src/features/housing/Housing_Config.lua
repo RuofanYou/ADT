@@ -239,7 +239,7 @@ local CFG = {
             point    = "BOTTOM",  -- Quickbar 自身锚点
             relPoint = "BOTTOM",  -- 相对 UIParent 的锚点
             x        = 0,          -- 水平偏移（像素；正值→向右）
-            bottomMargin = 0,      -- 底边距（像素；正值→向上）。当 point/relPoint 不是 BOTTOM 时同样作为 Y 偏移使用
+            bottomMargin = 5,      -- 底边距（像素；正值→向上）。当 point/relPoint 不是 BOTTOM 时同样作为 Y 偏移使用
         },
         -- 暴雪 ModesBar 与 Quickbar 之间的垂直间距（Quickbar 顶到 ModesBar 底）
         modeBarGap = 1,
