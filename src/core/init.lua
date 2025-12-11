@@ -51,6 +51,7 @@ local DEFAULTS = {
     AutoRotateSequence = "0,90",       -- 序列（逗号分隔），仅在 mode=sequence 生效
     AutoRotateApplyScope = "onlyPaint", -- 仅在按住 CTRL 连续放置时启用："onlyPaint"；或对所有抓取入口启用："all"
     AutoRotateStepDegrees = 15,         -- 基本模式单次步进角度（估值，可在设置中调节）
+    AutoRotateIncrementDegrees = 15,    -- 递增旋转模式：每次放置增加的角度
     -- 注意：按 decorRecordID 的专属步进、序列索引、学习记录等运行期/半持久化数据
     -- 统一收敛到 ADT_DB.AutoRotate 子表中，避免出现重复字段。
 
@@ -106,7 +107,7 @@ end
 -- 允许值校验（防御：被其它版本写入异常值时恢复到安全态）
 local function ValidateEnums(db)
     local mode = db.AutoRotateMode
-    if mode ~= "preset" and mode ~= "learn" and mode ~= "sequence" then
+    if mode ~= "preset" and mode ~= "learn" and mode ~= "sequence" and mode ~= "increment" then
         db.AutoRotateMode = "preset"
     end
 end

@@ -489,6 +489,24 @@ local function buildModules()
     return modules
 end
 
+-- 分类显示名：集中管理，避免散落重复（单一权威）
+local function getCategoryDisplayName(key)
+    if key == 'Housing' then
+        return (L and L['SC Housing']) or '通用'
+    elseif key == 'Clipboard' then
+        return (L and L['SC Clipboard']) or '临时板'
+    elseif key == 'History' then
+        return (L and L['SC History']) or '最近放置'
+    elseif key == 'AutoRotate' then
+        return (L and L['SC AutoRotate']) or '自动旋转'
+    elseif key == 'Keybinds' then
+        return (L and L['SC Keybinds']) or '快捷键'
+    elseif key == 'About' then
+        return (L and L['SC About']) or '信息'
+    end
+    return tostring(key)
+end
+
 local function ensureSorted(self)
     -- 若未构建，先构建基础模块（语言、剪切板等）
     if not self._sorted then self._sorted = buildModules() end
@@ -514,6 +532,12 @@ local function ensureSorted(self)
         end
         -- 如需在 provider 失败时重试，可在外部显式调用 RebuildModules()。
     end
+    -- 语言可能在 Dock 构建后切换；这里每次确保分类名称与当前语言表同步（单一权威）。
+    if self._sorted then
+        for _, cat in ipairs(self._sorted) do
+            cat.categoryName = getCategoryDisplayName(cat.key)
+        end
+    end
 end
 
 function CommandDock:GetSortedModules()
@@ -521,22 +545,7 @@ function CommandDock:GetSortedModules()
     return self._sorted
 end
 
-local function getCategoryDisplayName(key)
-    if key == 'Housing' then
-        return (L and L['SC Housing']) or '通用'
-    elseif key == 'Clipboard' then
-        return (L and L['SC Clipboard']) or '临时板'
-    elseif key == 'History' then
-        return (L and L['SC History']) or '最近放置'
-    elseif key == 'AutoRotate' then
-        return (L and L['SC AutoRotate']) or '自动旋转'
-    elseif key == 'Keybinds' then
-        return (L and L['SC Keybinds']) or '快捷键'
-    elseif key == 'About' then
-        return (L and L['SC About']) or '信息'
-    end
-    return tostring(key)
-end
+-- 上移到 ensureSorted 之前，避免首次调用时为 nil
 
 local function sortCategory(cat)
     table.sort(cat.modules, function(a, b)

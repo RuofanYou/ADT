@@ -80,6 +80,13 @@ ADT.L = ADT.L or {}
     ["Grab an item to calibrate"] = "Grab a decor to calibrate",
     ["Step for this decor set to %s°"] = "Step for this decor set to %s°",
     ["Step for this decor cleared"] = "Per-decor step cleared; using global",
+    -- Increment mode
+    ["Enable Increment Rotate"] = "Enable Increment Rotate",
+    ["Enable Increment Rotate tooltip"] = "When holding CTRL to batch place, each subsequent item will rotate by an additional configured angle.",
+    ["Mode Increment"] = "Increment",
+    ["Increment Angle"] = "Increment Angle",
+    ["Increment Angle tooltip"] = "In Increment mode, each placement adds this many degrees. Use /adtresetrot to reset the accumulator to 0.",
+    ["Increment accumulator reset to 0"] = "Increment accumulator reset to 0",
     
     ["SC Housing"] = "General",
     ["SC Clipboard"] = "Clipboard",
@@ -94,7 +101,7 @@ ADT.L = ADT.L or {}
     ["Right Click Clear"] = "<Right-click to clear>",
     ["Keybinds Module Not Loaded"] = "Keybinds module not loaded",
     ["Keybinds Housing Only Hint"] = "Only active in Housing Editor mode",
-    ["Reset All Keybinds"] = "[ Reset to Default ]",
+    ["Reset All Keybinds"] = "Reset",
     ["Keybinds Reset Done"] = "All keybinds reset to default",
     ["List Is Empty"] = "No results",
     -- Hover InfoLine（室内/外 + 库存 + 染色）
@@ -190,6 +197,16 @@ ADT.L = ADT.L or {}
     ["Credits Label"] = "Credits",
     ["Bilibili Label"] = "bilibili:",
     ["QQ Group Label"] = "QQ Group:",
+    
+    -- Quickbar
+    ["Quickbar slot %s cleared"] = "Quickbar slot %s cleared",
+    ["Decor bound to quickbar %s"] = "Decor bound to quickbar %s",
+    ["All quickbar slots cleared"] = "All quickbar slots cleared",
+    ["Cannot place decor"] = "Cannot place decor",
+    ["Empty slot %s"] = "Empty slot %s",
+    ["Quickbar bind hint"] = "Grab a decor and press this key to bind",
+    ["Left-click: Place"] = "Left-click: Place",
+    ["Right-click: Clear"] = "Right-click: Clear",
 }
 
 -- 中文语言表
@@ -267,6 +284,13 @@ ADT.L = ADT.L or {}
     ["Grab an item to calibrate"] = "请先抓起一个装饰以校准",
     ["Step for this decor set to %s°"] = "已为该装饰设置步进 %s°",
     ["Step for this decor cleared"] = "已清除此装饰的专属步进，改用全局值",
+    -- 递增旋转模式
+    ["Enable Increment Rotate"] = "启用递增旋转",
+    ["Enable Increment Rotate tooltip"] = "按住 CTRL 批量放置时，第 n 件相对默认朝向自动多旋转 n×角度。",
+    ["Mode Increment"] = "递增旋转",
+    ["Increment Angle"] = "递增角度",
+    ["Increment Angle tooltip"] = "递增模式下，每次放置后自动累加该角度。使用 /adtresetrot 或 /重置旋转 可将累加器重置为 0。",
+    ["Increment accumulator reset to 0"] = "递增累加器已重置为 0",
     
     ["SC Housing"] = "通用",
     ["SC Clipboard"] = "临时板",
@@ -282,7 +306,7 @@ ADT.L = ADT.L or {}
     ["Right Click Clear"] = "<右键解除键位>",
     ["Keybinds Module Not Loaded"] = "快捷键模块未加载",
     ["Keybinds Housing Only Hint"] = "仅在住宅编辑模式下生效",
-    ["Reset All Keybinds"] = "[ 恢复默认 ]",
+    ["Reset All Keybinds"] = "恢复默认",
     ["Keybinds Reset Done"] = "快捷键已恢复默认",
     -- 悬停“信息行”
     ["Indoor"] = "室内",
@@ -374,6 +398,16 @@ ADT.L = ADT.L or {}
     ["Cannot select decor to redo"] = "无法选中目标以执行重做。",
     ["Placement-level undo restricted"] = "当前环境不支持放置级撤销，仅可撤销变换。",
     ["Redo requires manual re-place"] = "重做需手动再次放置该物品。",
+    
+    -- 快捷栏
+    ["Quickbar slot %s cleared"] = "快捷栏 %s 已清空",
+    ["Decor bound to quickbar %s"] = "装饰已绑定到快捷栏 %s",
+    ["All quickbar slots cleared"] = "所有快捷栏已清空",
+    ["Cannot place decor"] = "无法放置装饰",
+    ["Empty slot %s"] = "空槽位 %s",
+    ["Quickbar bind hint"] = "抓取装饰后按此键绑定",
+    ["Left-click: Place"] = "左键：放置",
+    ["Right-click: Clear"] = "右键：清空",
 }
 
 -- 应用指定语言到 ADT.L

@@ -880,8 +880,13 @@ do
     end
 
     function EL:OnEvent(event, ...)
-        if ADT and ADT.DebugPrint and event ~= "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" then
-            ADT.DebugPrint("[Housing] OnEvent: "..tostring(event))
+        -- 调试输出节流：悬停事件（基础/专家）只打印一次，避免刷屏
+        if ADT and (ADT.DebugPrint or ADT.DebugOnce) then
+            if event == "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" or event == "HOUSING_EXPERT_MODE_HOVERED_TARGET_CHANGED" then
+                if ADT.DebugOnce then ADT.DebugOnce("[Housing] OnEvent: "..tostring(event)) end
+            else
+                ADT.DebugPrint("[Housing] OnEvent: "..tostring(event))
+            end
         end
         -- 需求变更：基础/专家模式均允许悬停驱动 HoverHUD（不再屏蔽）。
         if event == "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" or event == "HOUSING_EXPERT_MODE_HOVERED_TARGET_CHANGED" then

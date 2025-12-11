@@ -5,7 +5,8 @@
     <Script file="Housing_Favorites.lua"/>
     <Script file="Housing_HoverHUD.lua"/>
     <Script file="Housing_BatchPlace.lua"/>
-    <Script file="Housing_AutoRotate.lua"/>
+
+    <Script file="Housing_IncrementRotate.lua"/>
     <Script file="Housing_KeyRotate.lua"/>
     <Script file="Housing_Recent.lua"/>
     <Script file="Housing_VisitAssistant.lua"/>
