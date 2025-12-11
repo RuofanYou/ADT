@@ -23,16 +23,16 @@ local DEFAULTS = {
     Recall       = "CTRL-R",     -- 取出临时板
     Reset        = "T",          -- 重置变换
     ResetAll     = "CTRL-T",     -- 重置全部
-    RotateCCW90  = "",           -- 逆时针旋转90°（无默认）
-    RotateCW90   = "",           -- 顺时针旋转90°（无默认）
-    QuickScale   = "SHIFT-S",    -- 快速缩放到200%
+    -- 根据玩家反馈：Q=顺时针(+90)，E=逆时针(-90)
+    RotateCCW90  = "E",          -- 逆时针旋转90°（默认 E）
+    RotateCW90   = "Q",          -- 顺时针旋转90°（默认 Q）
 }
 
 -- 动作定义（每个动作对应一个功能）
 -- 注意：这是快捷键到功能的唯一权威映射
 local ACTIONS = {
     Duplicate = {
-        name = "复制放置",
+        name = "重复",
         nameEN = "Duplicate",
         callback = function() if ADT.Housing and ADT.Housing.TryDuplicateItem then ADT.Housing:TryDuplicateItem() end end,
     },
@@ -80,11 +80,6 @@ local ACTIONS = {
         name = "顺时针旋转90°",
         nameEN = "Rotate CW 90°",
         callback = function() if ADT.RotateHotkey and ADT.RotateHotkey.RotateSelectedByDegrees then ADT.RotateHotkey:RotateSelectedByDegrees(90) end end,
-    },
-    QuickScale = {
-        name = "快速缩放200%",
-        nameEN = "Quick Scale 200%",
-        callback = function() if ADT.AutoScale and ADT.AutoScale.QuickScale then ADT.AutoScale:QuickScale() end end,
     },
 }
 
@@ -137,14 +132,18 @@ function M:SetKeybind(actionName, key)
     if ADT.Housing and ADT.Housing.RefreshOverrides then
         ADT.Housing:RefreshOverrides()
     end
+    -- 刷新 HoverHUD 键帽文本（单一权威：显示与绑定一致）
+    if ADT.Housing and ADT.Housing.RefreshKeycaps then
+        ADT.Housing:RefreshKeycaps()
+    end
 end
 
 -- 获取动作的显示名称
 function M:GetActionDisplayName(actionName)
     local action = ACTIONS[actionName]
     if not action then return actionName end
-    -- 根据游戏语言返回
-    local locale = GetLocale()
+    -- 根据 ADT 当前选择的语言返回（单一权威：ADT.CurrentLocale）
+    local locale = ADT.CurrentLocale or (ADT.GetActiveLocale and ADT.GetActiveLocale()) or GetLocale()
     if locale == "zhCN" or locale == "zhTW" then
         return action.name
     end
@@ -173,8 +172,32 @@ function M:GetAllActions()
             keyDisplay = self:GetKeyDisplayName(self:GetKeybind(name)),
         })
     end
-    -- 按类别排序（可选）
+    -- 先按名称排序（保持原有稳定顺序）
     table.sort(result, function(a, b) return a.name < b.name end)
+    -- 特别规则1：让 RotateCW90 排在 RotateCCW90 之前（Q 在 E 之前）
+    do
+        local idxCW, idxCCW
+        for i, v in ipairs(result) do
+            if v.name == 'RotateCW90' then idxCW = i end
+            if v.name == 'RotateCCW90' then idxCCW = i end
+        end
+        if idxCW and idxCCW and idxCW > idxCCW then
+            local cw = table.remove(result, idxCW)
+            if idxCW < idxCCW then idxCCW = idxCCW - 1 end
+            table.insert(result, idxCCW, cw)
+        end
+    end
+    -- 特别规则2：确保“存入临时板”在“取出临时板”之上且相邻
+    local idxStore, idxRecall
+    for i, v in ipairs(result) do
+        if v.name == 'Store' then idxStore = i end
+        if v.name == 'Recall' then idxRecall = i end
+    end
+    if idxStore and idxRecall and idxStore ~= (idxRecall - 1) then
+        local storeEntry = table.remove(result, idxStore)
+        if idxStore < idxRecall then idxRecall = idxRecall - 1 end
+        table.insert(result, idxRecall, storeEntry)
+    end
     return result
 end
 
@@ -216,7 +239,12 @@ end
 -- 注册单个绑定
 function M:RegisterBinding(actionName)
     if isInCombat then return end  -- 战斗中不修改绑定
-    
+    -- 若为 Q/E 旋转并且用户关闭了“启用 Q/E 旋转”，则跳过注册
+    if (actionName == 'RotateCCW90' or actionName == 'RotateCW90') then
+        local en = ADT.GetDBValue and ADT.GetDBValue('EnableQERotate')
+        if en == false then return end
+    end
+
     local key = self:GetKeybind(actionName)
     if not key or key == "" then return end
     
@@ -309,6 +337,10 @@ function M:ResetAllToDefaults()
         self:DeactivateAll()
         self:ActivateAll()
     end
+    -- 键帽文本也需要同步刷新
+    if ADT.Housing and ADT.Housing.RefreshKeycaps then
+        ADT.Housing:RefreshKeycaps()
+    end
 end
 
 -- ===========================
@@ -354,10 +386,22 @@ local function OnAddonLoaded()
             ADT.SetDBValue("Keybinds", db)
         end
     end
+    -- 清理已废弃字段：移除旧版“快速缩放”快捷键，避免出现在配置中（单一权威）
+    if ADT.GetDBValue and ADT.SetDBValue then
+        local db = ADT.GetDBValue("Keybinds") or {}
+        if db.QuickScale ~= nil then
+            db.QuickScale = nil
+            ADT.SetDBValue("Keybinds", db)
+        end
+    end
     
     -- 如果已在编辑模式，立即激活
     if C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive() then
         M:ActivateAll()
+    end
+    -- 初始进入时尝试刷新一次键帽文本（若 UI 已创建）
+    if ADT.Housing and ADT.Housing.RefreshKeycaps then
+        ADT.Housing:RefreshKeycaps()
     end
 end
 
@@ -367,4 +411,18 @@ C_Timer.After(0.5, OnAddonLoaded)
 -- 调试提示
 if ADT.DebugPrint then
     ADT.DebugPrint("[Keybinds] 模块已加载")
+end
+
+-- 订阅设置变化：当“启用 Q/E 旋转”被关闭/开启时，注销/注册相关绑定
+if ADT and ADT.Settings and ADT.Settings.On then
+    ADT.Settings.On('EnableQERotate', function(enabled)
+        if not isBindingsActive then return end
+        if enabled == false then
+            M:UnregisterBinding('RotateCW90')
+            M:UnregisterBinding('RotateCCW90')
+        else
+            M:RegisterBinding('RotateCW90')
+            M:RegisterBinding('RotateCCW90')
+        end
+    end)
 end

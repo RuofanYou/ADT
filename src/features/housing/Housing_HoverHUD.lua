@@ -219,7 +219,7 @@ end
 
 -- 确认弹窗定义
 StaticPopupDialogs["ADT_CONFIRM_EDIT_PROTECTED"] = {
-    text = "⚠️ " .. L["Decor is locked"] .. "\n\n%s\n\n" .. L["Confirm edit?"],
+    text = "" .. L["Decor is locked"] .. "\n\n%s\n\n" .. L["Confirm edit?"],
     button1 = L["Continue Edit"],
     button2 = L["Cancel Select"],
     button3 = L["Unlock"],
@@ -659,8 +659,16 @@ local function Blizzard_HouseEditor_OnLoaded()
         DisplayFrame.SubFrame = SubFrame
         Mixin(SubFrame, DisplayFrameMixin)
         SubFrame:OnLoad()
-        -- 默认显示 CTRL+D，兼容旧版通过 ADT.GetDuplicateKeyName() 返回文本
-        SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or "CTRL+D")
+        -- 键帽文本改为“单一权威：ADT.Keybinds”。若模块尚未就绪，再由刷新流程补齐。
+        do
+            local keyDisp
+            if ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds.GetKeyDisplayName then
+                keyDisp = ADT.Keybinds:GetKeyDisplayName(ADT.Keybinds:GetKeybind('Duplicate'))
+            else
+                keyDisp = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or ((CTRL_KEY_TEXT and (CTRL_KEY_TEXT.."+D")) or "CTRL+D")
+            end
+            SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", keyDisp)
+        end
         if SubFrame.LockStatusText then SubFrame.LockStatusText:Hide() end
         -- 新版将库存移动到 InfoLine 显示；隐藏旧的顶部数字
         if SubFrame.ItemCountText then SubFrame.ItemCountText:Hide() end
@@ -679,18 +687,44 @@ local function Blizzard_HouseEditor_OnLoaded()
         end
         SubFrame.isDuplicate = true
         local prev = SubFrame
-        prev = addHint(prev, L["Hotkey Cut"] or "Cut", CTRL.."+X")
-        prev = addHint(prev, L["Hotkey Copy"] or "Copy", CTRL.."+C")
-        prev = addHint(prev, L["Hotkey Paste"] or "Paste", CTRL.."+V")
-        prev = addHint(prev, L["Hotkey Store"] or "Store", CTRL.."+S")
-        prev = addHint(prev, L["Hotkey Recall"] or "Recall", CTRL.."+R")
+        -- 初始键帽文本按 Keybinds 动态生成
+        local function keyDisp(action, fallback)
+            if ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds.GetKeyDisplayName then
+                return ADT.Keybinds:GetKeyDisplayName(ADT.Keybinds:GetKeybind(action)) or fallback
+            end
+            return fallback
+        end
+        prev = addHint(prev, L["Hotkey Cut"] or "Cut",   keyDisp('Cut',   CTRL.."+X"))
+        prev = addHint(prev, L["Hotkey Copy"] or "Copy",  keyDisp('Copy',  CTRL.."+C"))
+        prev = addHint(prev, L["Hotkey Paste"] or "Paste",keyDisp('Paste', CTRL.."+V"))
+        prev = addHint(prev, L["Hotkey Store"] or "Store",keyDisp('Store', CTRL.."+S"))
+        prev = addHint(prev, L["Hotkey Recall"] or "Recall",keyDisp('Recall', CTRL.."+R"))
         -- 批量放置：按住 CTRL 连续放置
         prev = addHint(prev, L["Hotkey BatchPlace"] or "Batch Place", CTRL)
         -- 一键重置变换（专家模式）
-        prev = addHint(prev, L["Reset Current"] or "Reset", "T")
-        prev = addHint(prev, L["Reset All"] or "Reset All", CTRL.."+T")
+        prev = addHint(prev, L["Reset Current"] or "Reset", keyDisp('Reset', 'T'))
+        prev = addHint(prev, L["Reset All"] or "Reset All", keyDisp('ResetAll', CTRL.."+T"))
         -- 误操作保护：锁定/解锁
         prev = addHint(prev, L["Lock/Unlock"] or "Lock", "L")
+
+        -- Q/E 旋转（显示在 HUD 中；按设置 EnableQERotate 控制显隐）
+        do
+            local function getDisp(action, fb)
+                if ADT.Keybinds and ADT.Keybinds.GetActionDisplayName then
+                    return ADT.Keybinds:GetActionDisplayName(action) or fb
+                end
+                return fb
+            end
+            local function getKey(action, fb)
+                if ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds.GetKeyDisplayName then
+                    return ADT.Keybinds:GetKeyDisplayName(ADT.Keybinds:GetKeybind(action)) or fb
+                end
+                return fb
+            end
+            -- 顺时针（默认 Q）优先显示
+            prev = addHint(prev, getDisp('RotateCW90',  'Rotate CW 90°'),  getKey('RotateCW90',  'Q'))
+            prev = addHint(prev, getDisp('RotateCCW90', 'Rotate CCW 90°'), getKey('RotateCCW90', 'E'))
+        end
 
         -- 将所有“键帽”统一宽度，避免左侧文字参差不齐
         function DisplayFrame:NormalizeKeycapWidth()
@@ -702,6 +736,9 @@ local function Blizzard_HouseEditor_OnLoaded()
 
         -- 统一样式：延后由 ADT.ApplyHousingInstructionStyle 应用（加载顺序可能晚于本文件）
         if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame) end
+        
+        -- 首次创建后尝试按“单一权威”刷新一次键帽文本（防止模块加载顺序导致显示旧值）
+        if ADT and ADT.Housing and ADT.Housing.RefreshKeycaps then ADT.Housing:RefreshKeycaps() end
         DisplayFrame:NormalizeKeycapWidth()
         if DisplayFrame.RecalculateHeight then DisplayFrame:RecalculateHeight() end
         -- 关键：在子行全部创建完之后，再次统一设为透明，避免初始常驻
@@ -1410,14 +1447,27 @@ end
         end
         self.highlightEnabled = highlightEnabled
 
-        -- 展示文本遵循 ADT.GetDuplicateKeyName（历史兼容），行为固定为 Ctrl+D
-        self.currentDupeKeyName = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName())
-            or ((CTRL_KEY_TEXT and (CTRL_KEY_TEXT.."+D")) or "CTRL+D")
+        -- 展示文本改为从 ADT.Keybinds 读取（单一权威）。
+        do
+            local disp
+            if ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds.GetKeyDisplayName then
+                disp = ADT.Keybinds:GetKeyDisplayName(ADT.Keybinds:GetKeybind('Duplicate'))
+            else
+                disp = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or ((CTRL_KEY_TEXT and (CTRL_KEY_TEXT.."+D")) or "CTRL+D")
+            end
+            self.currentDupeKeyName = disp
+        end
         -- 不监听修饰键（避免 Alt 歧义）；由覆盖绑定触发。
         self.dupeKey = nil
 
         if DisplayFrame and DisplayFrame.SubFrame then
-            DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", ADT.GetDuplicateKeyName())
+            local disp
+            if ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds.GetKeyDisplayName then
+                disp = ADT.Keybinds:GetKeyDisplayName(ADT.Keybinds:GetKeybind('Duplicate'))
+            else
+                disp = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or ((CTRL_KEY_TEXT and (CTRL_KEY_TEXT.."+D")) or "CTRL+D")
+            end
+            DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", disp)
             if DisplayFrame.NormalizeKeycapWidth then DisplayFrame:NormalizeKeycapWidth() end
             if ADT and ADT.ApplyHousingInstructionStyle then
                 ADT.ApplyHousingInstructionStyle(DisplayFrame)
@@ -1445,9 +1495,14 @@ end
         -- HintFrames[1] = Cut (CTRL+X)
         -- HintFrames[2] = Copy (CTRL+C)
         -- HintFrames[3] = Paste (CTRL+V)
-        -- HintFrames[4] = Store (CTRL+S) - 始终显示
-        -- HintFrames[5] = Recall (CTRL+R) - 始终显示
+        -- HintFrames[4] = Store (CTRL+S) - 不再显示
+        -- HintFrames[5] = Recall (CTRL+R) - 不再显示
         -- HintFrames[6] = BatchPlace (CTRL) - 由 EnableBatchPlace 控制
+        -- HintFrames[7] = Reset (T)
+        -- HintFrames[8] = Reset All (CTRL+T)
+        -- HintFrames[9] = Lock (L)
+        -- HintFrames[10] = Rotate CW 90° (Q) - 由 EnableQERotate 控制
+        -- HintFrames[11] = Rotate CCW 90° (E) - 由 EnableQERotate 控制
         
         local allFrames = {}
         local visibilityConfig = {}
@@ -1469,15 +1524,17 @@ end
         -- HintFrames
         if DisplayFrame.HintFrames then
             local hintSettings = {
-                [1] = { dbKey = "EnableCut", default = true },   -- Cut (CTRL+X)
-                [2] = { dbKey = "EnableCopy", default = true },  -- Copy (CTRL+C)
-                [3] = { dbKey = "EnablePaste", default = true }, -- Paste (CTRL+V)
-                [4] = nil,  -- Store (CTRL+S) - 始终显示
-                [5] = nil,  -- Recall (CTRL+R) - 始终显示
-                [6] = { dbKey = "EnableBatchPlace", default = false }, -- Batch Place (CTRL)
-                [7] = { dbKey = "EnableResetT", default = true },      -- Reset (T)
-                [8] = { dbKey = "EnableResetAll", default = true },    -- Reset All (CTRL+T)
-                [9] = { dbKey = "EnableLock", default = true },        -- Lock (L)
+                [1]  = { dbKey = "EnableCut",         default = true  }, -- Cut (CTRL+X)
+                [2]  = { dbKey = "EnableCopy",        default = true  }, -- Copy (CTRL+C)
+                [3]  = { dbKey = "EnablePaste",       default = true  }, -- Paste (CTRL+V)
+                [4]  = { dbKey = "_HiddenStore",      default = false }, -- Store → 永不显示
+                [5]  = { dbKey = "_HiddenRecall",     default = false }, -- Recall → 永不显示
+                [6]  = { dbKey = "EnableBatchPlace",  default = false }, -- Batch Place (CTRL)
+                [7]  = { dbKey = "EnableResetT",      default = true  }, -- Reset (T)
+                [8]  = { dbKey = "EnableResetAll",    default = true  }, -- Reset All (CTRL+T)
+                [9]  = { dbKey = "EnableLock",        default = true  }, -- Lock (L)
+                [10] = { dbKey = "EnableQERotate",    default = true  }, -- Rotate CW 90° (Q)
+                [11] = { dbKey = "EnableQERotate",    default = true  }, -- Rotate CCW 90° (E)
             }
             for i, frame in ipairs(DisplayFrame.HintFrames) do
                 table.insert(allFrames, frame)
@@ -1549,15 +1606,20 @@ end
 end
 
 -- 语言切换时，刷新右侧提示行的本地化文本
-function EL:OnLocaleChanged()
-    if not DisplayFrame then return end
-    local L = ADT and ADT.L or {}
-    local CTRL = CTRL_KEY_TEXT or "CTRL"
-    -- 顶部重复提示（键帽文本可能因设置不同而变）
-    if DisplayFrame.SubFrame then
-        local keyName = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or (CTRL.."+D")
-        DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", keyName)
-    end
+    function EL:OnLocaleChanged()
+        if not DisplayFrame then return end
+        local L = ADT and ADT.L or {}
+        local CTRL = CTRL_KEY_TEXT or "CTRL"
+        -- 顶部重复提示：从 Keybinds 读取并本地化
+        if DisplayFrame.SubFrame then
+            local keyDisp
+            if ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds.GetKeyDisplayName then
+                keyDisp = ADT.Keybinds:GetKeyDisplayName(ADT.Keybinds:GetKeybind('Duplicate'))
+            else
+                keyDisp = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or (CTRL.."+D")
+            end
+            DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", keyDisp)
+        end
     -- 信息行：语言切换后等待下一次悬停刷新
     if DisplayFrame.InfoLine and DisplayFrame.InfoLine.InstructionText then
         DisplayFrame.InfoLine.InstructionText:SetText("")
@@ -1575,16 +1637,34 @@ function EL:OnLocaleChanged()
         [9] = L["Lock/Unlock"] or "Lock",
     }
     local keycaps = {
-        [1] = CTRL.."+X",
-        [2] = CTRL.."+C",
-        [3] = CTRL.."+V",
-        [4] = CTRL.."+S",
-        [5] = CTRL.."+R",
+        [1] = (ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds.GetKeyDisplayName(ADT.Keybinds:GetKeybind('Cut'))) or (CTRL.."+X"),
+        [2] = (ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds.GetKeyDisplayName(ADT.Keybinds:GetKeybind('Copy'))) or (CTRL.."+C"),
+        [3] = (ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds.GetKeyDisplayName(ADT.Keybinds:GetKeybind('Paste'))) or (CTRL.."+V"),
+        [4] = (ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds.GetKeyDisplayName(ADT.Keybinds:GetKeybind('Store'))) or (CTRL.."+S"),
+        [5] = (ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds.GetKeyDisplayName(ADT.Keybinds:GetKeybind('Recall'))) or (CTRL.."+R"),
         [6] = CTRL,
-        [7] = "T",
-        [8] = CTRL.."+T",
+        [7] = (ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds.GetKeyDisplayName(ADT.Keybinds:GetKeybind('Reset'))) or 'T',
+        [8] = (ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds.GetKeyDisplayName(ADT.Keybinds:GetKeybind('ResetAll'))) or (CTRL.."+T"),
         [9] = "L",
     }
+    -- 追加：旋转（Q/E）键位映射，用于 HUD 行 10/11
+    do
+        local function _getDisp(action, fb)
+            if ADT.Keybinds and ADT.Keybinds.GetActionDisplayName then
+                return ADT.Keybinds:GetActionDisplayName(action) or fb
+            end
+            return fb
+        end
+        map[10] = _getDisp('RotateCW90',  'Rotate CW 90°')
+        map[11] = _getDisp('RotateCCW90', 'Rotate CCW 90°')
+        if ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds.GetKeyDisplayName then
+            keycaps[10] = ADT.Keybinds:GetKeyDisplayName(ADT.Keybinds:GetKeybind('RotateCW90')) or 'Q'
+            keycaps[11] = ADT.Keybinds:GetKeyDisplayName(ADT.Keybinds:GetKeybind('RotateCCW90')) or 'E'
+        else
+            keycaps[10] = 'Q'
+            keycaps[11] = 'E'
+        end
+    end
     if DisplayFrame.HintFrames then
         for i, line in ipairs(DisplayFrame.HintFrames) do
             if line and line.SetHotkey and map[i] and keycaps[i] then
@@ -1603,7 +1683,73 @@ function EL:OnLocaleChanged()
     end
     -- 重新应用可见性（用户开关可能影响）
     if self.UpdateHintVisibility then self:UpdateHintVisibility() end
-end
+    end
+
+    -- 新增：集中刷新右侧所有“键帽文本”，严格从 ADT.Keybinds 读取（单一权威）
+    function EL:RefreshKeycaps()
+        if not DisplayFrame then return end
+        local L = ADT and ADT.L or {}
+        local CTRL = CTRL_KEY_TEXT or "CTRL"
+        -- 顶部 Duplicate
+        if DisplayFrame.SubFrame then
+            local dup = ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds:GetKeybind('Duplicate')
+            local disp = (ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds:GetKeyDisplayName(dup))
+                or (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or (CTRL.."+D")
+            DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", disp)
+        end
+        -- 其他行
+        if DisplayFrame.HintFrames then
+            local function KD(name, fb)
+                if ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds.GetKeyDisplayName then
+                    return ADT.Keybinds:GetKeyDisplayName(ADT.Keybinds:GetKeybind(name)) or fb
+                end
+                return fb
+            end
+            local caps = {
+                KD('Cut',   CTRL.."+X"),
+                KD('Copy',  CTRL.."+C"),
+                KD('Paste', CTRL.."+V"),
+                KD('Store', CTRL.."+S"),
+                KD('Recall',CTRL.."+R"),
+                CTRL, -- 批量放置（保持 CTRL 提示）
+                KD('Reset', 'T'),
+                KD('ResetAll', CTRL.."+T"),
+                'L',
+            }
+            -- 扩展：Q/E 旋转键帽（行 10/11）
+            caps[10] = KD('RotateCW90',  'Q')
+            caps[11] = KD('RotateCCW90', 'E')
+            for i, line in ipairs(DisplayFrame.HintFrames) do
+                local textMap = {
+                    [1] = L["Hotkey Cut"]    or "Cut",
+                    [2] = L["Hotkey Copy"]   or "Copy",
+                    [3] = L["Hotkey Paste"]  or "Paste",
+                    [4] = L["Hotkey Store"]  or "Store",
+                    [5] = L["Hotkey Recall"] or "Recall",
+                    [6] = L["Hotkey BatchPlace"] or "Batch Place",
+                    [7] = L["Reset Current"] or "Reset",
+                    [8] = L["Reset All"] or "Reset All",
+                    [9] = L["Lock/Unlock"] or "Lock",
+                }
+                -- 扩展：为旋转行设置本地化显示名
+                do
+                    local function _getDisp(action, fb)
+                        if ADT.Keybinds and ADT.Keybinds.GetActionDisplayName then
+                            return ADT.Keybinds:GetActionDisplayName(action) or fb
+                        end
+                        return fb
+                    end
+                    textMap[10] = _getDisp('RotateCW90',  'Rotate CW 90°')
+                    textMap[11] = _getDisp('RotateCCW90', 'Rotate CCW 90°')
+                end
+                if line and line.SetHotkey and textMap[i] and caps[i] then
+                    line:SetHotkey(textMap[i], caps[i])
+                end
+            end
+        end
+        if DisplayFrame.NormalizeKeycapWidth then DisplayFrame:NormalizeKeycapWidth() end
+        if ADT and ADT.ApplyHousingInstructionStyle then ADT.ApplyHousingInstructionStyle(DisplayFrame) end
+    end
 
 --
 -- 绑定辅助：复制 / 粘贴 / 剪切
@@ -1793,8 +1939,7 @@ do
     local btnCopy, btnPaste, btnCut
     -- 一键重置变换（T / CTRL-T）
     local btnResetSubmode, btnResetAll
-    -- 旋转快捷键（Q/E 90°）
-    local btnRotateQ, btnRotateE
+    -- 旋转快捷键由 Keybinds 模块统一管理（单一权威）。
     -- 高级编辑：虚拟多选 按键按钮（不做强制覆盖，仅提供绑定接口）
     local btnAdvToggle, btnAdvToggleHovered, btnAdvClear, btnAdvAnchorHover, btnAdvAnchorSelected
 
@@ -1863,20 +2008,7 @@ do
             if ADT and ADT.Housing and ADT.Housing.ResetAllTransforms then ADT.Housing:ResetAllTransforms() end
         end)
 
-        -- 旋转 90°（Q/E）：调用 RotateHotkey 模块（若未加载则安全无操作）
-        btnRotateQ = CreateFrame("Button", "ADT_HousingOverride_RotateQ", owner, "SecureActionButtonTemplate")
-        btnRotateE = CreateFrame("Button", "ADT_HousingOverride_RotateE", owner, "SecureActionButtonTemplate")
-        -- 根据玩家反馈：Q=顺时针(+90)，E=逆时针(-90)
-        btnRotateQ:SetScript("OnClick", function()
-            if ADT and ADT.RotateHotkey and ADT.RotateHotkey.RotateSelectedByDegrees then
-                ADT.RotateHotkey:RotateSelectedByDegrees(90)
-            end
-        end)
-        btnRotateE:SetScript("OnClick", function()
-            if ADT and ADT.RotateHotkey and ADT.RotateHotkey.RotateSelectedByDegrees then
-                ADT.RotateHotkey:RotateSelectedByDegrees(-90)
-            end
-        end)
+        -- Q/E 旋转不再在此注册覆盖绑定，改由 ADT.Keybinds 统一管理。
 
         -- 误操作保护按钮（L 键锁定/解锁）
         btnToggleLock = CreateFrame("Button", "ADT_HousingOverride_ToggleLock", owner, "SecureActionButtonTemplate")
@@ -1902,9 +2034,7 @@ do
         { key = "CTRL-Q", button = function() return btnToggleUI end, fixed = true },
         -- 误操作保护锁定/解锁（可由设置开关控制）
         { key = "L", button = function() return btnToggleLock end, fixed = true, dbKey = "EnableLock" },
-        -- 旋转 90°（可由设置开关控制）
-        { key = "Q", button = function() return btnRotateQ end, fixed = true, dbKey = "EnableQERotate" },
-        { key = "E", button = function() return btnRotateE end, fixed = true, dbKey = "EnableQERotate" },
+        -- 旋转 90°绑定移除：改由 Keybinds.lua 统一注册（并受 EnableQERotate 门控）。
     }
 
     function EL:ClearOverrides()

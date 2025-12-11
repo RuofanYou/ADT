@@ -122,7 +122,7 @@ local CFG = {
         -- 锚点：将官方 DecorCount 贴到 Dock.Header 的哪个点位
         point    = "RIGHT",
         relPoint = "RIGHT",
-        offsetX  = -50,
+        offsetX  = -60,
         offsetY  = -2,
         -- 缩放：整体缩放比（不改变父级/显隐）
         scale    = 0.65,
@@ -138,7 +138,7 @@ local CFG = {
     PlacedListButton = {
         point    = "LEFT",
         relPoint = "LEFT",
-        offsetX  = 40,
+        offsetX  = 50,
         offsetY  = -5,
         scale    = 1.0,
         strata   = nil,      -- nil=跟随 Dock 主体；也可指定 "FULLSCREEN_DIALOG" 等
@@ -201,6 +201,32 @@ local CFG = {
             enabled   = true,
             inDuration = 0.15,   -- 秒
         },
+    },
+    -- 快捷键设置 UI（KeybindUI）布局与样式参数（配置驱动，单一权威）
+    KeybindUI = {
+        -- 动作名称列宽度
+        actionLabelWidth = 120,
+        -- 按键框尺寸
+        keyBoxWidth   = 100,
+        keyBoxHeight  = 22,
+        -- 按键框与动作名之间的间距
+        actionToKeyGap = 8,
+        -- Header 区域提示文本偏移（相对 Header 右侧）
+        headerHintOffsetX = -50,   -- 负值向左
+        headerHintOffsetY = 13,    -- 正值向上
+        -- 边框颜色（RGBA 0~1）
+        borderNormal    = { r = 0.3, g = 0.3, b = 0.3, a = 1 },
+        borderHover     = { r = 0.8, g = 0.6, b = 0, a = 1 },
+        borderRecording = { r = 1, g = 0.82, b = 0, a = 1 },
+        -- 背景颜色
+        bgColor = { r = 0.08, g = 0.08, b = 0.08, a = 1 },
+        -- 按键文本颜色（正常 / 未设置 / 录制中）
+        keyTextNormal   = { r = 1, g = 0.82, b = 0 },      -- 金色
+        keyTextEmpty    = { r = 0.5, g = 0.5, b = 0.5 },   -- 灰色
+        keyTextRecording = { r = 1, g = 0.82, b = 0 },     -- 金色
+        -- Header 提示文本颜色（悬停 / 录制中）
+        hintHover     = { r = 0.6, g = 0.8, b = 1 },       -- 浅蓝色
+        hintRecording = { r = 1, g = 0.82, b = 0 },        -- 金色
     },
 }
 

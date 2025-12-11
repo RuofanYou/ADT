@@ -2482,7 +2482,7 @@ do  -- Central
         local offsetY = fromOffsetY
         local offsetX = GetRightPadding()
         
-        -- 添加标题
+        -- 添加标题（带右侧提示区域）
         n = n + 1
         content[n] = {
             dataIndex = n,
@@ -2493,6 +2493,23 @@ do  -- Central
                 if obj.Right then obj.Right:Hide() end
                 if obj.Divider then obj.Divider:Show() end
                 obj.Label:SetJustifyH("LEFT")
+                
+                -- 创建或获取提示文本（右侧）
+                if not obj._keybindHint then
+                    local KCFG = (ADT.HousingInstrCFG and ADT.HousingInstrCFG.KeybindUI) or {}
+                    local hintOffsetX = KCFG.headerHintOffsetX or -8
+                    local hintOffsetY = KCFG.headerHintOffsetY or 0
+                    local hint = obj:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+                    hint:SetPoint("RIGHT", obj, "RIGHT", hintOffsetX, hintOffsetY)
+                    hint:SetJustifyH("RIGHT")
+                    hint:SetTextColor(0.6, 0.8, 1, 1)  -- 浅蓝色
+                    obj._keybindHint = hint
+                end
+                obj._keybindHint:SetText("")
+                obj._keybindHint:Show()
+                
+                -- 注册为全局引用，供 KeybindEntry 使用
+                MainFrame._keybindCategoryHint = obj._keybindHint
             end,
             point = "TOPLEFT",
             relativePoint = "TOPLEFT",
@@ -2540,7 +2557,8 @@ do  -- Central
                     dataIndex = n,
                     templateKey = "KeybindEntry",
                     setupFunc = function(obj)
-                        obj:SetKeybindData(capAction)
+                        -- 仅以动作名为键，渲染时从 Keybinds 读取现值，避免滚动复用后显示回退
+                        obj:SetKeybindByActionName(capAction.name)
                     end,
                     point = "TOPLEFT",
                     relativePoint = "TOPLEFT",
@@ -2558,7 +2576,7 @@ do  -- Central
                 dataIndex = n,
                 templateKey = "Header",
                 setupFunc = function(obj)
-                    obj:SetText((ADT.L and ADT.L['Keybinds Housing Only Hint']) or "⚠️ 这些快捷键仅在住宅编辑模式下生效")
+                    obj:SetText((ADT.L and ADT.L['Keybinds Housing Only Hint']) or "仅在住宅编辑模式下生效")
                     SetTextColor(obj.Label, Def.TextColorWarn or {1, 0.82, 0})
                     if obj.Left then obj.Left:Hide() end
                     if obj.Right then obj.Right:Hide() end
@@ -2984,19 +3002,23 @@ local function CreateUI()
 
         -- 快捷键条目模板（用于快捷键分类）
         local KeybindEntryMixin = {}
-        
-        function KeybindEntryMixin:SetKeybindData(actionInfo)
-            self.actionInfo = actionInfo
-            self.actionName = actionInfo.name
-            
-            -- 更新显示
+
+        -- 单一权威：所有显示数据一律从 ADT.Keybinds 现存配置读取
+        -- 说明：过去使用构建时快照（actionInfo）导致“滚动复用后回退到旧文本”。
+        -- 现改为按 actionName 即时查询，彻底消除快照失真。
+        function KeybindEntryMixin:SetKeybindByActionName(actionName)
+            self.actionName = actionName
+            -- 动作显示名
+            local displayName = (ADT.Keybinds and ADT.Keybinds.GetActionDisplayName and ADT.Keybinds:GetActionDisplayName(actionName)) or actionName
             if self.ActionLabel then
-                self.ActionLabel:SetText(actionInfo.displayName or actionInfo.name)
+                self.ActionLabel:SetText(displayName)
             end
+            -- 按键显示名
+            local key = ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds:GetKeybind(actionName) or ""
+            local keyText = ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds:GetKeyDisplayName(key) or ""
             if self.KeyLabel then
-                local keyText = actionInfo.keyDisplay or ""
                 if keyText == "" then
-                    keyText = (ADT.L and ADT.L['Not Set']) or "未设置"
+                    keyText = (ADT.L and ADT.L['Not Set']) or "Not Set"
                     SetTextColor(self.KeyLabel, Def.TextColorDisabled or {0.5, 0.5, 0.5})
                 else
                     SetTextColor(self.KeyLabel, {1, 0.82, 0}) -- 金色
@@ -3008,26 +3030,29 @@ local function CreateUI()
         
         function KeybindEntryMixin:UpdateRecordingState(isRecording)
             self.isRecording = isRecording
+            local headerHint = MainFrame._keybindCategoryHint
             if isRecording then
                 -- 录制中状态
                 if self.KeyLabel then
-                    self.KeyLabel:SetText((ADT.L and ADT.L['Press Key']) or "按下按键...")
+                    self.KeyLabel:SetText((ADT.L and ADT.L['Press Key']) or "Press key...")
                     SetTextColor(self.KeyLabel, {1, 0.82, 0}) -- 金色
                 end
                 if self.KeyBorder then
                     self.KeyBorder:SetColorTexture(1, 0.82, 0, 1)  -- 金色边框
                 end
-                if self.HintLabel then
-                    self.HintLabel:SetText((ADT.L and ADT.L['ESC Cancel']) or "或按 Escape 取消")
-                    self.HintLabel:SetTextColor(1, 0.82, 0, 1)  -- 金色
+                -- 在 Header 区域显示提示
+                if headerHint then
+                    headerHint:SetText((ADT.L and ADT.L['ESC Cancel']) or "or press ESC to cancel")
+                    headerHint:SetTextColor(1, 0.82, 0, 1)  -- 金色
                 end
             else
                 -- 恢复正常状态
                 if self.KeyBorder then
                     self.KeyBorder:SetColorTexture(0.3, 0.3, 0.3, 1)  -- 灰色边框
                 end
-                if self.HintLabel then
-                    self.HintLabel:SetText("")
+                -- 清除 Header 提示
+                if headerHint then
+                    headerHint:SetText("")
                 end
             end
         end
@@ -3036,14 +3061,15 @@ local function CreateUI()
             if self.isRecording then
                 -- 取消录制
                 self:UpdateRecordingState(false)
-                self:SetKeybindData(self.actionInfo)  -- 恢复原显示
+                -- 恢复当前配置显示（而非旧快照）
+                self:SetKeybindByActionName(self.actionName)
                 MainFrame._recordingKeybindEntry = nil
             else
                 -- 开始录制
                 -- 先取消其他正在录制的条目
                 if MainFrame._recordingKeybindEntry and MainFrame._recordingKeybindEntry ~= self then
                     MainFrame._recordingKeybindEntry:UpdateRecordingState(false)
-                    MainFrame._recordingKeybindEntry:SetKeybindData(MainFrame._recordingKeybindEntry.actionInfo)
+                    MainFrame._recordingKeybindEntry:SetKeybindByActionName(MainFrame._recordingKeybindEntry.actionName)
                 end
                 MainFrame._recordingKeybindEntry = self
                 self:UpdateRecordingState(true)
@@ -3053,14 +3079,8 @@ local function CreateUI()
         function KeybindEntryMixin:OnClearButtonClick()
             if self.actionName and ADT.Keybinds then
                 ADT.Keybinds:SetKeybind(self.actionName, "")
-                -- 刷新显示
-                local newInfo = {
-                    name = self.actionName,
-                    displayName = ADT.Keybinds:GetActionDisplayName(self.actionName),
-                    key = "",
-                    keyDisplay = "",
-                }
-                self:SetKeybindData(newInfo)
+                -- 刷新显示（即时读取单一权威配置）
+                self:SetKeybindByActionName(self.actionName)
             end
         end
         
@@ -3072,9 +3092,9 @@ local function CreateUI()
             if key == "LCTRL" or key == "RCTRL" or key == "CTRL" then return end
             if key == "LALT" or key == "RALT" or key == "ALT" then return end
             if key == "ESCAPE" then
-                -- ESC 取消录制
+                -- ESC 取消录制（恢复当前配置显示）
                 self:UpdateRecordingState(false)
-                self:SetKeybindData(self.actionInfo)
+                self:SetKeybindByActionName(self.actionName)
                 MainFrame._recordingKeybindEntry = nil
                 return
             end
@@ -3090,15 +3110,8 @@ local function CreateUI()
             -- 保存按键
             if self.actionName and ADT.Keybinds then
                 ADT.Keybinds:SetKeybind(self.actionName, finalKey)
-                
-                -- 刷新显示
-                local newInfo = {
-                    name = self.actionName,
-                    displayName = ADT.Keybinds:GetActionDisplayName(self.actionName),
-                    key = finalKey,
-                    keyDisplay = ADT.Keybinds:GetKeyDisplayName(finalKey),
-                }
-                self:SetKeybindData(newInfo)
+                -- 刷新显示（从配置读取最新值，避免本地快照）
+                self:SetKeybindByActionName(self.actionName)
             end
             
             self:UpdateRecordingState(false)
@@ -3106,12 +3119,22 @@ local function CreateUI()
         end
 
         function KeybindEntryMixin:GetDesiredWidth()
-            -- 计算所需宽度：动作名(140) + 间距(8) + 按键框(100) + 间距(8) + 提示文本(120) + 右边距(16)
-            -- = 140 + 8 + 100 + 8 + 120 + 16 = 392
-            return 400
+            -- 计算所需宽度：动作名(140) + 间距(8) + 按键框(100) + 右边距(8)
+            -- = 140 + 8 + 100 + 8 = 256（提示已移到 Header）
+            return 260
         end
 
         local function KeybindEntry_Create()
+            -- 读取配置（配置驱动，单一权威）
+            local KCFG = (ADT.HousingInstrCFG and ADT.HousingInstrCFG.KeybindUI) or {}
+            local actionLabelWidth = KCFG.actionLabelWidth or 120
+            local keyBoxWidth = KCFG.keyBoxWidth or 100
+            local keyBoxHeight = KCFG.keyBoxHeight or 22
+            local actionToKeyGap = KCFG.actionToKeyGap or 8
+            local borderNormal = KCFG.borderNormal or { r = 0.3, g = 0.3, b = 0.3, a = 1 }
+            local borderHover = KCFG.borderHover or { r = 0.8, g = 0.6, b = 0, a = 1 }
+            local bgColor = KCFG.bgColor or { r = 0.08, g = 0.08, b = 0.08, a = 1 }
+            
             local f = CreateFrame("Button", nil, ScrollView)
             Mixin(f, KeybindEntryMixin)
             f:SetSize(MainFrame.centerButtonWidth or Def.centerButtonWidth, Def.ButtonSize)
@@ -3129,14 +3152,14 @@ local function CreateUI()
             -- 动作名称标签（左侧）
             local actionLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             actionLabel:SetPoint("LEFT", f, "LEFT", 8, 0)
-            actionLabel:SetWidth(140)
+            actionLabel:SetWidth(actionLabelWidth)
             actionLabel:SetJustifyH("LEFT")
             f.ActionLabel = actionLabel
             
             -- 按键框容器（模拟魔兽原生样式）
             local keyBox = CreateFrame("Button", nil, f)
-            keyBox:SetSize(100, 22)
-            keyBox:SetPoint("LEFT", actionLabel, "RIGHT", 8, 0)
+            keyBox:SetSize(keyBoxWidth, keyBoxHeight)
+            keyBox:SetPoint("LEFT", actionLabel, "RIGHT", actionToKeyGap, 0)
             keyBox:RegisterForClicks("LeftButtonUp", "RightButtonUp")
             f.KeyBox = keyBox
             
@@ -3149,7 +3172,7 @@ local function CreateUI()
             -- 按键框边框
             local keyBorder = keyBox:CreateTexture(nil, "BORDER")
             keyBorder:SetAllPoints()
-            keyBorder:SetColorTexture(0.3, 0.3, 0.3, 1)
+            keyBorder:SetColorTexture(borderNormal.r, borderNormal.g, borderNormal.b, borderNormal.a)
             keyBorder:SetDrawLayer("BORDER", -1)
             f.KeyBorder = keyBorder
             
@@ -3157,21 +3180,13 @@ local function CreateUI()
             local keyInner = keyBox:CreateTexture(nil, "ARTWORK")
             keyInner:SetPoint("TOPLEFT", 1, -1)
             keyInner:SetPoint("BOTTOMRIGHT", -1, 1)
-            keyInner:SetColorTexture(0.08, 0.08, 0.08, 1)
+            keyInner:SetColorTexture(bgColor.r, bgColor.g, bgColor.b, bgColor.a)
             f.KeyInner = keyInner
             
             -- 按键文本
             local keyLabel = keyBox:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
             keyLabel:SetPoint("CENTER", keyBox, "CENTER", 0, 0)
             f.KeyLabel = keyLabel
-            
-            -- 提示文本（右侧，魔兽原生风格）
-            local hintLabel = f:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            hintLabel:SetPoint("LEFT", keyBox, "RIGHT", 8, 0)
-            hintLabel:SetWidth(120)
-            hintLabel:SetJustifyH("LEFT")
-            hintLabel:SetTextColor(0.5, 0.5, 0.5, 1)
-            f.HintLabel = hintLabel
             
             -- 按键框点击：左键录制，右键清除
             keyBox:SetScript("OnClick", function(self, button)
@@ -3182,19 +3197,27 @@ local function CreateUI()
                 end
             end)
             
-            -- 按键框悬停效果
+            -- 按键框悬停效果（使用 Header 区域的提示）
             keyBox:SetScript("OnEnter", function(self)
                 if not f.isRecording then
-                    keyBorder:SetColorTexture(0.8, 0.6, 0, 1)  -- 金色边框
-                    f.HintLabel:SetText((ADT.L and ADT.L['Right Click Clear']) or "<右键解除键位>")
-                    f.HintLabel:SetTextColor(0.6, 0.8, 1, 1)  -- 浅蓝色
+                    keyBorder:SetColorTexture(borderHover.r, borderHover.g, borderHover.b, borderHover.a)
+                    local headerHint = MainFrame._keybindCategoryHint
+                    if headerHint then
+                        local hintColor = KCFG.hintHover or { r = 0.6, g = 0.8, b = 1 }
+                        local hintText = (ADT.L and ADT.L["Right Click Clear"]) or "<Right-click to clear>"
+                        headerHint:SetText(hintText)
+                        headerHint:SetTextColor(hintColor.r, hintColor.g, hintColor.b, 1)
+                    end
                 end
             end)
             
             keyBox:SetScript("OnLeave", function(self)
                 if not f.isRecording then
-                    keyBorder:SetColorTexture(0.3, 0.3, 0.3, 1)  -- 恢复灰色
-                    f.HintLabel:SetText("")
+                    keyBorder:SetColorTexture(borderNormal.r, borderNormal.g, borderNormal.b, borderNormal.a)
+                    local headerHint = MainFrame._keybindCategoryHint
+                    if headerHint then
+                        headerHint:SetText("")
+                    end
                 end
             end)
             
