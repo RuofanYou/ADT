@@ -28,7 +28,7 @@ end
 local function LoadSettings()
     M.isEnabled = (ADT.GetDBValue and ADT.GetDBValue("EnableIncrementRotate")) == true
     M.incrementDeg = tonumber(ADT.GetDBValue and ADT.GetDBValue("IncrementRotateDegrees")) or 90
-    D(string.format("[IncRot] Settings: enabled=%s, deg=%d", tostring(M.isEnabled), M.incrementDeg))
+    D(string.format("[IncRot] Settings: enabled=%s, deg=%.3f", tostring(M.isEnabled), M.incrementDeg))
 end
 
 -- ===========================
@@ -69,7 +69,7 @@ local function OnStartPlacing()
         deg = (M.count * M.incrementDeg) % 360
     end
     
-    D(string.format("[IncRot] StartPlacing: count=%d, deg=%d (increment mode)", M.count, deg))
+    D(string.format("[IncRot] StartPlacing: count=%d, deg=%.3f (increment mode)", M.count, deg))
     
     if deg == 0 then return end
     
@@ -77,7 +77,7 @@ local function OnStartPlacing()
     C_Timer.After(0.1, function()
         if not IsControlKeyDown() then return end
         if ADT.RotateHotkey and ADT.RotateHotkey.RotateSelectedByDegrees then
-            D(string.format("[IncRot] Execute: deg=%d", deg))
+            D(string.format("[IncRot] Execute: deg=%.3f", deg))
             ADT.RotateHotkey:RotateSelectedByDegrees(deg)
         end
     end)
@@ -125,6 +125,92 @@ local function RegisterSettings()
         uiOrder = 10,
     })
 
+    -- 解析自定义角度（容忍空白、度符、全角/中文标点等）
+    local function ParseAngleInput(s)
+        s = tostring(s or "")
+        -- 去空白与常见单位
+        s = s:gsub("[°度]", "")
+        s = s:gsub("%s+", "")
+        -- 全角数字/符号 → 半角
+        local map = {
+            ['０']='0',['１']='1',['２']='2',['３']='3',['４']='4',
+            ['５']='5',['６']='6',['７']='7',['８']='8',['９']='9',
+            ['．']='.', ['。']='.', ['，']='.', ['、']='.',
+            ['－']='-', ['—']='-', ['–']='-', ['＋']='+',
+        }
+        s = s:gsub(".", function(ch) return map[ch] or ch end)
+        -- 仅保留 数字 / 正负号 / 小数点
+        s = s:gsub("[^%d%+%-%.]", "")
+        -- 归一化多个小数点：仅保留首个
+        local firstDot
+        s = s:gsub("%.", function(dot)
+            if firstDot then return "" else firstDot = true return dot end
+        end)
+        -- 去掉孤立的符号
+        if s == "" or s == "." or s == "+" or s == "-" then return nil end
+        local v = tonumber(s)
+        return v
+    end
+
+    -- 自定义角度输入弹窗（KISS：基于 StaticPopup，避免引入额外 UI）
+    local function OpenCustomAngleDialog()
+        local DLG_KEY = "ADT_INPUT_INCREMENT_ROTATE_DEG"
+        if not StaticPopupDialogs[DLG_KEY] then
+            StaticPopupDialogs[DLG_KEY] = {
+                text = (L["Enter increment angle"] or "输入递增角度（度）"),
+                button1 = OKAY,
+                button2 = CANCEL,
+                hasEditBox = true,
+                timeout = 0,
+                whileDead = true,
+                hideOnEscape = true,
+                preferredIndex = 3,
+                OnShow = function(self)
+                    local current = tonumber(ADT.GetDBValue and ADT.GetDBValue('IncrementRotateDegrees')) or 90
+                    local eb = self.GetEditBox and self:GetEditBox() or self.editBox
+                    if eb then
+                        local s = tostring(current)
+                        eb:SetText(s)
+                        if eb.HighlightText then eb:HighlightText() end
+                        if eb.SetAutoFocus then eb:SetAutoFocus(true) end
+                    end
+                    D("[IncRot][Popup] OnShow")
+                end,
+                EditBoxOnEnterPressed = function(self)
+                    local parent = self:GetParent()
+                    StaticPopup_OnClick(parent, 1)
+                end,
+                OnAccept = function(self)
+                    local eb = self.GetEditBox and self:GetEditBox() or self.editBox
+                    local txt = eb and (eb.GetText and eb:GetText() or "") or ""
+                    D("[IncRot][Popup] OnAccept raw=" .. tostring(txt))
+                    local v = ParseAngleInput(txt)
+                    D("[IncRot][Popup] parsed=" .. tostring(v))
+                    if not v then
+                        if ADT and ADT.Notify then ADT.Notify(L["Invalid number"] or "输入无效：请输入数字（支持小数/全角）", 'error') end
+                        return
+                    end
+                    ADT.SetDBValue('IncrementRotateDegrees', v, true)
+                    LoadSettings()
+                    if ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel and ADT.CommandDock.SettingsPanel.UpdateSettingsEntries then
+                        ADT.CommandDock.SettingsPanel:UpdateSettingsEntries()
+                    end
+                    if ADT and ADT.Notify then
+                        ADT.Notify(string.format((L["Increment angle set to"] or "已设置递增角度为").." %s°", tostring(v)), 'success')
+                    end
+                end,
+            }
+        end
+        StaticPopup_Show(DLG_KEY)
+    end
+
+    local function valueToText(v)
+        local num = tonumber(v)
+        if not num then return tostring(v or '') end
+        local s = string.format("%.3f", num):gsub("0+$", ""):gsub("%.$", "")
+        return s .. "°"
+    end
+
     CC:AddModule({
         name = L["Increment Angle"] or "递增角度",
         dbKey = 'IncrementRotateDegrees',
@@ -137,7 +223,9 @@ local function RegisterSettings()
             { value = 90,  text = "90°" },
             { value = 120, text = "120°" },
             { value = 180, text = "180°" },
+            { action = 'button', text = (L["Custom..."] or "自定义…"), onClick = OpenCustomAngleDialog },
         },
+        valueToText = valueToText, -- 当当前值不在预设项中时，用于标签展示
         description = L["Increment Angle tooltip"] or "每个物品比上一个多转多少度。",
         categoryKeys = { 'AutoRotate' },
         uiOrder = 11,
