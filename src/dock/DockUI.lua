@@ -2495,14 +2495,28 @@ do  -- Central
                 obj.Label:SetJustifyH("LEFT")
                 
                 -- 创建或获取提示文本（右侧）
+                -- 说明：原实现将 FontString 作为 ScrollView 的子级，受 SetClipsChildren(true) 裁剪，
+                -- 当 hintOffsetY 较大时（例如 200）会被截断，无法“越出弹窗”。
+                -- 为遵循 KISS，改为把提示挂到 MainFrame 上，并通过锚点相对 Header 定位，
+                -- 既可突破 ScrollView 的裁剪，又不破坏现有滚动与对象池逻辑。
                 if not obj._keybindHint then
                     local KCFG = (ADT.HousingInstrCFG and ADT.HousingInstrCFG.KeybindUI) or {}
                     local hintOffsetX = KCFG.headerHintOffsetX or -8
                     local hintOffsetY = KCFG.headerHintOffsetY or 0
-                    local hint = obj:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+                    -- 挂到 MainFrame（FULLSCREEN_DIALOG 层），避免被 ScrollView 裁剪
+                    local hint = MainFrame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+                    hint:SetDrawLayer("OVERLAY", 7)
                     hint:SetPoint("RIGHT", obj, "RIGHT", hintOffsetX, hintOffsetY)
                     hint:SetJustifyH("RIGHT")
                     hint:SetTextColor(0.6, 0.8, 1, 1)  -- 浅蓝色
+
+                    -- 跟随 Header 显隐，避免在滚动释放后残留
+                    if not obj._adt_hintHooked then
+                        obj:HookScript("OnHide", function() if hint then hint:Hide() end end)
+                        obj:HookScript("OnShow", function() if hint then hint:Show() end end)
+                        obj._adt_hintHooked = true
+                    end
+
                     obj._keybindHint = hint
                 end
                 obj._keybindHint:SetText("")
@@ -3119,9 +3133,23 @@ local function CreateUI()
         end
 
         function KeybindEntryMixin:GetDesiredWidth()
-            -- 计算所需宽度：动作名(140) + 间距(8) + 按键框(100) + 右边距(8)
-            -- = 140 + 8 + 100 + 8 = 256（提示已移到 Header）
-            return 260
+            -- 动态计算所需宽度：基于实际文本宽度 + 按键框 + 边距
+            local KCFG = (ADT.HousingInstrCFG and ADT.HousingInstrCFG.KeybindUI) or {}
+            local keyBoxWidth = KCFG.keyBoxWidth or 100
+            local actionToKeyGap = KCFG.actionToKeyGap or 8
+            local leftPad = 8
+            local rightPad = 8
+            
+            -- 获取动作名文本实际宽度
+            local textWidth = 120  -- 默认最小宽度
+            if self.ActionLabel then
+                local actualWidth = self.ActionLabel:GetStringWidth()
+                if actualWidth and actualWidth > 0 then
+                    textWidth = math.max(textWidth, actualWidth + 10)  -- 额外留白
+                end
+            end
+            
+            return leftPad + textWidth + actionToKeyGap + keyBoxWidth + rightPad
         end
 
         local function KeybindEntry_Create()
@@ -3149,14 +3177,14 @@ local function CreateUI()
             bg:SetColorTexture(0, 0, 0, 0.1)
             f.Background = bg
             
-            -- 动作名称标签（左侧）
+            -- 动作名称标签（左侧）- 使用较大宽度适应多语言
             local actionLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             actionLabel:SetPoint("LEFT", f, "LEFT", 8, 0)
-            actionLabel:SetWidth(actionLabelWidth)
+            actionLabel:SetWidth(160)  -- 增大到 160 以适应 "Rotate CCW 90°" 等英文
             actionLabel:SetJustifyH("LEFT")
             f.ActionLabel = actionLabel
             
-            -- 按键框容器（模拟魔兽原生样式）
+            -- 按键框容器（相对 actionLabel 定位）
             local keyBox = CreateFrame("Button", nil, f)
             keyBox:SetSize(keyBoxWidth, keyBoxHeight)
             keyBox:SetPoint("LEFT", actionLabel, "RIGHT", actionToKeyGap, 0)

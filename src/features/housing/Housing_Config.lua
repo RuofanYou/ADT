@@ -213,7 +213,7 @@ local CFG = {
         actionToKeyGap = 8,
         -- Header 区域提示文本偏移（相对 Header 右侧）
         headerHintOffsetX = -50,   -- 负值向左
-        headerHintOffsetY = 13,    -- 正值向上
+        headerHintOffsetY = 120,    -- 正值向上
         -- 边框颜色（RGBA 0~1）
         borderNormal    = { r = 0.3, g = 0.3, b = 0.3, a = 1 },
         borderHover     = { r = 0.8, g = 0.6, b = 0, a = 1 },
