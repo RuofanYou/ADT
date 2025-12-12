@@ -121,21 +121,55 @@ local function AttachTo(main)
             local pendingTicker
             local lastApplied
             
-            -- 判空：除 Header 外是否存在“可见且占据面积”的子节点
+            -- 判空辅助：检测 Frame 上是否有“有意义文本”区域（FontString 且非空白）
+            local function HasMeaningfulTextInRegions(frame)
+                if not (frame and frame.GetRegions) then return false end
+                for _, r in ipairs({frame:GetRegions()}) do
+                    if r and r.GetObjectType and r:GetObjectType() == "FontString" then
+                        if (not r.IsShown or r:IsShown()) and (not r.IsVisible or r:IsVisible()) then
+                            local a = r.GetAlpha and (r:GetAlpha() or 0) or 1
+                            if a > 0.01 then
+                                local t = r.GetText and r:GetText() or nil
+                                if type(t) == "string" and t:match("%S") then
+                                    return true
+                                end
+                            end
+                        end
+                    end
+                end
+                return false
+            end
+
+            -- 判空：除 Header 外是否存在“真正正文”
+            -- 规则（单一权威）：
+            -- 1) 递归寻找可见后代；
+            -- 2) 对每个可见 Frame：若自身挂有有意义文本 → 视为正文；
+            -- 3) 对叶子 Frame：若无文本但可吃鼠标（Button/控件） → 视为正文；
+            -- 4) 纯装饰（仅贴图/空文本/无交互）不计入正文。
             local function AnyNonHeaderVisible(frame, header)
                 if not frame then return false end
                 for _, ch in ipairs({frame:GetChildren()}) do
                     if ch and ch ~= header and (not ch.IsShown or ch:IsShown()) then
                         -- 若存在可见后代，则认为“正文存在”
                         if AnyNonHeaderVisible(ch, header) then return true end
-                        -- 无后代或后代不可见时，仅在自己具备有效绘制面积且非透明时才算可见
+
                         local alphaOK = (not ch.GetAlpha) or ((ch:GetAlpha() or 0) > 0.01)
                         local visibleOK = (not ch.IsVisible) or ch:IsVisible()
-                        local w = (ch.GetWidth and ch:GetWidth()) or 0
-                        local h = (ch.GetHeight and ch:GetHeight()) or 0
-                        local hasArea = (w or 0) > 2 and (h or 0) > 2
-                        if alphaOK and visibleOK and hasArea and (not ch.GetChildren or select('#', ch:GetChildren()) == 0) then
-                            return true
+                        if alphaOK and visibleOK then
+                            local w = (ch.GetWidth and ch:GetWidth()) or 0
+                            local h = (ch.GetHeight and ch:GetHeight()) or 0
+                            local hasArea = (w or 0) > 2 and (h or 0) > 2
+                            if hasArea then
+                                -- 文本优先：无论是否叶子，只要有意义文本就算正文
+                                if HasMeaningfulTextInRegions(ch) then
+                                    return true
+                                end
+                                -- 叶子控件：没有文本但可交互（例如图标按钮）
+                                local childCount = (ch.GetChildren and select("#", ch:GetChildren())) or 0
+                                if childCount == 0 and ch.IsMouseEnabled and ch:IsMouseEnabled() then
+                                    return true
+                                end
+                            end
                         end
                     end
                 end
@@ -437,9 +471,20 @@ ADT.DockUI.SetSubPanelHeaderAlpha = function(alpha)
     a = math.max(0, math.min(1, a))
     label:SetAlpha(a)
     if a <= 0.001 then label:Hide() else label:Show() end
+    -- Alpha 可能被 HoverHUD 持续驱动；只在“有意义 Alpha 阈值”跨越时触发一次判空，
+    -- 避免每帧重算带来性能浪费。
     local sub = main.SubPanel
-    if sub and sub._ADT_RequestAutoResize then
-        sub._ADT_RequestAutoResize()
+    if sub then
+        local nowMeaningful = a > 0.01
+        if sub._ADT_LastHeaderAlphaMeaningful ~= nowMeaningful then
+            sub._ADT_LastHeaderAlphaMeaningful = nowMeaningful
+            -- 跨越阈值时可能需要从 0 高度恢复；统一走自适应入口以保证高度与显隐一致
+            if sub._ADT_RequestAutoResize then
+                sub._ADT_RequestAutoResize()
+            elseif ADT and ADT.DockUI and ADT.DockUI.EvaluateSubPanelAutoHide then
+                C_Timer.After(0, ADT.DockUI.EvaluateSubPanelAutoHide)
+            end
+        end
     end
 end
 

@@ -410,7 +410,18 @@ do
     -- 防御：确保层级在木框之上，且不会吃掉左侧面板的鼠标
     CloseButton:SetFrameLevel((BorderFrame:GetFrameLevel() or 0) + 2)
     CloseButton:SetScript("OnClick", function()
-        MainFrame:Hide()
+        -- 根因修复：
+        -- 右侧 Dock 主框体在家宅编辑器内被用户手动关闭时，
+        -- 若直接 Hide() 父容器，会导致后续模式切换（如外观模式→普通编辑）
+        -- 采纳的 Instructions 与 HoverHUD 全部挂在隐藏的父层级下，SubPanel 永久不可见。
+        -- 设计上“主体面板显隐”应独立于 SubPanel，因此在编辑器内点击关闭仅隐藏主体面板，
+        -- 保持 Dock 容器与 SubPanel 继续可用（不挡交互且可随悬停/选中自动显隐）。
+        local inEditor = (C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive()) or false
+        if inEditor and ADT and ADT.DockUI and ADT.DockUI.SetMainPanelsVisible then
+            ADT.DockUI.SetMainPanelsVisible(false)
+        else
+            MainFrame:Hide()
+        end
         if ADT.UI and ADT.UI.PlaySoundCue then
             ADT.UI.PlaySoundCue('ui.checkbox.off')
         end
