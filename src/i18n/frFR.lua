@@ -206,4 +206,14 @@ ADT.Locales.frFR = {
     -- RecentSlot
     ["Recent Slot"] = "Récent",
     ["No recent placement"] = "Aucun placement",
+    
+    -- Barre rapide paramètres
+    ["SC Quickbar"] = "Barre rapide",
+    ["Enable Quickbar"] = "Activer barre rapide",
+    ["Enable Quickbar tooltip"] = "Affiche la barre F1-F8 et l'emplacement « Récent » ; désactivez pour HUD par défaut.",
+    ["Quickbar Size"] = "Taille barre",
+    ["Quickbar Size tooltip"] = "Ajuste la taille globale de la barre rapide.",
+    ["Quickbar Size Large"] = "Grande",
+    ["Quickbar Size Medium"] = "Moyenne (défaut)",
+    ["Quickbar Size Small"] = "Petite",
 }

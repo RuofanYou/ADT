@@ -60,6 +60,9 @@ local DEFAULTS = {
     VisitFriendWaitSec = 8,           -- 等待好友列表刷新最大秒数
     -- 进入编辑模式时自动打开控制中心（Dock）
     EnableDockAutoOpenInEditor = true,
+    -- 动作栏（Quickbar）开关与尺寸
+    EnableQuickbar = true,           -- 默认启用
+    QuickbarSize = "medium",         -- 可选：large / medium / small
 }
 
 -- 统一设置事件总线（单一权威）：任何对 ADT_DB 的写操作都通过此处发出事件

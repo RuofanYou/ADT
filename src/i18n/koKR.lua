@@ -206,4 +206,14 @@ ADT.Locales.koKR = {
     -- RecentSlot
     ["Recent Slot"] = "최근",
     ["No recent placement"] = "배치 없음",
+    
+    -- 动作栏设置
+    ["SC Quickbar"] = "퀵바",
+    ["Enable Quickbar"] = "퀵바 사용",
+    ["Enable Quickbar tooltip"] = "F1-F8 퀵바와 '최근' 슬롯 표시; 끄면 기본 HUD로 복원.",
+    ["Quickbar Size"] = "퀵바 크기",
+    ["Quickbar Size tooltip"] = "퀵바의 전체 크기 조절.",
+    ["Quickbar Size Large"] = "대",
+    ["Quickbar Size Medium"] = "중(기본)",
+    ["Quickbar Size Small"] = "소",
 }

@@ -206,4 +206,14 @@ ADT.Locales.ruRU = {
     -- RecentSlot
     ["Recent Slot"] = "Недавние",
     ["No recent placement"] = "Нет установок",
+    
+    -- Быстрая панель настройки
+    ["SC Quickbar"] = "Быстрая панель",
+    ["Enable Quickbar"] = "Вкл. быструю панель",
+    ["Enable Quickbar tooltip"] = "Показывать панель F1-F8 и слот «Недавние»; отключите для стандартного HUD.",
+    ["Quickbar Size"] = "Размер панели",
+    ["Quickbar Size tooltip"] = "Настраивает общий размер быстрой панели.",
+    ["Quickbar Size Large"] = "Большой",
+    ["Quickbar Size Medium"] = "Средний (по умолч.)",
+    ["Quickbar Size Small"] = "Маленький",
 }

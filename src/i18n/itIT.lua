@@ -206,4 +206,14 @@ ADT.Locales.itIT = {
     -- RecentSlot
     ["Recent Slot"] = "Recenti",
     ["No recent placement"] = "Nessuna posa",
+    
+    -- Barra rapida impostazioni
+    ["SC Quickbar"] = "Barra rapida",
+    ["Enable Quickbar"] = "Abilita barra rapida",
+    ["Enable Quickbar tooltip"] = "Mostra la barra F1-F8 e lo slot «Recenti»; disabilita per HUD standard.",
+    ["Quickbar Size"] = "Dimens. barra",
+    ["Quickbar Size tooltip"] = "Regola la dimensione globale della barra rapida.",
+    ["Quickbar Size Large"] = "Grande",
+    ["Quickbar Size Medium"] = "Media (predef.)",
+    ["Quickbar Size Small"] = "Piccola",
 }

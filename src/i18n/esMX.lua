@@ -206,4 +206,14 @@ ADT.Locales.esMX = {
     -- RecentSlot
     ["Recent Slot"] = "Reciente",
     ["No recent placement"] = "Sin colocaciones",
+    
+    -- Barra rápida configuración
+    ["SC Quickbar"] = "Barra rápida",
+    ["Enable Quickbar"] = "Activar barra rápida",
+    ["Enable Quickbar tooltip"] = "Muestra la barra F1-F8 y el slot «Reciente»; desactiva para restaurar el HUD predeterminado.",
+    ["Quickbar Size"] = "Tamaño barra",
+    ["Quickbar Size tooltip"] = "Ajusta el tamaño global de la barra rápida.",
+    ["Quickbar Size Large"] = "Grande",
+    ["Quickbar Size Medium"] = "Mediano (predet.)",
+    ["Quickbar Size Small"] = "Pequeño",
 }

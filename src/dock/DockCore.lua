@@ -451,8 +451,40 @@ local function buildModules()
         numModules = 0,
     }
 
-    -- 信息分类（关于插件的信息）
+    -- 动作栏分类（设置类）
+    local function buildQuickbarSizeOptions()
+        return {
+            { value = 'large',  text = L['Quickbar Size Large'] },
+            { value = 'medium', text = L['Quickbar Size Medium'] },
+            { value = 'small',  text = L['Quickbar Size Small'] },
+        }
+    end
+    local moduleQuickbarEnable = {
+        name = L['Enable Quickbar'],
+        dbKey = 'EnableQuickbar',
+        description = L['Enable Quickbar tooltip'],
+        categoryKeys = { 'Quickbar' },
+        uiOrder = 0,
+    }
+    local moduleQuickbarSize = {
+        name = L['Quickbar Size'],
+        dbKey = 'QuickbarSize',
+        type = 'dropdown',
+        options = buildQuickbarSizeOptions(),
+        description = L['Quickbar Size tooltip'],
+        categoryKeys = { 'Quickbar' },
+        uiOrder = 1,
+    }
     modules[6] = {
+        key = 'Quickbar',
+        categoryName = L['SC Quickbar'],
+        categoryType = 'settings',
+        modules = { moduleQuickbarEnable, moduleQuickbarSize },
+        numModules = 2,
+    }
+
+    -- 信息分类（关于插件的信息）
+    modules[7] = {
         key = 'About',
         categoryName = L['SC About'],
         categoryType = 'about', -- 关于信息类分类
@@ -512,6 +544,8 @@ local function getCategoryDisplayName(key)
         return L['SC AutoRotate']
     elseif key == 'Keybinds' then
         return L['SC Keybinds']
+    elseif key == 'Quickbar' then
+        return L['SC Quickbar']
     elseif key == 'About' then
         return L['SC About']
     end

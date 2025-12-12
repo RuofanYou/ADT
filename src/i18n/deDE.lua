@@ -207,4 +207,14 @@ ADT.Locales.deDE = {
     -- RecentSlot
     ["Recent Slot"] = "Zuletzt",
     ["No recent placement"] = "Keine Platzierung",
+    
+    -- Schnellleiste Einstellungen
+    ["SC Quickbar"] = "Schnellleiste",
+    ["Enable Quickbar"] = "Schnellleiste aktivieren",
+    ["Enable Quickbar tooltip"] = "F1-F8 Schnellleiste und „Zuletzt"-Slot anzeigen; deaktivieren für Standard-HUD.",
+    ["Quickbar Size"] = "Schnellleisten-Größe",
+    ["Quickbar Size tooltip"] = "Gesamte Schnellleisten-Größe anpassen.",
+    ["Quickbar Size Large"] = "Groß",
+    ["Quickbar Size Medium"] = "Mittel (Standard)",
+    ["Quickbar Size Small"] = "Klein",
 }

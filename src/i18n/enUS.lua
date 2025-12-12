@@ -221,4 +221,14 @@ ADT.Locales.enUS = {
     -- RecentSlot
     ["Recent Slot"] = "Recent",
     ["No recent placement"] = "No recent placement",
+    
+    -- Quickbar Settings
+    ["SC Quickbar"] = "Quickbar",
+    ["Enable Quickbar"] = "Enable Quickbar",
+    ["Enable Quickbar tooltip"] = "Show the F1-F8 quickbar and Recent slot; turn off to hide and restore Blizzard default HUD layout.",
+    ["Quickbar Size"] = "Quickbar Size",
+    ["Quickbar Size tooltip"] = "Adjust the overall quickbar scale.",
+    ["Quickbar Size Large"] = "Large",
+    ["Quickbar Size Medium"] = "Medium (Default)",
+    ["Quickbar Size Small"] = "Small",
 }

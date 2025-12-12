@@ -276,8 +276,25 @@ function UI:Refresh()
     end
 end
 
+-- 应用缩放（根据设置读取大小倍率）
+function UI:ApplyScale()
+    if not barFrame then return end
+    local size = ADT.GetDBValue and ADT.GetDBValue('QuickbarSize') or 'medium'
+    local cfg = ADT and ADT.HousingInstrCFG and ADT.HousingInstrCFG.QuickbarUI or nil
+    local scaleTable = cfg and cfg.scaleBySize or nil
+    local scale = (scaleTable and scaleTable[size]) or 1.0
+    barFrame:SetScale(scale)
+    D("[QuickbarUI] Applied scale=" .. tostring(scale) .. " for size=" .. tostring(size))
+end
+
 -- 关键：进入/退出编辑器时切换 parent（与 DockUI 一致）
 function UI:OnEditorEnter()
+    -- 若开关关闭则不显示
+    if ADT.GetDBValue and ADT.GetDBValue('EnableQuickbar') == false then
+        D("[QuickbarUI] Disabled by setting, skipping")
+        return
+    end
+    
     if not barFrame then self:Create() end
     if not barFrame then return end
     
@@ -301,6 +318,7 @@ function UI:OnEditorEnter()
     barFrame:Show()
     barFrame:SetAlpha(1)
     self:Refresh()
+    self:ApplyScale()
     AlignEditorHUDToQuickbar()
     D("[QuickbarUI] Shown in editor mode")
 end
@@ -398,5 +416,20 @@ if ADT and ADT.Settings and ADT.Settings.On then
         C_Timer.After(0, function()
             if UI and UI.Refresh then UI:Refresh() end
         end)
+    end)
+    
+    -- 监听"启用动作栏"开关
+    ADT.Settings.On('EnableQuickbar', function(enabled)
+        if enabled == false then
+            UI:OnEditorExit()
+        else
+            local active = C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive()
+            if active then UI:OnEditorEnter() end
+        end
+    end)
+    
+    -- 监听"动作栏尺寸"变化
+    ADT.Settings.On('QuickbarSize', function()
+        if UI and UI.ApplyScale then UI:ApplyScale() end
     end)
 end

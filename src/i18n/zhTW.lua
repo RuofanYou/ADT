@@ -206,4 +206,14 @@ ADT.Locales.zhTW = {
     -- RecentSlot
     ["Recent Slot"] = "最近放置",
     ["No recent placement"] = "暫無記錄",
+    
+    -- 動作欄設定
+    ["SC Quickbar"] = "動作欄",
+    ["Enable Quickbar"] = "啟用動作欄",
+    ["Enable Quickbar tooltip"] = "顯示底部 F1-F8 快捷欄與「最近放置」槽位；關閉後隱藏並恢復暴雪預設 HUD 佈局。",
+    ["Quickbar Size"] = "動作欄尺寸",
+    ["Quickbar Size tooltip"] = "調整快捷欄的整體大小。",
+    ["Quickbar Size Large"] = "大",
+    ["Quickbar Size Medium"] = "中（預設）",
+    ["Quickbar Size Small"] = "小",
 }

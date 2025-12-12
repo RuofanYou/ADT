@@ -178,6 +178,11 @@ end
 
 -- 显示/隐藏
 function RecentSlot:Show()
+    -- 若开关关闭则不显示
+    if ADT.GetDBValue and ADT.GetDBValue('EnableQuickbar') == false then
+        D("[RecentSlot] Disabled by setting, skipping")
+        return
+    end
     if not slotFrame then self:Create() end
     if slotFrame then 
         slotFrame:Show()
@@ -245,3 +250,16 @@ if ADT.History then
 end
 
 D("[RecentSlot] Module loaded")
+
+-- 监听"启用动作栏"开关
+if ADT and ADT.Settings and ADT.Settings.On then
+    ADT.Settings.On('EnableQuickbar', function(enabled)
+        if enabled == false then
+            RecentSlot:Hide()
+        else
+            local active = C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive()
+            if active then RecentSlot:Show() end
+        end
+    end)
+end
+
