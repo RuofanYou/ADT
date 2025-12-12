@@ -19,6 +19,9 @@ local CFG = {
         contentBottomPadding = 10,
         subPanelMinHeight = 160,
         subPanelMaxHeight = 720,
+        -- SubPanel 正文判空相关阈值（单一权威）
+        contentAlphaThreshold = 0.01, -- alpha ≤ 阈值视为不可见（用于排除装饰/占位）
+        leafMinAreaPx = 2,            -- 叶子节点最小边长（像素），过小视为无效区域
         -- ============ 右侧三层纵向布局（LayoutManager 单一权威） ============
         -- DockUI 最小高度（像素）：必须保证 Header + 基本交互可见
         dockMinHeightPx = 160,
@@ -260,6 +263,12 @@ local CFG = {
         },
         -- 暴雪 ModesBar 与 Quickbar 之间的垂直间距（Quickbar 顶到 ModesBar 底）
         modeBarGap = 1,
+        -- 动作栏整体缩放：与设置面板“动作栏大小”一致（配置驱动，单一权威）
+        scaleBySize = {
+            large  = 1.15,
+            medium = 1.00,
+            small  = 0.85,
+        },
         -- 槽位内文本（右上角按键、右下角库存）内收像素：统一权威
         SlotTextInsets = {
             keyRight  = 6,  -- 按键文本距右侧内收

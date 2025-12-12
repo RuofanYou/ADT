@@ -107,103 +107,123 @@ local function AttachTo(main)
 
         sub.Header = header
 
-        -- 自适应高度：根据 Content 子节点的“实际可见范围”动态调节 SubPanel 高度
-        -- 说明：
-        -- - 不依赖业务侧（Housing）的行数/字体/布局细节，完全依据可见像素范围计算；
-        -- - 避免双实现（DRY）：高度唯一权威改为由 SubPanel 自身测量；业务侧只需触发一次“请求自适应”。
+        -- 自适应高度 + 判空显隐：完全依据“正文存在性”的单一权威扫描结果。
         do
-            -- 改为使用 Housing_Config.lua 的“单一权威”配置，避免硬编码
             local CFG = ADT.GetHousingCFG and ADT.GetHousingCFG() or nil
             local L   = CFG and CFG.Layout or {}
-            local AUTO_MIN     = tonumber(L.subPanelMinHeight)   or 160
-            local AUTO_MAX     = tonumber(L.subPanelMaxHeight)   or 1024
-            local INSET_TOP    = tonumber(L.contentTopPadding)   or 14   -- content 与 sub 顶边的内边距
-            local INSET_BOTTOM = tonumber(L.contentBottomPadding) or 10   -- content 与 sub 底边的内边距
-            local HEADER_NUDGE = tonumber(L.headerTopNudge)      or 10   -- Header 相对 Content 的下移
-            local HEADER_GAP   = tonumber(L.headerToInstrGap)    or 8    -- Header 与说明列表的间距
+            local AUTO_MIN     = tonumber(L.subPanelMinHeight)      or 160
+            local AUTO_MAX     = tonumber(L.subPanelMaxHeight)      or 1024
+            local INSET_TOP    = tonumber(L.contentTopPadding)      or 14
+            local INSET_BOTTOM = tonumber(L.contentBottomPadding)   or 10
+            local HEADER_NUDGE = tonumber(L.headerTopNudge)         or 10
+            local HEADER_GAP   = tonumber(L.headerToInstrGap)       or 8
+            local ALPHA_TH     = tonumber(L.contentAlphaThreshold)  or 0.01
+            local LEAF_MIN_PX  = tonumber(L.leafMinAreaPx)          or 2
+
             local pendingTicker
             local lastApplied
-            
-            -- 判空：除 Header 外是否存在“可见且占据面积”的子节点
-            local function AnyNonHeaderVisible(frame, header)
-                if not frame then return false end
-                for _, ch in ipairs({frame:GetChildren()}) do
-                    if ch and ch ~= header and (not ch.IsShown or ch:IsShown()) then
-                        -- 若存在可见后代，则认为“正文存在”
-                        if AnyNonHeaderVisible(ch, header) then return true end
-                        -- 无后代或后代不可见时，仅在自己具备有效绘制面积且非透明时才算可见
-                        local alphaOK = (not ch.GetAlpha) or ((ch:GetAlpha() or 0) > 0.01)
-                        local visibleOK = (not ch.IsVisible) or ch:IsVisible()
-                        local w = (ch.GetWidth and ch:GetWidth()) or 0
-                        local h = (ch.GetHeight and ch:GetHeight()) or 0
-                        local hasArea = (w or 0) > 2 and (h or 0) > 2
-                        if alphaOK and visibleOK and hasArea and (not ch.GetChildren or select('#', ch:GetChildren()) == 0) then
-                            return true
-                        end
-                    end
-                end
-                return false
+
+            local InteractiveTypes = {
+                Button      = true,
+                CheckButton = true,
+                EditBox     = true,
+                Slider      = true,
+                ScrollFrame = true,
+                Frame       = false,
+            }
+
+            local function IsEffectivelyVisible(obj)
+                if not obj then return false end
+                if obj.IsShown and not obj:IsShown() then return false end
+                local a = obj.GetAlpha and (obj:GetAlpha() or 0) or 1
+                if a <= ALPHA_TH then return false end
+                return true
+            end
+
+            local function HasArea(obj)
+                local w = (obj.GetWidth and obj:GetWidth()) or 0
+                local h = (obj.GetHeight and obj:GetHeight()) or 0
+                return w > LEAF_MIN_PX and h > LEAF_MIN_PX
             end
 
             local function HeaderHasMeaningfulText(header)
                 if not (header and header.Label) then return false end
-                if not (header.Label.IsShown and header.Label:IsShown()) then return false end
-                local a = header.Label.GetAlpha and header.Label:GetAlpha() or 1
-                if a <= 0.01 then return false end
-                local t = header.Label.GetText and header.Label:GetText() or nil
-                return type(t) == 'string' and t:match('%S') ~= nil
+                local label = header.Label
+                if not IsEffectivelyVisible(label) then return false end
+                local t = label.GetText and label:GetText() or ""
+                return type(t) == "string" and t:match("%S") ~= nil
             end
 
-            local function DeepestBottom(frame)
-                if not (frame and frame.GetBottom) then return nil end
-                -- 透明/不可见的容器不参与高度计算，避免把 HoverHUD 等透明容器的“更低 bottom”算进去
-                if (frame.GetAlpha and (frame:GetAlpha() or 0) <= 0.01) then return nil end
-                if (frame.IsVisible and not frame:IsVisible()) then return nil end
-                local minB = frame:GetBottom()
-                if frame.GetChildren then
-                    for _, ch in ipairs({frame:GetChildren()}) do
-                        if ch and (not ch.IsShown or ch:IsShown()) then
-                            -- 同样忽略透明/不可见子节点
-                            if (not ch.GetAlpha or (ch:GetAlpha() or 0) > 0.01) and (not ch.IsVisible or ch:IsVisible()) then
-                                local b = DeepestBottom(ch)
-                                if b then minB = (minB and math.min(minB, b)) or b end
+            local function EvaluateContent(root, header)
+                local hasBody = false
+                local bottomMost
+
+                local function UpdateBottom(obj)
+                    local b = obj and obj.GetBottom and obj:GetBottom() or nil
+                    if b then bottomMost = bottomMost and math.min(bottomMost, b) or b end
+                end
+
+                local function ScanRegions(frame)
+                    if not (frame and frame.GetRegions) then return end
+                    for _, r in ipairs({frame:GetRegions()}) do
+                        if r and r.GetObjectType and r:GetObjectType() == "FontString" then
+                            if IsEffectivelyVisible(r) then
+                                local text = r.GetText and r:GetText() or ""
+                                if type(text) == "string" and text:match("%S") then
+                                    hasBody = true
+                                    UpdateBottom(r)
+                                end
                             end
                         end
                     end
                 end
-                return minB
-            end
 
-            -- 计算目标高度。
-            -- 修正点：
-            -- - 顶锚从“弹窗顶部/Header 顶部”改为“Header 下方分隔线 + headerToInstrGap”，
-            --   以避免额外把 Header 顶部空间计入“正文高度”造成底部多余留白。
-            -- - 同时保持 Header 自身始终包含在 SubPanel 高度内（即：Header 可见区域 + GAP + 正文 + 下内边距）。
-            local function ComputeRequiredHeight()
-                if not (sub and sub.Content) then return end
-                local cont   = sub.Content
-                local header = sub.Header
-                if not header then return end
+                local function ScanFrame(frame)
+                    if not frame or frame == header then return end
+                    if not IsEffectivelyVisible(frame) then return end
 
-                -- 1) 计算“正文”的下边界（排除 header 自身）；上边界固定取“Header 分隔线下方 GAP 处”
-                local bottomMost
-                for _, ch in ipairs({cont:GetChildren()}) do
-                    if ch and ch ~= header and (not ch.IsShown or ch:IsShown()) then
-                        -- 过滤透明/不可见容器，避免误把 HoverHUD 等透明容器计入高度
-                        if (not ch.GetAlpha or (ch:GetAlpha() or 0) > 0.01) and (not ch.IsVisible or ch:IsVisible()) then
-                            local cb = DeepestBottom(ch) or (ch.GetBottom and ch:GetBottom())
-                            if cb then bottomMost = bottomMost and math.min(bottomMost, cb) or cb end
+                    ScanRegions(frame)
+
+                    local ot = frame.GetObjectType and frame:GetObjectType() or nil
+                    if ot and InteractiveTypes[ot] and HasArea(frame) then
+                        hasBody = true
+                        UpdateBottom(frame)
+                    end
+
+                    if frame.GetChildren then
+                        local children = {frame:GetChildren()}
+                        if #children > 0 then
+                            for _, ch in ipairs(children) do
+                                ScanFrame(ch)
+                            end
                         end
                     end
                 end
 
-                -- 2) 以 Header 分隔线为顶部参考，动态测算高度
+                ScanRegions(root)
+                if root and root.GetChildren then
+                    for _, ch in ipairs({root:GetChildren()}) do
+                        ScanFrame(ch)
+                    end
+                end
+
+                return hasBody, bottomMost
+            end
+
+            local function ComputeRequiredHeight()
+                if not (sub and sub.Content and sub.Header) then return nil end
+                local cont   = sub.Content
+                local header = sub.Header
+
+                local hasBody, bottomMost = EvaluateContent(cont, header)
+                local hasHeaderText = HeaderHasMeaningfulText(header)
+                if not hasBody and not hasHeaderText then
+                    return 0
+                end
+
                 local headerHeight = (header.GetHeight and header:GetHeight()) or ((Def.ButtonSize or 28) + 2)
                 local headerBottom = header.GetBottom and header:GetBottom() or nil
-                -- 纵向布局稳定前可能尚未获得 Bottom；此时回退到“Header 顶部法”，避免返回 nil
                 local headerTop    = header.GetTop and header:GetTop() or nil
-
-                -- 顶端基准：Header 下边（或以顶-高估算）减去 GAP
                 local headerRefBottom = headerBottom or (headerTop and (headerTop - headerHeight)) or 0
                 local topRef = headerRefBottom - HEADER_GAP
 
@@ -212,10 +232,7 @@ local function AttachTo(main)
                     contentPixels = math.max(0, topRef - bottomMost)
                 end
 
-                -- 顶端：内容区到 SubPanel 顶部的固定内边距（含 header 高度/位置/GAP）
                 local topPadding = INSET_TOP + HEADER_NUDGE + headerHeight + HEADER_GAP
-
-                -- 目标高度 = 顶部(内容→Header 分隔线/GAP/内边距) + 正文高度 + 底部内边距
                 local target = math.floor(topPadding + contentPixels + INSET_BOTTOM + 0.5)
                 target = math.max(AUTO_MIN, math.min(AUTO_MAX, target))
                 return target
@@ -223,12 +240,10 @@ local function AttachTo(main)
 
             local function ApplyAutoHeightOnce()
                 local h = ComputeRequiredHeight()
-                if not h then return false end
+                if h == nil then return false end
                 if lastApplied and math.abs((lastApplied or 0) - h) <= 1 then
-                    -- 变化很小则认为已稳定
                     return true
                 end
-                -- 记录“期望高度”供 LayoutManager 统一裁剪（单一权威：最终高度由 LayoutManager 决定）
                 sub._ADT_DesiredHeight = h
                 sub:SetHeight(h)
                 lastApplied = h
@@ -236,30 +251,31 @@ local function AttachTo(main)
             end
 
             local function EvaluateAutoHide()
-                -- BUGFIX: 永不隐藏 SubPanel（编辑模式中必须常驻）。
-                -- KISS：无条件保持可见，不再因“正文/标题为空”而隐藏或收缩为 0 高度。
-                if not sub:IsShown() then
-                    sub:Show()
+                if not (sub and sub.Content and sub.Header) then return end
+                local hasBody, _ = EvaluateContent(sub.Content, sub.Header)
+                local hasHeaderText = HeaderHasMeaningfulText(sub.Header)
+                if not hasBody and not hasHeaderText then
+                    sub._ADT_DesiredHeight = 0
+                    sub:SetHeight(0)
+                    if sub.IsShown and sub:IsShown() then sub:Hide() end
+                else
+                    if sub.IsShown and not sub:IsShown() then sub:Show() end
                 end
             end
 
             local function RequestAutoResize()
                 if pendingTicker then return end
-                -- 短期采样多次以等待暴雪 VerticalLayout 完成排版（字体缩放/行隐藏等）
                 local count, maxSample = 0, 12
                 pendingTicker = C_Timer.NewTicker(0.02, function(t)
                     count = count + 1
                     local stable = ApplyAutoHeightOnce()
                     if stable or count >= maxSample then
                         t:Cancel(); pendingTicker = nil
-                        -- 排版稳定后判空一次
                         EvaluateAutoHide()
-                        -- 宽度为 DockUI 的唯一权威，这里只“请求父容器重算”。
                         if ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel then
                             local main = ADT.CommandDock.SettingsPanel
                             if main.UpdateAutoWidth then main:UpdateAutoWidth() end
                         end
-                        -- 子面板高度变化后，请求右侧三层重排
                         if ADT and ADT.HousingLayoutManager and ADT.HousingLayoutManager.RequestLayout then
                             ADT.HousingLayoutManager:RequestLayout("SubPanelAutoResize")
                         end
@@ -267,10 +283,7 @@ local function AttachTo(main)
                 end)
             end
 
-            -- 提供给外部的统一触发入口：以方法形式挂到 sub 本体，避免全局重复实现。
             sub._ADT_RequestAutoResize = function()
-                -- 移除“必须已可见才能自适应”的限制，
-                -- 以便在被误隐藏后也能通过内容变化自动恢复显示。
                 RequestAutoResize()
             end
 
