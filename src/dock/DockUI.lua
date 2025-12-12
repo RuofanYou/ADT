@@ -2681,6 +2681,9 @@ local function CreateUI()
 
     -- 总宽度 = 左侧 + 中间 + 右侧（之前漏算右侧导致中间极窄）
     MainFrame:SetSize(sideSectionWidth + centralSectionWidth + rightSectionWidth, pageHeight)
+    -- 记录 Dock 的“期望高度”（单一权威）：LayoutManager 会按此值在大屏恢复显示行数，
+    -- 小屏仅裁剪，不改变该期望。
+    MainFrame._ADT_DesiredHeight = pageHeight
     -- 固定停靠：由我们统一控制定位与尺寸，不再恢复历史尺寸
     MainFrame:SetToplevel(true)
     

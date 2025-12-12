@@ -134,7 +134,12 @@ function LayoutManager:ComputeLayout()
     local gapPx = tonumber(cfg.verticalGapPx) or 0
 
     -- 期望高度（内容驱动）
-    local desiredDockH = tonumber(dock:GetHeight() or 0) or 0
+    -- Dock 期望高度由 DockUI 在创建时记录为 _ADT_DesiredHeight（单一权威），
+    -- LayoutManager 只负责裁剪，不应把“被裁剪后的当前高度”当成新的期望。
+    local desiredDockH = tonumber(dock._ADT_DesiredHeight)
+    if not desiredDockH or desiredDockH <= 0 then
+        desiredDockH = tonumber(dock:GetHeight() or 0) or 0
+    end
 
     local sub = GetSubPanel(dock)
     local desiredSubH = 0
