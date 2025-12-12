@@ -14,13 +14,6 @@ BINDING_NAME_ADT_TEMP_RECALL = "临时板：取出并放置（Ctrl+R）"
 BINDING_NAME_ADT_ROTATE_CCW_90 = "旋转 -90°（逆时针）"
 BINDING_NAME_ADT_ROTATE_CW_90  = "旋转 +90°（顺时针）"
 
--- 高级编辑（虚拟多选）相关绑定名称
-BINDING_NAME_ADT_ADV_TOGGLE = "切换：虚拟多选开关（录制并批量同步）"
-BINDING_NAME_ADT_ADV_TOGGLE_HOVER = "选集：将悬停装饰加入/移出选集"
-BINDING_NAME_ADT_ADV_CLEAR = "选集：清空"
-BINDING_NAME_ADT_ADV_ANCHOR_HOVER = "锚点：设为悬停装饰"
-BINDING_NAME_ADT_ADV_ANCHOR_SELECTED = "锚点：设为当前选中"
-
 -- 额外剪切板
 -- 旧剪切板相关绑定名已移除
 
@@ -38,37 +31,6 @@ function ADT_ToggleHistory()
 end
 
 -- 原“复制/粘贴/剪切”快捷键已废弃，避免多套逻辑并存。
-
--- ===== 高级编辑：虚拟多选 =====
-local function AdvLoaded()
-    return ADT and ADT.AdvancedEdit
-end
-
-function ADT_Adv_Toggle()
-    if not AdvLoaded() then print("ADT: 高级编辑模块未加载") return end
-    ADT.AdvancedEdit:ToggleEnabled()
-end
-
-function ADT_Adv_ToggleHovered()
-    if not AdvLoaded() then print("ADT: 高级编辑模块未加载") return end
-    ADT.AdvancedEdit:ToggleHovered()
-end
-
-function ADT_Adv_ClearSelection()
-    if not AdvLoaded() then print("ADT: 高级编辑模块未加载") return end
-    ADT.AdvancedEdit:ClearSelection()
-    print("ADT: 选集已清空")
-end
-
-function ADT_Adv_SetAnchor_Hovered()
-    if not AdvLoaded() then print("ADT: 高级编辑模块未加载") return end
-    ADT.AdvancedEdit:SetAnchorByHovered()
-end
-
-function ADT_Adv_SetAnchor_Selected()
-    if not AdvLoaded() then print("ADT: 高级编辑模块未加载") return end
-    ADT.AdvancedEdit:SetAnchorBySelected()
-end
 
 -- ===== 临时板：仅保留两项快捷键 =====
 local function TempLoaded()

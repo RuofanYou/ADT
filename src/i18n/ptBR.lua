@@ -148,8 +148,6 @@ ADT.Locales.ptBR = {
     ["Clipboard is empty"] = "Transferência vazia.",
     ["No hovered decor"] = "Nenhum decor sob o cursor.",
     ["No selected decor"] = "Nenhum decor selecionado.",
-    ["Selection empty or AE off"] = "Seleção vazia (ou AE off).",
-    ["Selection has no valid decor"] = "Seleção sem decor válido.",
     ["Cannot start placing 2"] = "Não é possível iniciar colocação.",
     ["Clipboard UI not loaded"] = "UI de transferência não carregada.",
 
@@ -205,4 +203,3 @@ ADT.Locales.ptBR = {
     ["Left-click: Place"] = "Clique esq.: colocar",
     ["Right-click: Clear"] = "Clique dir.: limpar",
 }
-

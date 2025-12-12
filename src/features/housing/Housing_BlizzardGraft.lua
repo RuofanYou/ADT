@@ -828,8 +828,24 @@ local function _ADT_ClampHeightFromTop(frame, topY)
     local uiBottom = UIParent and (UIParent.GetBottom and UIParent:GetBottom()) or 0
     local safePad = (CFG and CFG.DyePopout and CFG.DyePopout.safetyBottomPad) or 8
     local available = math.max(120, (topY - uiBottom) - safePad)
-    local curH = frame:GetHeight() or 300
-    if curH > available + 0.5 then frame:SetHeight(available) end
+    local curH = frame:GetHeight() or 0
+    -- 记录“自然高度”（未被我们裁剪前的最大值），用于空间恢复时回弹。
+    if (not frame._ADT_naturalHeight) or curH > (frame._ADT_naturalHeight + 0.5) then
+        frame._ADT_naturalHeight = curH
+    end
+    local naturalH = frame._ADT_naturalHeight or curH
+
+    -- 若自然高度超出可用空间，则裁剪到 available。
+    if naturalH > available + 0.5 then
+        if curH ~= available then frame:SetHeight(available) end
+        frame._ADT_wasClamped = true
+        return
+    end
+
+    -- 若此前被裁剪过，且当前空间足够，则回弹到自然高度。
+    if frame._ADT_wasClamped and naturalH > curH + 0.5 and naturalH <= available + 0.5 then
+        frame:SetHeight(naturalH)
+    end
 end
 
 local function AnchorDyePopout()
@@ -856,6 +872,13 @@ local function AnchorDyePopout()
             pop:SetFrameLevel((pane:GetFrameLevel() or 10) + 20)
         end)
 
+        -- 先触发一次染色板自身布局，避免首帧/竞态下高度过小导致误裁剪。
+        pcall(function()
+            if pop.MarkDirty then pop:MarkDirty() end
+            if pop.Layout then pop:Layout() end
+            if pop.UpdateLayout then pop:UpdateLayout() end
+        end)
+
         -- 自顶向下压缩，避免越出屏幕底部
         local topY = pane.GetTop and pane:GetTop()
         if topY then _ADT_ClampHeightFromTop(pop, topY) end
@@ -870,17 +893,38 @@ local function EnsureDyePopoutHooks()
     local pop = GetDyePopoutFrame()
     if not pop or pop._ADT_Anchored then return end
 
+    -- 短期 watcher：打开后 ~1s 内反复贴合/回弹，等待布局与 Dock 缩放稳定。
+    local function StartWatcher()
+        if pop._ADT_resizerTicker then pop._ADT_resizerTicker:Cancel(); pop._ADT_resizerTicker=nil end
+        local checks = 0
+        pop._ADT_resizerTicker = C_Timer.NewTicker(0.05, function(t)
+            if not pop:IsShown() then t:Cancel(); pop._ADT_resizerTicker=nil; return end
+            AnchorDyePopout()
+            checks = checks + 1
+            if checks >= 20 then t:Cancel(); pop._ADT_resizerTicker=nil end
+        end)
+    end
+    local function StopWatcher()
+        if pop._ADT_resizerTicker then pop._ADT_resizerTicker:Cancel(); pop._ADT_resizerTicker=nil end
+    end
+
     -- 首次显示：先瞬时透明 + 立即贴合，再下一帧复位透明度，避免“先在原位闪现一帧再飞过去”
     pop:HookScript("OnShow", function(self)
         local prevA = (self.GetAlpha and self:GetAlpha()) or 1
         if self.SetAlpha then self:SetAlpha(0) end
         AnchorDyePopout()
+        StartWatcher()
         C_Timer.After(0, function()
             AnchorDyePopout()
             if self.SetAlpha then self:SetAlpha(prevA) end
         end)
     end)
     pop:HookScript("OnSizeChanged", function() C_Timer.After(0, AnchorDyePopout) end)
+    pop:HookScript("OnHide", function(self)
+        StopWatcher()
+        self._ADT_wasClamped = nil
+        self._ADT_naturalHeight = nil
+    end)
 
     -- Dock 或 SubPanel 变化时也刷新
     local dock = GetDock()

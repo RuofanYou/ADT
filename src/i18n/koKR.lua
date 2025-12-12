@@ -148,8 +148,6 @@ ADT.Locales.koKR = {
     ["Clipboard is empty"] = "클립보드가 비었습니다.",
     ["No hovered decor"] = "가리킨 장식 없음.",
     ["No selected decor"] = "선택된 장식 없음.",
-    ["Selection empty or AE off"] = "선택 없음(AE 꺼짐).",
-    ["Selection has no valid decor"] = "유효한 장식 없음.",
     ["Cannot start placing 2"] = "배치 시작 불가.",
     ["Clipboard UI not loaded"] = "클립보드 UI 미로드.",
 
@@ -205,4 +203,3 @@ ADT.Locales.koKR = {
     ["Left-click: Place"] = "좌클릭: 배치",
     ["Right-click: Clear"] = "우클릭: 비우기",
 }
-

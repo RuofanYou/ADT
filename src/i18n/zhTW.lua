@@ -148,8 +148,6 @@ ADT.Locales.zhTW = {
     ["Clipboard is empty"] = "剪貼簿為空",
     ["No hovered decor"] = "未檢測到懸停裝飾",
     ["No selected decor"] = "目前未選中裝飾",
-    ["Selection empty or AE off"] = "選集為空（或 AE 關閉）",
-    ["Selection has no valid decor"] = "選集中沒有有效裝飾",
     ["Cannot start placing 2"] = "無法進入放置",
     ["Clipboard UI not loaded"] = "剪貼簿 UI 未載入",
 
@@ -205,4 +203,3 @@ ADT.Locales.zhTW = {
     ["Left-click: Place"] = "左鍵：放置",
     ["Right-click: Clear"] = "右鍵：清空",
 }
-

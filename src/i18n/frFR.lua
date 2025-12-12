@@ -148,8 +148,6 @@ ADT.Locales.frFR = {
     ["Clipboard is empty"] = "Presse‑papiers vide.",
     ["No hovered decor"] = "Aucun décor survolé.",
     ["No selected decor"] = "Aucun décor sélectionné.",
-    ["Selection empty or AE off"] = "Sélection vide (ou AE désactivé).",
-    ["Selection has no valid decor"] = "Aucun décor valide.",
     ["Cannot start placing 2"] = "Placement impossible.",
     ["Clipboard UI not loaded"] = "UI presse‑papiers non chargée.",
 
@@ -205,4 +203,3 @@ ADT.Locales.frFR = {
     ["Left-click: Place"] = "Clic gauche : placer",
     ["Right-click: Clear"] = "Clic droit : vider",
 }
-

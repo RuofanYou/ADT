@@ -13,11 +13,11 @@
     <Script file="Housing_VisitAssistant.lua"/>
     <!-- 自建“装饰物浏览器”弹窗已下线：仅搬运官方清单按钮与面板尺寸，
          遵循单一权威与 KISS，不再额外创建窗口。 -->
-    <Script file="Housing_AdvancedTools.lua"/>
     <Script file="Housing_ClipboardCore.lua"/>
     <!-- 快捷栏：Z-M 键位快速放置 -->
     <Script file="Housing_Quickbar.lua"/>
     <Script file="Housing_QuickbarUI.lua"/>
+    <Script file="Housing_RecentSlot.lua"/>
     <!-- 移除临时板弹窗（已整合到 Dock 分类 Clipboard） -->
 
     <!-- 指示条模板（使用 ADT_ 前缀避免冲突） -->

@@ -148,8 +148,6 @@ ADT.Locales.itIT = {
     ["Clipboard is empty"] = "Appunti vuoti.",
     ["No hovered decor"] = "Nessun decor sotto cursore.",
     ["No selected decor"] = "Nessun decor selezionato.",
-    ["Selection empty or AE off"] = "Selezione vuota (o AE off).",
-    ["Selection has no valid decor"] = "Selezione senza decor valido.",
     ["Cannot start placing 2"] = "Impossibile iniziare posa.",
     ["Clipboard UI not loaded"] = "UI appunti non caricata.",
 
@@ -205,4 +203,3 @@ ADT.Locales.itIT = {
     ["Left-click: Place"] = "Clic sin.: posa",
     ["Right-click: Clear"] = "Clic des.: svuota",
 }
-

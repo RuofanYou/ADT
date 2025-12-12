@@ -148,8 +148,6 @@ ADT.Locales.esMX = {
     ["Clipboard is empty"] = "Portapapeles vacío.",
     ["No hovered decor"] = "No hay decor bajo cursor.",
     ["No selected decor"] = "No hay decor seleccionado.",
-    ["Selection empty or AE off"] = "Selección vacía (o AE apagado).",
-    ["Selection has no valid decor"] = "Selección sin decor válido.",
     ["Cannot start placing 2"] = "No se puede colocar.",
     ["Clipboard UI not loaded"] = "UI de portapapeles sin cargar.",
 
@@ -205,4 +203,3 @@ ADT.Locales.esMX = {
     ["Left-click: Place"] = "Clic izq.: colocar",
     ["Right-click: Clear"] = "Clic der.: limpiar",
 }
-

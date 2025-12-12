@@ -148,31 +148,6 @@ function Clipboard:AddFromSelected()
     if id then self:AddItem(id, name, icon, 1) else if ADT.Notify then ADT.Notify(ADT.L["No selected decor"], 'info') end end
 end
 
--- 采集：从高级编辑的选集（按 guid 去重 → decorID 聚合计数）
-function Clipboard:AddFromSelectionSet()
-    if not (IsHouseEditorActive and IsHouseEditorActive()) then return end
-    local AE = ADT.AdvancedEdit
-    if not (AE and AE.selectionList) then
-        if ADT.Notify then ADT.Notify(ADT.L["Selection empty or AE off"], 'info') end
-        return
-    end
-    local temp = {} -- decorID -> {name, icon, count}
-    for _, guid in ipairs(AE.selectionList) do
-        local info = GetDecorInstanceInfoForGUID and GetDecorInstanceInfoForGUID(guid)
-        if info and info.decorID then
-            local rec = temp[info.decorID]
-            if not rec then rec = { name = info.name, icon = info.iconTexture or info.iconAtlas, count = 0 }; temp[info.decorID] = rec end
-            rec.count = rec.count + 1
-        end
-    end
-    local added = 0
-    for decorID, rec in pairs(temp) do
-        self:AddItem(decorID, rec.name, rec.icon, rec.count)
-        added = added + 1
-    end
-    if added == 0 and ADT.Notify then ADT.Notify(ADT.L["Selection has no valid decor"], 'info') end
-end
-
 -- 进入放置
 function Clipboard:StartPlacing(decorID)
     if not (ADT and ADT.Housing and ADT.Housing.StartPlacingByRecordID) then return end
@@ -229,7 +204,6 @@ end
 SLASH_ADTCB1 = "/adtcb"
 SlashCmdList["ADTCB"] = function(msg)
     local sub = (msg or ""):lower()
-    if sub == "sel" then Clipboard:AddFromSelectionSet(); return end
     if sub == "hov" then Clipboard:AddFromHovered(); return end
     if sub == "cur" then Clipboard:AddFromSelected(); return end
     Clipboard:Toggle()

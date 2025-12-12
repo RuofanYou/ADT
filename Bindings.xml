@@ -8,21 +8,6 @@
     <Binding name="ADT_TEMP_RECALL">
         ADT_Temp_RecallTop();
     </Binding>
-    <Binding name="ADT_ADV_TOGGLE">
-        ADT_Adv_Toggle();
-    </Binding>
-    <Binding name="ADT_ADV_TOGGLE_HOVER">
-        ADT_Adv_ToggleHovered();
-    </Binding>
-    <Binding name="ADT_ADV_CLEAR">
-        ADT_Adv_ClearSelection();
-    </Binding>
-    <Binding name="ADT_ADV_ANCHOR_HOVER">
-        ADT_Adv_SetAnchor_Hovered();
-    </Binding>
-    <Binding name="ADT_ADV_ANCHOR_SELECTED">
-        ADT_Adv_SetAnchor_Selected();
-    </Binding>
     <Binding name="ADT_ROTATE_CCW_90">
         ADT_Rotate_CCW_90();
     </Binding>

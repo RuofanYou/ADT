@@ -148,8 +148,6 @@ ADT.Locales.ruRU = {
     ["Clipboard is empty"] = "Буфер обмена пуст.",
     ["No hovered decor"] = "Нет декора под курсором.",
     ["No selected decor"] = "Декор не выбран.",
-    ["Selection empty or AE off"] = "Выбор пуст (или AE выкл.).",
-    ["Selection has no valid decor"] = "Нет валидных декоров.",
     ["Cannot start placing 2"] = "Нельзя начать расстановку (нет в наличии или лимит).",
     ["Clipboard UI not loaded"] = "Интерфейс буфера обмена не загружен; выполните /reload.",
 

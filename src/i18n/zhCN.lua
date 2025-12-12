@@ -188,8 +188,6 @@ ADT.Locales.zhCN = {
     ["Clipboard is empty"] = "临时板为空",
     ["No hovered decor"] = "未检测到悬停装饰",
     ["No selected decor"] = "当前未选中装饰",
-    ["Selection empty or AE off"] = "选集为空（或高级编辑未开启）",
-    ["Selection has no valid decor"] = "选集中没有有效装饰",
     ["Cannot start placing 2"] = "无法进入放置（库存不足或达到上限）",
     ["Clipboard UI not loaded"] = "剪切板 UI 未加载，请重载界面或报告问题",
 

@@ -157,8 +157,6 @@ ADT.Locales.enUS = {
     ["Clipboard is empty"] = "Clipboard is empty.",
     ["No hovered decor"] = "No hovered decor detected.",
     ["No selected decor"] = "No selected decor.",
-    ["Selection empty or AE off"] = "Selection set is empty (or Advanced Edit disabled).",
-    ["Selection has no valid decor"] = "No valid decor in selection.",
     ["Cannot start placing 2"] = "Cannot start placing (insufficient stock or at limit).",
     ["Clipboard UI not loaded"] = "Clipboard UI not loaded; please /reload or report this issue.",
 

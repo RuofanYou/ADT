@@ -149,8 +149,6 @@ ADT.Locales.deDE = {
     ["Clipboard is empty"] = "Zwischenablage ist leer.",
     ["No hovered decor"] = "Kein Dekor unter Maus.",
     ["No selected decor"] = "Kein Dekor gewählt.",
-    ["Selection empty or AE off"] = "Auswahl leer (oder AE aus).",
-    ["Selection has no valid decor"] = "Keine gültigen Dekore.",
     ["Cannot start placing 2"] = "Platzieren nicht möglich.",
     ["Clipboard UI not loaded"] = "Zwischenablage-UI nicht geladen.",
 
@@ -206,4 +204,3 @@ ADT.Locales.deDE = {
     ["Left-click: Place"] = "Linksklick: Platzieren",
     ["Right-click: Clear"] = "Rechtsklick: Leeren",
 }
-
