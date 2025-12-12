@@ -7,9 +7,10 @@ ADT = ADT or {}
 
 local L = ADT.L or {}
 
--- 常量（与 QuickbarUI 保持一致）
-local SLOT_SIZE = 80
-local SLOT_SPACING = 5  -- 与 QuickBar 主体的间距
+-- 统一样式访问（单一权威）：从 Housing_Config.lua 暴露的 ADT.HousingInstrCFG 读取
+local function GetCFG()
+    return assert(ADT and ADT.HousingInstrCFG, "ADT.HousingInstrCFG 缺失：请确认 Housing_Config.lua 已加载")
+end
 
 -- 模块
 local RecentSlot = {}
@@ -35,9 +36,10 @@ function RecentSlot:Create()
     end
     
     slotFrame = CreateFrame("Button", "ADTRecentSlot", quickbar, "BackdropTemplate")
-    slotFrame:SetSize(SLOT_SIZE, SLOT_SIZE)
+    local CFG = GetCFG()
+    slotFrame:SetSize(CFG.RecentSlot.sizePx, CFG.RecentSlot.sizePx)
     -- 锚定到 QuickBar 正左方
-    slotFrame:SetPoint("RIGHT", quickbar, "LEFT", -SLOT_SPACING, 0)
+    slotFrame:SetPoint("RIGHT", quickbar, "LEFT", -CFG.RecentSlot.spacingPx, 0)
     slotFrame:SetFrameStrata("FULLSCREEN_DIALOG")
     slotFrame:SetFrameLevel(quickbar:GetFrameLevel())
     
@@ -53,29 +55,43 @@ function RecentSlot:Create()
     
     -- 图标
     slotFrame.icon = slotFrame:CreateTexture(nil, "ARTWORK")
-    slotFrame.icon:SetSize(SLOT_SIZE - 8, SLOT_SIZE - 8)
+    slotFrame.icon:SetSize(CFG.RecentSlot.sizePx - 8, CFG.RecentSlot.sizePx - 8)
     slotFrame.icon:SetPoint("CENTER")
     slotFrame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     slotFrame.icon:Hide()
     
     -- 空槽位背景
     slotFrame.emptyBg = slotFrame:CreateTexture(nil, "BACKGROUND", nil, 1)
-    slotFrame.emptyBg:SetSize(SLOT_SIZE - 6, SLOT_SIZE - 6)
+    slotFrame.emptyBg:SetSize(CFG.RecentSlot.sizePx - 6, CFG.RecentSlot.sizePx - 6)
     slotFrame.emptyBg:SetPoint("CENTER")
     slotFrame.emptyBg:SetAtlas("ui-hud-minimap-housing-indoor-static-bg")
     slotFrame.emptyBg:SetAlpha(0.7)
     slotFrame.emptyBg:Show()
     
     -- 顶部标签
-    slotFrame.labelText = slotFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    slotFrame.labelText:SetPoint("TOP", slotFrame, "TOP", 0, -4)
+    local labelCFG = CFG.RecentSlot.Label
+    slotFrame.labelText = slotFrame:CreateFontString(nil, "OVERLAY", labelCFG.fontTemplate)
+    slotFrame.labelText:SetPoint(labelCFG.point, slotFrame, labelCFG.relPoint, labelCFG.offsetX, labelCFG.offsetY)
     slotFrame.labelText:SetText(L["Recent Slot"] or "最近放置")
-    slotFrame.labelText:SetTextColor(0.9, 0.75, 0.3, 1)  -- 金色
+    do
+        local fontFile = select(1, slotFrame.labelText:GetFont())
+        if fontFile then
+            slotFrame.labelText:SetFont(fontFile, labelCFG.fontPx, labelCFG.fontFlags)
+        end
+    end
+    slotFrame.labelText:SetTextColor(labelCFG.color.r, labelCFG.color.g, labelCFG.color.b, labelCFG.color.a)
     
     -- 库存数量：右下角
-    slotFrame.quantity = slotFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    slotFrame.quantity:SetPoint("BOTTOMRIGHT", slotFrame, "BOTTOMRIGHT", -6, 6)
-    slotFrame.quantity:SetTextColor(1, 1, 1)
+    local qtyCFG = CFG.RecentSlot.Quantity
+    slotFrame.quantity = slotFrame:CreateFontString(nil, "OVERLAY", qtyCFG.fontTemplate)
+    slotFrame.quantity:SetPoint(qtyCFG.point, slotFrame, qtyCFG.relPoint, qtyCFG.offsetX, qtyCFG.offsetY)
+    do
+        local fontFile = select(1, slotFrame.quantity:GetFont())
+        if fontFile then
+            slotFrame.quantity:SetFont(fontFile, qtyCFG.fontPx, qtyCFG.fontFlags)
+        end
+    end
+    slotFrame.quantity:SetTextColor(qtyCFG.colorNormal.r, qtyCFG.colorNormal.g, qtyCFG.colorNormal.b, qtyCFG.colorNormal.a)
     slotFrame.quantity:Hide()
     
     -- 高亮
@@ -137,14 +153,16 @@ function RecentSlot:Refresh()
         end
         
         -- 显示库存
+        local CFG = GetCFG()
+        local qtyCFG = CFG.RecentSlot.Quantity
         if qty > 0 then
             slotFrame.quantity:SetText(tostring(qty))
-            slotFrame.quantity:SetTextColor(1, 1, 1)
+            slotFrame.quantity:SetTextColor(qtyCFG.colorNormal.r, qtyCFG.colorNormal.g, qtyCFG.colorNormal.b, qtyCFG.colorNormal.a)
             slotFrame.quantity:Show()
             slotFrame:SetBackdropBorderColor(1, 0.82, 0, 1)  -- 金色边框
         else
             slotFrame.quantity:SetText("0")
-            slotFrame.quantity:SetTextColor(1, 0.3, 0.3)
+            slotFrame.quantity:SetTextColor(qtyCFG.colorZero.r, qtyCFG.colorZero.g, qtyCFG.colorZero.b, qtyCFG.colorZero.a)
             slotFrame.quantity:Show()
             slotFrame:SetBackdropBorderColor(0.8, 0.3, 0.3, 1)  -- 红色边框
         end

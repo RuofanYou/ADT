@@ -6,7 +6,7 @@
 ## Category-zhCN: 住宅增强
 ## IconTexture: Interface\AddOns\AdvancedDecorationTools\ADTicon.png
 ## Author: 瑟瑟
-## Version: 251212.103
+## Version: 251212.108
 ## SavedVariables: ADT_DB
 ## Bindings: Bindings.xml
 

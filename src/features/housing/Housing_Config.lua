@@ -268,6 +268,36 @@ local CFG = {
             qtyBottom = 6,  -- 库存数字距底部内收
         },
     },
+
+    -- “最近放置”快捷槽（RecentSlot）视觉参数（配置驱动，单一权威）
+    RecentSlot = {
+        -- 槽位尺寸与与 Quickbar 间距
+        sizePx    = 80,
+        spacingPx = 8,
+        -- 顶部标签（“最近放置”）
+        Label = {
+            point    = "TOP",
+            relPoint = "TOP",
+            offsetX  = 0,
+            offsetY  = -4,
+            fontTemplate = "GameFontNormalSmall",
+            fontPx       = 12,
+            fontFlags    = nil,
+            color = { r = 0.9, g = 0.75, b = 0.3, a = 1 }, -- 金色
+        },
+        -- 右下角库存数量
+        Quantity = {
+            point    = "BOTTOMRIGHT",
+            relPoint = "BOTTOMRIGHT",
+            offsetX  = -6,
+            offsetY  = 6,
+            fontTemplate = "GameFontNormalSmall",
+            fontPx       = 12,
+            fontFlags    = nil,
+            colorNormal = { r = 1, g = 1, b = 1, a = 1 },
+            colorZero   = { r = 1, g = 0.3, b = 0.3, a = 1 },
+        },
+    },
 }
 
 -- 导出为全局唯一权威
