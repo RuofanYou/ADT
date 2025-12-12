@@ -217,4 +217,8 @@ ADT.Locales.zhCN = {
     ["Quickbar bind hint"] = "抓取装饰后按此键绑定",
     ["Left-click: Place"] = "左键：放置",
     ["Right-click: Clear"] = "右键：清空",
+    
+    -- RecentSlot
+    ["Recent Slot"] = "最近放置",
+    ["No recent placement"] = "暂无记录",
 }

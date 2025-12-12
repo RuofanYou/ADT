@@ -202,4 +202,8 @@ ADT.Locales.esMX = {
     ["Quickbar bind hint"] = "Agarra un decor y pulsa",
     ["Left-click: Place"] = "Clic izq.: colocar",
     ["Right-click: Clear"] = "Clic der.: limpiar",
+    
+    -- RecentSlot
+    ["Recent Slot"] = "Reciente",
+    ["No recent placement"] = "Sin colocaciones",
 }

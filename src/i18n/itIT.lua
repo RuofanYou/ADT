@@ -202,4 +202,8 @@ ADT.Locales.itIT = {
     ["Quickbar bind hint"] = "Prendi un decor e premi",
     ["Left-click: Place"] = "Clic sin.: posa",
     ["Right-click: Clear"] = "Clic des.: svuota",
+    
+    -- RecentSlot
+    ["Recent Slot"] = "Recenti",
+    ["No recent placement"] = "Nessuna posa",
 }

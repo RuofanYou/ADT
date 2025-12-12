@@ -202,4 +202,8 @@ ADT.Locales.ptBR = {
     ["Quickbar bind hint"] = "Pegue um decor e pressione",
     ["Left-click: Place"] = "Clique esq.: colocar",
     ["Right-click: Clear"] = "Clique dir.: limpar",
+    
+    -- RecentSlot
+    ["Recent Slot"] = "Recente",
+    ["No recent placement"] = "Sem colocações",
 }

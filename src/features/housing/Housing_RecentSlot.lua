@@ -66,10 +66,10 @@ function RecentSlot:Create()
     slotFrame.emptyBg:SetAlpha(0.7)
     slotFrame.emptyBg:Show()
     
-    -- 顶部标签 "Recent"
+    -- 顶部标签
     slotFrame.labelText = slotFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     slotFrame.labelText:SetPoint("TOP", slotFrame, "TOP", 0, -4)
-    slotFrame.labelText:SetText("Recent")
+    slotFrame.labelText:SetText(L["Recent Slot"] or "最近放置")
     slotFrame.labelText:SetTextColor(0.9, 0.75, 0.3, 1)  -- 金色
     
     -- 库存数量：右下角

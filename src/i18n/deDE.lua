@@ -203,4 +203,8 @@ ADT.Locales.deDE = {
     ["Quickbar bind hint"] = "Dekor greifen und Taste drücken",
     ["Left-click: Place"] = "Linksklick: Platzieren",
     ["Right-click: Clear"] = "Rechtsklick: Leeren",
+    
+    -- RecentSlot
+    ["Recent Slot"] = "Zuletzt",
+    ["No recent placement"] = "Keine Platzierung",
 }

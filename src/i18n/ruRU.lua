@@ -202,4 +202,8 @@ ADT.Locales.ruRU = {
     ["Quickbar bind hint"] = "Захватите декор и нажмите",
     ["Left-click: Place"] = "ЛКМ: поставить",
     ["Right-click: Clear"] = "ПКМ: очистить",
+    
+    -- RecentSlot
+    ["Recent Slot"] = "Недавние",
+    ["No recent placement"] = "Нет установок",
 }

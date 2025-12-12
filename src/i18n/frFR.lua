@@ -202,4 +202,8 @@ ADT.Locales.frFR = {
     ["Quickbar bind hint"] = "Saisissez un décor puis appuyez",
     ["Left-click: Place"] = "Clic gauche : placer",
     ["Right-click: Clear"] = "Clic droit : vider",
+    
+    -- RecentSlot
+    ["Recent Slot"] = "Récent",
+    ["No recent placement"] = "Aucun placement",
 }

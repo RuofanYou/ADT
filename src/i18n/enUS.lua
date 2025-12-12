@@ -217,4 +217,8 @@ ADT.Locales.enUS = {
     ["Quickbar bind hint"] = "Grab a decor and press this key to bind",
     ["Left-click: Place"] = "Left-click: Place",
     ["Right-click: Clear"] = "Right-click: Clear",
+    
+    -- RecentSlot
+    ["Recent Slot"] = "Recent",
+    ["No recent placement"] = "No recent placement",
 }

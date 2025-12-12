@@ -202,4 +202,8 @@ ADT.Locales.koKR = {
     ["Quickbar bind hint"] = "장식을 잡고 키를 누르세요",
     ["Left-click: Place"] = "좌클릭: 배치",
     ["Right-click: Clear"] = "우클릭: 비우기",
+    
+    -- RecentSlot
+    ["Recent Slot"] = "최근",
+    ["No recent placement"] = "배치 없음",
 }
