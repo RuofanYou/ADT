@@ -194,6 +194,8 @@ C_Timer.After(0.5, Initialize)
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("HOUSE_EDITOR_MODE_CHANGED")
 eventFrame:RegisterEvent("HOUSING_DECOR_PLACE_SUCCESS")
+eventFrame:RegisterEvent("HOUSING_DECOR_REMOVED")
+eventFrame:RegisterEvent("HOUSING_CATALOG_CATEGORY_UPDATED")
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "HOUSE_EDITOR_MODE_CHANGED" then
         C_Timer.After(0.1, function()
@@ -207,6 +209,11 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "HOUSING_DECOR_PLACE_SUCCESS" then
         -- 放置成功后刷新显示
         C_Timer.After(0.1, function()
+            RecentSlot:Refresh()
+        end)
+    elseif event == "HOUSING_DECOR_REMOVED" or event == "HOUSING_CATALOG_CATEGORY_UPDATED" then
+        -- 装饰被移除或库存变化时刷新
+        C_Timer.After(0.2, function()
             RecentSlot:Refresh()
         end)
     end

@@ -343,16 +343,26 @@ C_Timer.After(0.5, Initialize)
 -- 事件监听
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("HOUSE_EDITOR_MODE_CHANGED")
-eventFrame:SetScript("OnEvent", function(self, event, mode)
+eventFrame:RegisterEvent("HOUSING_DECOR_REMOVED")
+eventFrame:RegisterEvent("HOUSING_CATALOG_CATEGORY_UPDATED")
+eventFrame:RegisterEvent("HOUSING_DECOR_PLACE_SUCCESS")
+eventFrame:SetScript("OnEvent", function(self, event, ...)
     D("[QuickbarUI] Event: " .. event)
-    C_Timer.After(0.1, function()
-        local isActive = C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive()
-        if isActive then
-            UI:OnEditorEnter()
-        else
-            UI:OnEditorExit()
-        end
-    end)
+    if event == "HOUSE_EDITOR_MODE_CHANGED" then
+        C_Timer.After(0.1, function()
+            local isActive = C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive()
+            if isActive then
+                UI:OnEditorEnter()
+            else
+                UI:OnEditorExit()
+            end
+        end)
+    elseif event == "HOUSING_DECOR_REMOVED" or event == "HOUSING_CATALOG_CATEGORY_UPDATED" or event == "HOUSING_DECOR_PLACE_SUCCESS" then
+        -- 库存变化时刷新
+        C_Timer.After(0.2, function()
+            UI:Refresh()
+        end)
+    end
 end)
 
 -- 斜杠命令
