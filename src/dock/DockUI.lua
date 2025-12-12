@@ -2781,11 +2781,18 @@ local function CreateUI()
         end
 
         local topY = parent:GetTop() or 0
-        local targetTop = topY
-        if HouseEditorFrame and HouseEditorFrame.StoragePanel and HouseEditorFrame.StoragePanel:GetTop() then
-            targetTop = HouseEditorFrame.StoragePanel:GetTop()
+        local yOffset
+        -- 若布局管理器提供了纵向覆写，则以其为单一权威，
+        -- 避免 UpdateAutoWidth / AnchorWatcher 反复把 Dock 拉回顶部。
+        if self._ADT_VerticalOffsetOverride ~= nil then
+            yOffset = tonumber(self._ADT_VerticalOffsetOverride) or 0
+        else
+            local targetTop = topY
+            if HouseEditorFrame and HouseEditorFrame.StoragePanel and HouseEditorFrame.StoragePanel:GetTop() then
+                targetTop = HouseEditorFrame.StoragePanel:GetTop()
+            end
+            yOffset = (targetTop or topY) - topY
         end
-        local yOffset = (targetTop or topY) - topY
 
         self:ClearAllPoints()
         self:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -Def.ScreenRightMargin, yOffset)

@@ -66,6 +66,9 @@ local function AttachTo(main)
         local content = CreateFrame("Frame", nil, sub)
         content:SetPoint("TOPLEFT", sub, "TOPLEFT", 10, -14)
         content:SetPoint("BOTTOMRIGHT", sub, "BOTTOMRIGHT", -10, 10)
+        -- 当 SubPanel 被 LayoutManager 压缩时，正文可能超出容器底部；
+        -- 这里启用裁剪：超出部分直接不渲染（符合“显示不下就不显示”的交互预期）。
+        content:SetClipsChildren(true)
         sub.Content = content
 
         -- 标题 Header（占位文案）
@@ -121,55 +124,21 @@ local function AttachTo(main)
             local pendingTicker
             local lastApplied
             
-            -- 判空辅助：检测 Frame 上是否有“有意义文本”区域（FontString 且非空白）
-            local function HasMeaningfulTextInRegions(frame)
-                if not (frame and frame.GetRegions) then return false end
-                for _, r in ipairs({frame:GetRegions()}) do
-                    if r and r.GetObjectType and r:GetObjectType() == "FontString" then
-                        if (not r.IsShown or r:IsShown()) and (not r.IsVisible or r:IsVisible()) then
-                            local a = r.GetAlpha and (r:GetAlpha() or 0) or 1
-                            if a > 0.01 then
-                                local t = r.GetText and r:GetText() or nil
-                                if type(t) == "string" and t:match("%S") then
-                                    return true
-                                end
-                            end
-                        end
-                    end
-                end
-                return false
-            end
-
-            -- 判空：除 Header 外是否存在“真正正文”
-            -- 规则（单一权威）：
-            -- 1) 递归寻找可见后代；
-            -- 2) 对每个可见 Frame：若自身挂有有意义文本 → 视为正文；
-            -- 3) 对叶子 Frame：若无文本但可吃鼠标（Button/控件） → 视为正文；
-            -- 4) 纯装饰（仅贴图/空文本/无交互）不计入正文。
+            -- 判空：除 Header 外是否存在“可见且占据面积”的子节点
             local function AnyNonHeaderVisible(frame, header)
                 if not frame then return false end
                 for _, ch in ipairs({frame:GetChildren()}) do
                     if ch and ch ~= header and (not ch.IsShown or ch:IsShown()) then
                         -- 若存在可见后代，则认为“正文存在”
                         if AnyNonHeaderVisible(ch, header) then return true end
-
+                        -- 无后代或后代不可见时，仅在自己具备有效绘制面积且非透明时才算可见
                         local alphaOK = (not ch.GetAlpha) or ((ch:GetAlpha() or 0) > 0.01)
                         local visibleOK = (not ch.IsVisible) or ch:IsVisible()
-                        if alphaOK and visibleOK then
-                            local w = (ch.GetWidth and ch:GetWidth()) or 0
-                            local h = (ch.GetHeight and ch:GetHeight()) or 0
-                            local hasArea = (w or 0) > 2 and (h or 0) > 2
-                            if hasArea then
-                                -- 文本优先：无论是否叶子，只要有意义文本就算正文
-                                if HasMeaningfulTextInRegions(ch) then
-                                    return true
-                                end
-                                -- 叶子控件：没有文本但可交互（例如图标按钮）
-                                local childCount = (ch.GetChildren and select("#", ch:GetChildren())) or 0
-                                if childCount == 0 and ch.IsMouseEnabled and ch:IsMouseEnabled() then
-                                    return true
-                                end
-                            end
+                        local w = (ch.GetWidth and ch:GetWidth()) or 0
+                        local h = (ch.GetHeight and ch:GetHeight()) or 0
+                        local hasArea = (w or 0) > 2 and (h or 0) > 2
+                        if alphaOK and visibleOK and hasArea and (not ch.GetChildren or select('#', ch:GetChildren()) == 0) then
+                            return true
                         end
                     end
                 end
@@ -259,27 +228,18 @@ local function AttachTo(main)
                     -- 变化很小则认为已稳定
                     return true
                 end
+                -- 记录“期望高度”供 LayoutManager 统一裁剪（单一权威：最终高度由 LayoutManager 决定）
+                sub._ADT_DesiredHeight = h
                 sub:SetHeight(h)
                 lastApplied = h
                 return false
             end
 
             local function EvaluateAutoHide()
-                if not (sub and sub.Content and sub.Header) then return end
-                -- 判空单一权威：无正文且 Header 无意义文本 → 压缩为 0 高度（不 Hide，保持锚点语义）
-                local noBody = not AnyNonHeaderVisible(sub.Content, sub.Header)
-                local noHead = not HeaderHasMeaningfulText(sub.Header)
-                if noBody and noHead then
-                    sub:SetHeight(0)
-                    -- Frame 默认不裁剪子节点；用 alpha 让视觉上真正“消失”
-                    sub._ADT_AutoHidden = true
-                    sub:SetAlpha(0)
-                    return
-                end
-                -- 非空：恢复可见性（高度由自适应采样负责）
-                if sub._ADT_AutoHidden then
-                    sub._ADT_AutoHidden = nil
-                    sub:SetAlpha(1)
+                -- BUGFIX: 永不隐藏 SubPanel（编辑模式中必须常驻）。
+                -- KISS：无条件保持可见，不再因“正文/标题为空”而隐藏或收缩为 0 高度。
+                if not sub:IsShown() then
+                    sub:Show()
                 end
             end
 
@@ -299,6 +259,10 @@ local function AttachTo(main)
                             local main = ADT.CommandDock.SettingsPanel
                             if main.UpdateAutoWidth then main:UpdateAutoWidth() end
                         end
+                        -- 子面板高度变化后，请求右侧三层重排
+                        if ADT and ADT.HousingLayoutManager and ADT.HousingLayoutManager.RequestLayout then
+                            ADT.HousingLayoutManager:RequestLayout("SubPanelAutoResize")
+                        end
                     end
                 end)
             end
@@ -306,7 +270,7 @@ local function AttachTo(main)
             -- 提供给外部的统一触发入口：以方法形式挂到 sub 本体，避免全局重复实现。
             sub._ADT_RequestAutoResize = function()
                 -- 移除“必须已可见才能自适应”的限制，
-                -- 以便在被压缩为 0 高度/Alpha 后也能通过内容变化自动恢复显示。
+                -- 以便在被误隐藏后也能通过内容变化自动恢复显示。
                 RequestAutoResize()
             end
 
@@ -416,7 +380,7 @@ local function AttachTo(main)
             -- 尺寸/可见性变动时触发一次
             sub:HookScript("OnShow", function()
                 RequestAutoResize()
-                -- 次帧判空一次，保证“仅装饰/空正文”场景也能收敛
+                -- 次帧保持常驻可见（不做隐藏判定）。
                 C_Timer.After(0.05, EvaluateAutoHide)
             end)
             if sub.Content.HookScript then
@@ -457,10 +421,6 @@ ADT.DockUI.SetSubPanelHeaderText = function(text)
     if not (sub and sub.Header and sub.Header.Label) then return end
     sub.Header:SetText(text or "")
     if text and text ~= "" then sub.Header.Label:Show() end
-    -- Header 变化也可能触发显隐/高度收敛，统一走自适应入口（单一权威）
-    if sub._ADT_RequestAutoResize then
-        sub._ADT_RequestAutoResize()
-    end
 end
 
 ADT.DockUI.SetSubPanelHeaderAlpha = function(alpha)
@@ -471,21 +431,6 @@ ADT.DockUI.SetSubPanelHeaderAlpha = function(alpha)
     a = math.max(0, math.min(1, a))
     label:SetAlpha(a)
     if a <= 0.001 then label:Hide() else label:Show() end
-    -- Alpha 可能被 HoverHUD 持续驱动；只在“有意义 Alpha 阈值”跨越时触发一次判空，
-    -- 避免每帧重算带来性能浪费。
-    local sub = main.SubPanel
-    if sub then
-        local nowMeaningful = a > 0.01
-        if sub._ADT_LastHeaderAlphaMeaningful ~= nowMeaningful then
-            sub._ADT_LastHeaderAlphaMeaningful = nowMeaningful
-            -- 跨越阈值时可能需要从 0 高度恢复；统一走自适应入口以保证高度与显隐一致
-            if sub._ADT_RequestAutoResize then
-                sub._ADT_RequestAutoResize()
-            elseif ADT and ADT.DockUI and ADT.DockUI.EvaluateSubPanelAutoHide then
-                C_Timer.After(0, ADT.DockUI.EvaluateSubPanelAutoHide)
-            end
-        end
-    end
 end
 
 -- 统一：是否让 Header Alpha 跟随 HoverHUD 的 DisplayFrame OnUpdate

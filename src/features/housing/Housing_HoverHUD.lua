@@ -37,6 +37,10 @@ end
 
 local EL = CreateFrame("Frame")
 ADT.Housing = EL
+-- 将布局管理器挂到 Housing 命名空间（单一权威对象已在 Housing_LayoutManager.lua 创建）
+if ADT and ADT.HousingLayoutManager then
+    EL.LayoutManager = ADT.HousingLayoutManager
+end
 
 -- 统一：订阅设置变更以刷新提示/热键覆盖
 if ADT and ADT.Settings and ADT.Settings.On then

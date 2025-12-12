@@ -1,6 +1,7 @@
 <Ui xsi:schemaLocation="http://www.blizzard.com/wow/ui/..\FrameXML\UI.xsd">
-    <!-- 顺序：配置 → 样式器/重挂（BlizzardGraft）→ 自建 HoverHUD。 -->
+    <!-- 顺序：配置 → 布局管理器 → 样式器/重挂（BlizzardGraft）→ 自建 HoverHUD。 -->
     <Script file="Housing_Config.lua"/>
+    <Script file="Housing_LayoutManager.lua"/>
     <Script file="Housing_BlizzardGraft.lua"/>
     <Script file="Housing_Favorites.lua"/>
     <Script file="Housing_HoverHUD.lua"/>

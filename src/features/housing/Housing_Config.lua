@@ -19,6 +19,24 @@ local CFG = {
         contentBottomPadding = 10,
         subPanelMinHeight = 160,
         subPanelMaxHeight = 720,
+        -- ============ 右侧三层纵向布局（LayoutManager 单一权威） ============
+        -- DockUI 最小高度（像素）：必须保证 Header + 基本交互可见
+        dockMinHeightPx = 160,
+        -- DockUI 最小临界高度（像素）：再小会破坏交互；溢出时 Dock 不得低于该值
+        dockMinHeightCriticalPx = 160,
+        -- DockUI 最大高度占屏幕比例（0~1）：仅作为 max-height 防爆，不做主分配
+        dockMaxHeightViewportRatio = 0.32,
+        -- SubPanel 最大高度占屏幕比例（0~1）
+        subPanelMaxHeightViewportRatio = 0.40,
+        -- 官方面板最小高度（像素）：默认允许为 0
+        blizzardMinHeightPx = 0,
+        -- 三层之间的统一垂直间距（像素，默认 0 表示相切）
+        verticalGapPx = 0,
+        -- 视口安全边距（像素）
+        topSafeMarginPx = 0,
+        bottomSafeMarginPx = 8,
+        -- SubPanel 居中偏置（像素，正值向上）
+        subPanelCenterBiasPx = 0,
         -- ============ 新增：宽度约束（Dock/子面板统一权威） ============
         -- 中央区域（不含左侧分类栏）的最小宽度，避免短文案把面板压窄导致换行/省略。
         -- 对应 DockUI.UpdateAutoWidth 中的 minCenter。
@@ -94,8 +112,7 @@ local CFG = {
         -- 为与 DockUI 右侧面板/子面板的“0 外扩”对齐，这里仅在锚点上做等量补偿。
         anchorLeftCompensation  = 6,   -- 清单锚到 SubPanel 时，LEFT 方向的 +像素偏移
         anchorRightCompensation = -6,  -- 清单锚到 SubPanel 时，RIGHT 方向的 -像素偏移
-        -- 清单顶部与 SubPanel 底部之间的垂直间距（像素，正值=向下留白）
-        verticalGap = 6,
+        -- 垂直间距由 Layout.verticalGapPx 统一裁决（单一权威）
     },
     -- 悬停提示淡入/淡出节奏（配置驱动，单一权威）
     Fading = {
