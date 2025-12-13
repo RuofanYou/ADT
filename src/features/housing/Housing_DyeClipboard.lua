@@ -61,6 +61,11 @@ end
 --------------------------------------------------------------------------------
 
 function DyeClipboard:CopyFromHovered()
+    -- 检查是否启用染料复制功能
+    if ADT.GetDBValue and ADT.GetDBValue('EnableDyeCopy') == false then
+        return false
+    end
+    
     -- 检查是否悬停在装饰上
     if not IsHoveringDecor or not IsHoveringDecor() then
         return false
@@ -106,6 +111,11 @@ end
 --------------------------------------------------------------------------------
 
 function DyeClipboard:PasteToSelected()
+    -- 检查是否启用染料复制功能
+    if ADT.GetDBValue and ADT.GetDBValue('EnableDyeCopy') == false then
+        return false
+    end
+    
     -- 检查是否有已复制的数据
     if not self.copiedColors then
         return false
@@ -173,14 +183,8 @@ function DyeClipboard:Clear()
     self.copiedFromName = nil
 end
 
--- 兼容旧接口
-function DyeClipboard:TryCopyDecorDyes()
-    return self:CopyFromHovered()
-end
 
-function DyeClipboard:TryPasteCustomization()
-    return self:PasteToSelected()
-end
+
 
 --------------------------------------------------------------------------------
 -- 鼠标事件处理
@@ -203,6 +207,11 @@ DyeClipboard:SetScript("OnEvent", DyeClipboard.OnEvent)
 --------------------------------------------------------------------------------
 
 function DyeClipboard:Enable()
+    -- 检查是否启用染料复制功能
+    if ADT.GetDBValue and ADT.GetDBValue('EnableDyeCopy') == false then
+        return
+    end
+    
     self:RegisterEvent("GLOBAL_MOUSE_UP")
     if ADT.DebugPrint then
         ADT.DebugPrint("[DyeClipboard] 已启用")

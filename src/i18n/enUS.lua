@@ -43,6 +43,8 @@ ADT.Locales.enUS = {
     ["Enable L Lock tooltip"] = "Press L to lock/unlock the hovered decor. Turn off to hide the hint and disable the hotkey.",
     ["Enable Q/E Rotate"] = "Enable Q/E Rotate",
     ["Enable Q/E Rotate tooltip"] = "While in the House Editor: Q rotates the grabbed/selected decor by +90°, E by -90°. Turn off to disable these hotkeys and hide related hints.",
+    ["Enable Dye Copy"] = "Enable Dye Copy",
+    ["Enable Dye Copy tooltip"] = "In Customize Mode: SHIFT+C to copy dyes from hovered decor, SHIFT+Left Click to paste. Turn off to disable this feature.",
     -- Dock auto open in editor
     ["Auto Open Dock in Editor"] = "Open Dock by Default",
     ["Auto Open Dock in Editor tooltip"] = "When you enter or return to the House Editor, ADT's Command Dock opens automatically. Turn off to stop auto opening; use /adt to open.",

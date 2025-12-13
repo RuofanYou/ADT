@@ -43,6 +43,8 @@ ADT.Locales.zhCN = {
     ["Enable L Lock tooltip"] = "按 L 锁定/解锁当前悬停的装饰；关闭后隐藏提示并禁用该热键。",
     ["Enable Q/E Rotate"] = "启用 Q/E 旋转",
     ["Enable Q/E Rotate tooltip"] = "在住宅编辑器中：Q 为 +90°，E 为 -90° 旋转当前抓起/选中的装饰；关闭后禁用该热键并隐藏提示。",
+    ["Enable Dye Copy"] = "启用染料复制",
+    ["Enable Dye Copy tooltip"] = "在自定义模式下：SHIFT+C 复制悬停装饰的染料，SHIFT+左键粘贴；关闭后禁用此功能。",
     -- Dock auto open in editor
     ["Auto Open Dock in Editor"] = "默认开启设置面板",
     ["Auto Open Dock in Editor tooltip"] = "进入或回到住宅编辑模式时自动显示控制中心（Dock）。关闭后不再自动弹出；可用 /adt 打开。",

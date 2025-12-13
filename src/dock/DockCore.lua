@@ -330,6 +330,15 @@ local function buildModules()
         uiOrder = 9,
     }
     
+    -- 启用染料复制（自定义模式）
+    local moduleDyeCopy = {
+        name = L["Enable Dye Copy"],
+        dbKey = 'EnableDyeCopy',
+        description = L["Enable Dye Copy tooltip"],
+        categoryKeys = { 'Housing' },
+        uiOrder = 10,
+    }
+    
     -- 语言选择下拉菜单模块
     local function buildLanguageOptions()
         local opts = {
@@ -361,9 +370,10 @@ local function buildModules()
         key = 'Housing',
         categoryName = L['SC Housing'],
         categoryType = 'settings', -- 设置类分类
-        modules = { moduleEditorAutoOpen, moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace, moduleResetT, moduleResetAll, moduleLock, moduleQERotate, moduleLanguage },
-        numModules = 11,
+        modules = { moduleEditorAutoOpen, moduleRepeat, moduleCopy, moduleCut, modulePaste, moduleBatchPlace, moduleResetT, moduleResetAll, moduleLock, moduleQERotate, moduleDyeCopy, moduleLanguage },
+        numModules = 12,
     }
+
 
     -- 临时板分类（装饰列表类）
     modules[2] = {
