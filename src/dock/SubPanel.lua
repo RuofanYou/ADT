@@ -518,3 +518,169 @@ function ADT.DockUI.GetSubPanelHeaderAlpha()
     if type(a) ~= 'number' then return 0 end
     return a
 end
+
+--
+-- SubPanel 悬停信息显示（关注点分离：自己监听悬停事件，自己获取 Decor 信息）
+--
+do
+    local L = ADT.L or {}
+    local GetCatalogEntryInfoByRecordID = C_HousingCatalog and C_HousingCatalog.GetCatalogEntryInfoByRecordID
+    local GetHoveredDecorInfo = C_HousingDecor and C_HousingDecor.GetHoveredDecorInfo
+    local IsHoveringDecor = C_HousingDecor and C_HousingDecor.IsHoveringDecor
+    local IsHouseEditorActive = C_HouseEditor and C_HouseEditor.IsHouseEditorActive
+    
+    local function GetCatalogDecorInfo(decorID)
+        if not GetCatalogEntryInfoByRecordID then return nil end
+        return GetCatalogEntryInfoByRecordID(1, decorID, true)
+    end
+    
+    -- 语义着色工具：从配置读取颜色
+    local function Colorize(key, text)
+        local cfg = ADT and ADT.HousingInstrCFG
+        local colors = cfg and cfg.Colors
+        local hex = colors and colors[key]
+        if not hex then return tostring(text or "") end
+        return "|c" .. hex .. tostring(text or "") .. "|r"
+    end
+    
+    -- InfoLine 框架（延迟创建）
+    local infoLine = nil
+    
+    local function EnsureInfoLine()
+        if infoLine then return infoLine end
+        
+        local main = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+        if not (main and main.EnsureSubPanel) then return nil end
+        local sub = main:EnsureSubPanel()
+        if not (sub and sub.Content and sub.Header) then return nil end
+        
+        -- 获取统一边距配置
+        local pad = (GetRightPadding and GetRightPadding()) or 10
+        
+        -- 创建信息行（在 Header 下方）
+        infoLine = CreateFrame("Frame", nil, sub.Content)
+        infoLine:SetHeight(24)
+        infoLine:SetPoint("TOPLEFT", sub.Header, "BOTTOMLEFT", 0, -4)
+        infoLine:SetPoint("TOPRIGHT", sub.Header, "BOTTOMRIGHT", 0, -4)
+        
+        -- 左侧文本：室内/外 | 库存（应用左边距）
+        local leftText = infoLine:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        leftText:SetPoint("LEFT", infoLine, "LEFT", pad, 0)
+        leftText:SetJustifyH("LEFT")
+        infoLine.LeftText = leftText
+        
+        -- 右侧文本：染色槽信息（应用右边距）
+        local rightText = infoLine:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        rightText:SetPoint("RIGHT", infoLine, "RIGHT", -pad, 0)
+        rightText:SetJustifyH("RIGHT")
+        infoLine.RightText = rightText
+        
+        infoLine:Hide()
+        return infoLine
+    end
+    
+    -- 更新 Header 和 InfoLine 显示悬停的 Decor 信息
+    local function UpdateDecorHeader()
+        if not IsHouseEditorActive or not IsHouseEditorActive() then return end
+        
+        local line = EnsureInfoLine()
+        
+        if not IsHoveringDecor or not IsHoveringDecor() then
+            -- 离开悬停：清空 Header 和 InfoLine
+            ADT.DockUI.SetSubPanelHeaderText("")
+            if line then line:Hide() end
+            ADT.DockUI.RequestSubPanelAutoResize()
+            return
+        end
+        
+        local info = GetHoveredDecorInfo and GetHoveredDecorInfo()
+        if not info then
+            ADT.DockUI.SetSubPanelHeaderText("")
+            if line then line:Hide() end
+            ADT.DockUI.RequestSubPanelAutoResize()
+            return
+        end
+        
+        -- 标题：装饰名（带锁图标如果受保护）
+        local displayName = info.name or ""
+        if ADT.Housing and ADT.Housing.Protection and ADT.Housing.Protection.IsProtected then
+            local isProtected = ADT.Housing.Protection:IsProtected(info.decorGUID, info.decorID)
+            if isProtected then
+                displayName = "|A:BonusChest-Lock:16:16|a " .. displayName
+            end
+        end
+        ADT.DockUI.SetSubPanelHeaderText(displayName)
+        ADT.DockUI.SetSubPanelHeaderAlpha(1)
+        
+        -- InfoLine：显示详细信息
+        if line then
+            -- 左侧：室内/室外 | 库存
+            local indoor = not not info.isAllowedIndoors
+            local outdoor = not not info.isAllowedOutdoors
+            local placeText = (indoor and outdoor) and (L["Indoor & Outdoor"] or "Indoor & Outdoor")
+                or (indoor and (L["Indoor"] or "Indoor"))
+                or (outdoor and (L["Outdoor"] or "Outdoor"))
+                or (L["Indoor"] or "Indoor")
+            
+            local entryInfo = info.decorID and GetCatalogDecorInfo(info.decorID)
+            local stored = 0
+            if entryInfo then
+                stored = (entryInfo.quantity or 0) + (entryInfo.remainingRedeemable or 0)
+            end
+            
+            local stockLabel = L["Stock"] or "Stock"
+            local labelSep = Colorize('separatorMuted', ' | ')
+            local colon = Colorize('separatorMuted', ": ")
+            local placeC = Colorize('labelMuted', placeText)
+            local stockLbl = Colorize('labelMuted', stockLabel)
+            local stockVal = (stored and stored > 0)
+                and Colorize('valueGood', tostring(stored))
+                or Colorize('valueBad', tostring(stored or 0))
+            
+            line.LeftText:SetText(placeC .. labelSep .. stockLbl .. colon .. stockVal)
+            
+            -- 右侧：染色槽信息（如果有）
+            local rightStr = ""
+            local slots = info.dyeSlots or {}
+            local total = #slots
+            if total and total > 0 then
+                local used = 0
+                for i = 1, total do
+                    local s = slots[i]
+                    if s and s.dyeColorID then used = used + 1 end
+                end
+                local usedKey = (used <= 0) and 'valueNeutral' or ((used < total) and 'valueWarn' or 'valueGood')
+                local slash = Colorize('separatorMuted', "/")
+                rightStr = string.format("|A:catalog-palette-icon:16:16|a %s%s%s",
+                    Colorize(usedKey, tostring(used)),
+                    slash,
+                    Colorize('labelMuted', tostring(total))
+                )
+            end
+            
+            if rightStr ~= "" then
+                line.RightText:SetText(rightStr)
+                line.RightText:Show()
+            else
+                line.RightText:SetText("")
+                line.RightText:Hide()
+            end
+            
+            line:Show()
+        end
+        
+        ADT.DockUI.RequestSubPanelAutoResize()
+    end
+    
+    -- 创建事件监听帧
+    local eventFrame = CreateFrame("Frame")
+    eventFrame:RegisterEvent("HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED")
+    eventFrame:SetScript("OnEvent", function(self, event, ...)
+        if event == "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" then
+            UpdateDecorHeader()
+        end
+    end)
+    
+    -- 对外暴露刷新接口
+    ADT.DockUI.UpdateDecorHeader = UpdateDecorHeader
+end
