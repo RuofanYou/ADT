@@ -265,9 +265,9 @@ local CFG = {
         modeBarGap = 1,
         -- 动作栏整体缩放：与设置面板“动作栏大小”一致（配置驱动，单一权威）
         scaleBySize = {
-            large  = 1.15,
+            large  = 1.35,
             medium = 1.00,
-            small  = 0.85,
+            small  = 0.65,
         },
         -- 槽位内文本（右上角按键、右下角库存）内收像素：统一权威
         SlotTextInsets = {
