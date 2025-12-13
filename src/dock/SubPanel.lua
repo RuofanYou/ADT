@@ -28,8 +28,8 @@ local function AttachTo(main)
         if self.CentralSection then
             sub:SetPoint("TOPLEFT", self.CentralSection, "BOTTOMLEFT", 0, 0)
         else
-            -- 兜底（极早期调用）：仍按当前估算宽度贴紧右侧区域。
-            local leftOffset = tonumber(self.sideSectionWidth) or ComputeSideSectionWidth() or 180
+            -- 极早期调用：CentralSection 尚未就绪时，按“侧栏宽度计算（单一权威）”锚定到右侧区域。
+            local leftOffset = ComputeSideSectionWidth()
             sub:SetPoint("TOPLEFT", self, "BOTTOMLEFT", leftOffset, 0)
         end
         sub:SetPoint("TOPRIGHT", self, "BOTTOMRIGHT", 0, 0)
@@ -369,7 +369,7 @@ local function AttachTo(main)
                         end
                     end
 
-                    local pad = (GetRightPadding and GetRightPadding()) or 0
+                    local pad = GetRightPadding()
                     local safe = 16 -- 轻微安全边
                     local want = math.max(headerW, maxRow) + pad + safe
                     -- 保护：避免把不合理的大值（例如异常字体测量）一路放大到接近屏幕宽
@@ -525,15 +525,38 @@ end
 do
     local L = ADT.L or {}
     local GetCatalogEntryInfoByRecordID = C_HousingCatalog and C_HousingCatalog.GetCatalogEntryInfoByRecordID
-    local GetHoveredDecorInfo = C_HousingDecor and C_HousingDecor.GetHoveredDecorInfo
-    local IsHoveringDecor = C_HousingDecor and C_HousingDecor.IsHoveringDecor
-    local GetSelectedDecorInfo = C_HousingDecor and C_HousingDecor.GetSelectedDecorInfo
-    local IsDecorSelected = C_HousingDecor and C_HousingDecor.IsDecorSelected
     local IsHouseEditorActive = C_HouseEditor and C_HouseEditor.IsHouseEditorActive
+    local GetActiveHouseEditorMode = C_HouseEditor and C_HouseEditor.GetActiveHouseEditorMode
+
+    local BasicMode = Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.BasicDecor
+    local ExpertMode = Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.ExpertDecor
     
     local function GetCatalogDecorInfo(decorID)
         if not GetCatalogEntryInfoByRecordID then return nil end
         return GetCatalogEntryInfoByRecordID(1, decorID, true)
+    end
+
+    -- 单一权威：根据当前编辑模式选用对应 API，避免“看起来能用”的跨命名空间假设。
+    local function GetActiveDecorInfo()
+        local mode = GetActiveHouseEditorMode and GetActiveHouseEditorMode() or nil
+        local api
+        if mode == BasicMode then
+            api = C_HousingBasicMode
+        elseif mode == ExpertMode then
+            api = C_HousingExpertMode
+        else
+            return nil
+        end
+
+        if api and api.IsHoveringDecor and api.IsHoveringDecor() then
+            return api.GetHoveredDecorInfo and api.GetHoveredDecorInfo() or nil
+        end
+
+        if api and api.IsDecorSelected and api.IsDecorSelected() then
+            return api.GetSelectedDecorInfo and api.GetSelectedDecorInfo() or nil
+        end
+
+        return nil
     end
     
     -- 语义着色工具：从配置读取颜色
@@ -556,8 +579,8 @@ do
         local sub = main:EnsureSubPanel()
         if not (sub and sub.Content and sub.Header) then return nil end
         
-        -- 获取统一边距配置
-        local pad = (GetRightPadding and GetRightPadding()) or 10
+        -- 获取统一边距配置（单一权威）
+        local pad = GetRightPadding()
         
         -- 创建信息行（在 Header 下方）
         infoLine = CreateFrame("Frame", nil, sub.Content)
@@ -587,12 +610,7 @@ do
         
         local line = EnsureInfoLine()
         
-        local info
-        if IsHoveringDecor and IsHoveringDecor() then
-            info = GetHoveredDecorInfo and GetHoveredDecorInfo() or nil
-        elseif IsDecorSelected and IsDecorSelected() then
-            info = GetSelectedDecorInfo and GetSelectedDecorInfo() or nil
-        end
+        local info = GetActiveDecorInfo()
 
         if not info then
             ADT.DockUI.SetSubPanelHeaderText("")
