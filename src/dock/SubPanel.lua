@@ -530,6 +530,8 @@ do
 
     local BasicMode = Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.BasicDecor
     local ExpertMode = Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.ExpertDecor
+    local CustomizeMode = Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.Customize
+    local CleanupMode = Enum and Enum.HouseEditorMode and Enum.HouseEditorMode.Cleanup
     
     local function GetCatalogDecorInfo(decorID)
         if not GetCatalogEntryInfoByRecordID then return nil end
@@ -544,6 +546,10 @@ do
             api = C_HousingBasicMode
         elseif mode == ExpertMode then
             api = C_HousingExpertMode
+        elseif mode == CustomizeMode then
+            api = C_HousingCustomizeMode
+        elseif mode == CleanupMode then
+            api = C_HousingCleanupMode
         else
             return nil
         end
@@ -554,6 +560,12 @@ do
 
         if api and api.IsDecorSelected and api.IsDecorSelected() then
             return api.GetSelectedDecorInfo and api.GetSelectedDecorInfo() or nil
+        end
+
+        -- 清理模式：官方 API 未提供“选中 Decor 信息”读取接口，仅提供“悬停 Decor 信息”。
+        -- 若用户在清理模式通过点击/列表产生“选中态”，这里以 C_HousingDecor 作为唯一可用的数据源。
+        if mode == CleanupMode and C_HousingDecor and C_HousingDecor.IsDecorSelected and C_HousingDecor.IsDecorSelected() then
+            return C_HousingDecor.GetSelectedDecorInfo and C_HousingDecor.GetSelectedDecorInfo() or nil
         end
 
         return nil
@@ -712,6 +724,11 @@ do
     eventFrame:RegisterEvent("HOUSING_EXPERT_MODE_HOVERED_TARGET_CHANGED")
     eventFrame:RegisterEvent("HOUSING_BASIC_MODE_SELECTED_TARGET_CHANGED")
     eventFrame:RegisterEvent("HOUSING_EXPERT_MODE_SELECTED_TARGET_CHANGED")
+    eventFrame:RegisterEvent("HOUSING_CUSTOMIZE_MODE_HOVERED_TARGET_CHANGED")
+    eventFrame:RegisterEvent("HOUSING_CUSTOMIZE_MODE_SELECTED_TARGET_CHANGED")
+    eventFrame:RegisterEvent("HOUSING_DECOR_CUSTOMIZATION_CHANGED")
+    eventFrame:RegisterEvent("HOUSING_CLEANUP_MODE_HOVERED_TARGET_CHANGED")
+    eventFrame:RegisterEvent("HOUSING_CLEANUP_MODE_TARGET_SELECTED")
     eventFrame:SetScript("OnEvent", function(self, event, ...)
         -- 目标：无论基础/专家模式，只要“悬停/抓取(选中)” Decor 发生变化，都刷新 SubPanel。
         -- 说明：UpdateDecorHeader 内部自行判定优先级（悬停优先，其次选中）。

@@ -40,8 +40,7 @@ local CFG = {
         -- 视口安全边距（像素）
         topSafeMarginPx = 0,
         bottomSafeMarginPx = 8,
-        -- SubPanel 居中偏置（像素，正值向上）
-        subPanelCenterBiasPx = 0,
+        -- 说明：布局已改为“Dock 固定右上 + SubPanel 向下堆叠”，不再使用“SubPanel 居中偏置”。
         -- ============ 新增：宽度约束（Dock/子面板统一权威） ============
         -- 中央区域（不含左侧分类栏）的最小宽度，避免短文案把面板压窄导致换行/省略。
         -- 对应 DockUI.UpdateAutoWidth 中的 minCenter。
