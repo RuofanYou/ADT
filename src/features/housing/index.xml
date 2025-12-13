@@ -18,6 +18,8 @@
     <Script file="Housing_Quickbar.lua"/>
     <Script file="Housing_QuickbarUI.lua"/>
     <Script file="Housing_RecentSlot.lua"/>
+    <!-- 染料复制粘贴模块：自定义模式下 CTRL+C/V -->
+    <Script file="Housing_DyeClipboard.lua"/>
     <!-- 移除临时板弹窗（已整合到 Dock 分类 Clipboard） -->
 
     <!-- 指示条模板（使用 ADT_ 前缀避免冲突） -->

@@ -116,6 +116,7 @@ ADT.Locales.itIT = {
     ["Keybind Action Quickbar6"] = "Barra rapida 6",
     ["Keybind Action Quickbar7"] = "Barra rapida 7",
     ["Keybind Action Quickbar8"] = "Barra rapida 8",
+    ["Keybind Action DyeCopy"] = "Copy Dye",
 
     ["Indoor"] = "Interno",
     ["Outdoor"] = "Esterno",
@@ -235,4 +236,15 @@ ADT.Locales.itIT = {
     ["Quickbar Size Large"] = "Grande",
     ["Quickbar Size Medium"] = "Media (predef.)",
     ["Quickbar Size Small"] = "Piccola",
+    
+    -- Appunti tinture
+    ["Must be in customize mode"] = "Passa a modalità Personalizza",
+    ["Decor cannot be dyed"] = "Questo decor non può essere tinto",
+    ["Failed to get decor info"] = "Impossibile ottenere info",
+    ["Failed to get decor GUID"] = "Impossibile ottenere GUID",
+    ["API not available"] = "API non disponibile",
+    ["No dyes to paste"] = "Nessuna tintura copiata",
+    ["Dyes copied from %s"] = "Tinture copiate da %s: ",
+    ["Dyes pasted to %s"] = "Tinture incollate su %s: ",
+    ["Dye clipboard cleared"] = "Appunti tinture svuotati",
 }

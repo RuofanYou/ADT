@@ -125,6 +125,7 @@ ADT.Locales.zhCN = {
     ["Keybind Action Quickbar6"] = "快捷栏 6",
     ["Keybind Action Quickbar7"] = "快捷栏 7",
     ["Keybind Action Quickbar8"] = "快捷栏 8",
+    ["Keybind Action DyeCopy"] = "复制染料",
     -- 悬停“信息行”
     ["Indoor"] = "室内",
     ["Outdoor"] = "室外",
@@ -250,4 +251,15 @@ ADT.Locales.zhCN = {
     ["Quickbar Size Large"] = "大",
     ["Quickbar Size Medium"] = "中（默认）",
     ["Quickbar Size Small"] = "小",
+    
+    -- 染料复制粘贴
+    ["Must be in customize mode"] = "请先切换到自定义模式",
+    ["Decor cannot be dyed"] = "该装饰不支持染色",
+    ["Failed to get decor info"] = "无法获取装饰信息",
+    ["Failed to get decor GUID"] = "无法获取装饰标识",
+    ["API not available"] = "API 不可用",
+    ["No dyes to paste"] = "无已复制的染料可粘贴",
+    ["Dyes copied from %s"] = "已复制 %s 的染料：",
+    ["Dyes pasted to %s"] = "已粘贴染料到 %s：",
+    ["Dye clipboard cleared"] = "染料剪贴板已清空",
 }

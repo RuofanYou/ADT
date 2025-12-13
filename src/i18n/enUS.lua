@@ -122,6 +122,7 @@ ADT.Locales.enUS = {
     ["Keybind Action Quickbar6"] = "Quickbar 6",
     ["Keybind Action Quickbar7"] = "Quickbar 7",
     ["Keybind Action Quickbar8"] = "Quickbar 8",
+    ["Keybind Action DyeCopy"] = "Copy Dye",
     -- Hover InfoLine（室内/外 + 库存 + 染色）
     ["Indoor"] = "Indoor",
     ["Outdoor"] = "Outdoor",
@@ -250,4 +251,15 @@ ADT.Locales.enUS = {
     ["Quickbar Size Large"] = "Large",
     ["Quickbar Size Medium"] = "Medium (Default)",
     ["Quickbar Size Small"] = "Small",
+    
+    -- Dye Clipboard
+    ["Must be in customize mode"] = "Must be in Customize Mode",
+    ["Decor cannot be dyed"] = "This decor cannot be dyed",
+    ["Failed to get decor info"] = "Failed to get decor info",
+    ["Failed to get decor GUID"] = "Failed to get decor GUID",
+    ["API not available"] = "API not available",
+    ["No dyes to paste"] = "No dyes copied to paste",
+    ["Dyes copied from %s"] = "Dyes copied from %s: ",
+    ["Dyes pasted to %s"] = "Dyes pasted to %s: ",
+    ["Dye clipboard cleared"] = "Dye clipboard cleared",
 }

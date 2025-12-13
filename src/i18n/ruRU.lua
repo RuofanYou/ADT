@@ -116,6 +116,7 @@ ADT.Locales.ruRU = {
     ["Keybind Action Quickbar6"] = "Слот 6",
     ["Keybind Action Quickbar7"] = "Слот 7",
     ["Keybind Action Quickbar8"] = "Слот 8",
+    ["Keybind Action DyeCopy"] = "Copy Dye",
 
     ["Indoor"] = "В помещении",
     ["Outdoor"] = "На улице",
@@ -235,4 +236,15 @@ ADT.Locales.ruRU = {
     ["Quickbar Size Large"] = "Большой",
     ["Quickbar Size Medium"] = "Средний (по умолч.)",
     ["Quickbar Size Small"] = "Маленький",
+    
+    -- Буфер красителей
+    ["Must be in customize mode"] = "Сначала переключитесь в режим настройки",
+    ["Decor cannot be dyed"] = "Этот декор нельзя красить",
+    ["Failed to get decor info"] = "Не удалось получить данные",
+    ["Failed to get decor GUID"] = "Не удалось получить GUID",
+    ["API not available"] = "API недоступен",
+    ["No dyes to paste"] = "Нет скопированных красителей",
+    ["Dyes copied from %s"] = "Красители скопированы с %s: ",
+    ["Dyes pasted to %s"] = "Красители вставлены на %s: ",
+    ["Dye clipboard cleared"] = "Буфер красителей очищен",
 }

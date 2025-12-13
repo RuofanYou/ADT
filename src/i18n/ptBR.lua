@@ -116,6 +116,7 @@ ADT.Locales.ptBR = {
     ["Keybind Action Quickbar6"] = "Barra rápida 6",
     ["Keybind Action Quickbar7"] = "Barra rápida 7",
     ["Keybind Action Quickbar8"] = "Barra rápida 8",
+    ["Keybind Action DyeCopy"] = "Copy Dye",
 
     ["Indoor"] = "Interno",
     ["Outdoor"] = "Externo",
@@ -235,4 +236,15 @@ ADT.Locales.ptBR = {
     ["Quickbar Size Large"] = "Grande",
     ["Quickbar Size Medium"] = "Médio (padrão)",
     ["Quickbar Size Small"] = "Pequeno",
+    
+    -- Transferência tintas
+    ["Must be in customize mode"] = "Mude para modo Personalizar",
+    ["Decor cannot be dyed"] = "Este decor não pode ser tingido",
+    ["Failed to get decor info"] = "Não foi possível obter info",
+    ["Failed to get decor GUID"] = "Não foi possível obter GUID",
+    ["API not available"] = "API indisponível",
+    ["No dyes to paste"] = "Nenhuma tinta copiada",
+    ["Dyes copied from %s"] = "Tintas copiadas de %s: ",
+    ["Dyes pasted to %s"] = "Tintas coladas em %s: ",
+    ["Dye clipboard cleared"] = "Transferência de tintas vazia",
 }

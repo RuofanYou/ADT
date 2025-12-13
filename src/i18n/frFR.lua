@@ -116,6 +116,7 @@ ADT.Locales.frFR = {
     ["Keybind Action Quickbar6"] = "Barre rapide 6",
     ["Keybind Action Quickbar7"] = "Barre rapide 7",
     ["Keybind Action Quickbar8"] = "Barre rapide 8",
+    ["Keybind Action DyeCopy"] = "Copy Dye",
 
     ["Indoor"] = "Intérieur",
     ["Outdoor"] = "Extérieur",
@@ -235,4 +236,15 @@ ADT.Locales.frFR = {
     ["Quickbar Size Large"] = "Grande",
     ["Quickbar Size Medium"] = "Moyenne (défaut)",
     ["Quickbar Size Small"] = "Petite",
+    
+    -- Presse‑papiers teintures
+    ["Must be in customize mode"] = "Passez en mode Personnaliser",
+    ["Decor cannot be dyed"] = "Ce décor ne peut pas être teint",
+    ["Failed to get decor info"] = "Info décor inaccessible",
+    ["Failed to get decor GUID"] = "GUID décor inaccessible",
+    ["API not available"] = "API indisponible",
+    ["No dyes to paste"] = "Aucune teinture copiée",
+    ["Dyes copied from %s"] = "Teintures copiées de %s : ",
+    ["Dyes pasted to %s"] = "Teintures collées sur %s : ",
+    ["Dye clipboard cleared"] = "Presse‑papiers teintures vidé",
 }

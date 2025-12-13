@@ -26,6 +26,8 @@ local DEFAULTS = {
     -- 根据玩家反馈：Q=顺时针(+90)，E=逆时针(-90)
     RotateCCW90  = "E",          -- 逆时针旋转90°（默认 E）
     RotateCW90   = "Q",          -- 顺时针旋转90°（默认 Q）
+    -- 染料复制（自定义模式专用）
+    DyeCopy      = "SHIFT-C",    -- 复制染料
     -- 快捷栏（Quickbar）默认键位
     Quickbar1    = "F1",
     Quickbar2    = "F2",
@@ -89,6 +91,12 @@ local ACTIONS = {
         name = "顺时针旋转90°",
         nameEN = "Rotate CW 90°",
         callback = function() if ADT.RotateHotkey and ADT.RotateHotkey.RotateSelectedByDegrees then ADT.RotateHotkey:RotateSelectedByDegrees(90) end end,
+    },
+    -- 染料复制（自定义模式专用）
+    DyeCopy = {
+        name = "复制染料",
+        nameEN = "Copy Dye",
+        callback = function() if ADT.DyeClipboard and ADT.DyeClipboard.CopyFromHovered then ADT.DyeClipboard:CopyFromHovered() end end,
     },
     -- 快捷栏（Quickbar）槽位 1-8：回调统一委托给 Quickbar 模块
     Quickbar1 = {

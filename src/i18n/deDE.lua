@@ -117,6 +117,7 @@ ADT.Locales.deDE = {
     ["Keybind Action Quickbar6"] = "Schnellleiste 6",
     ["Keybind Action Quickbar7"] = "Schnellleiste 7",
     ["Keybind Action Quickbar8"] = "Schnellleiste 8",
+    ["Keybind Action DyeCopy"] = "Copy Dye",
 
     ["Indoor"] = "Innen",
     ["Outdoor"] = "Außen",
@@ -236,4 +237,15 @@ ADT.Locales.deDE = {
     ["Quickbar Size Large"] = "Groß",
     ["Quickbar Size Medium"] = "Mittel (Standard)",
     ["Quickbar Size Small"] = "Klein",
+    
+    -- Farbstoff-Zwischenablage
+    ["Must be in customize mode"] = "Erst in Anpassungsmodus wechseln",
+    ["Decor cannot be dyed"] = "Dieses Dekor kann nicht gefärbt werden",
+    ["Failed to get decor info"] = "Dekor-Info nicht abrufbar",
+    ["Failed to get decor GUID"] = "Dekor-GUID nicht abrufbar",
+    ["API not available"] = "API nicht verfügbar",
+    ["No dyes to paste"] = "Keine kopierten Farbstoffe zum Einfügen",
+    ["Dyes copied from %s"] = "Farbstoffe kopiert von %s: ",
+    ["Dyes pasted to %s"] = "Farbstoffe eingefügt an %s: ",
+    ["Dye clipboard cleared"] = "Farbstoff-Zwischenablage geleert",
 }

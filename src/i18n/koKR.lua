@@ -116,6 +116,7 @@ ADT.Locales.koKR = {
     ["Keybind Action Quickbar6"] = "퀵바 6",
     ["Keybind Action Quickbar7"] = "퀵바 7",
     ["Keybind Action Quickbar8"] = "퀵바 8",
+    ["Keybind Action DyeCopy"] = "Copy Dye",
 
     ["Indoor"] = "실내",
     ["Outdoor"] = "실외",
@@ -235,4 +236,15 @@ ADT.Locales.koKR = {
     ["Quickbar Size Large"] = "대",
     ["Quickbar Size Medium"] = "중(기본)",
     ["Quickbar Size Small"] = "소",
+    
+    -- 염료 클립보드
+    ["Must be in customize mode"] = "맞춤 모드로 전환하세요",
+    ["Decor cannot be dyed"] = "이 장식은 염색 불가",
+    ["Failed to get decor info"] = "장식 정보를 가져올 수 없음",
+    ["Failed to get decor GUID"] = "장식 GUID를 가져올 수 없음",
+    ["API not available"] = "API 사용 불가",
+    ["No dyes to paste"] = "복사된 염료 없음",
+    ["Dyes copied from %s"] = "%s에서 염료 복사: ",
+    ["Dyes pasted to %s"] = "%s에 염료 붙여넣기: ",
+    ["Dye clipboard cleared"] = "염료 클립보드 비움",
 }

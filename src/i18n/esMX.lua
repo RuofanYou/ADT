@@ -116,6 +116,7 @@ ADT.Locales.esMX = {
     ["Keybind Action Quickbar6"] = "Barra rápida 6",
     ["Keybind Action Quickbar7"] = "Barra rápida 7",
     ["Keybind Action Quickbar8"] = "Barra rápida 8",
+    ["Keybind Action DyeCopy"] = "Copy Dye",
 
     ["Indoor"] = "Interior",
     ["Outdoor"] = "Exterior",
@@ -235,4 +236,15 @@ ADT.Locales.esMX = {
     ["Quickbar Size Large"] = "Grande",
     ["Quickbar Size Medium"] = "Mediano (predet.)",
     ["Quickbar Size Small"] = "Pequeño",
+    
+    -- Portapapeles tintes
+    ["Must be in customize mode"] = "Cambia a modo Personalizar",
+    ["Decor cannot be dyed"] = "Este decor no se puede teñir",
+    ["Failed to get decor info"] = "No se pudo obtener info",
+    ["Failed to get decor GUID"] = "No se pudo obtener GUID",
+    ["API not available"] = "API no disponible",
+    ["No dyes to paste"] = "Sin tintes copiados",
+    ["Dyes copied from %s"] = "Tintes copiados de %s: ",
+    ["Dyes pasted to %s"] = "Tintes pegados en %s: ",
+    ["Dye clipboard cleared"] = "Portapapeles de tintes vacío",
 }
