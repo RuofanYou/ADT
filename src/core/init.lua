@@ -406,6 +406,7 @@ f:SetScript("OnEvent", function(self, event, addonName)
                 end
                 if ADT and ADT.Housing and ADT.Housing.OnLocaleChanged then ADT.Housing:OnLocaleChanged() end
                 if ADT and ADT.Favorites and ADT.Favorites.OnLocaleChanged then ADT.Favorites:OnLocaleChanged() end
+                if ADT and ADT.RecentSlot and ADT.RecentSlot.OnLocaleChanged then ADT.RecentSlot:OnLocaleChanged() end
             end)
         end
         -- 若控制中心已构建，刷新一次分类与条目（避免语言切换后残留旧文案）

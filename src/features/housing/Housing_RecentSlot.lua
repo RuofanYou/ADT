@@ -5,8 +5,6 @@
 local ADDON_NAME, ADT = ...
 ADT = ADT or {}
 
-local L = ADT.L or {}
-
 -- 统一样式访问（单一权威）：从 Housing_Config.lua 暴露的 ADT.HousingInstrCFG 读取
 local function GetCFG()
     return assert(ADT and ADT.HousingInstrCFG, "ADT.HousingInstrCFG 缺失：请确认 Housing_Config.lua 已加载")
@@ -20,6 +18,34 @@ local slotFrame = nil
 
 local function D(msg)
     if ADT and ADT.DebugPrint then ADT.DebugPrint(msg) end
+end
+
+local function GetL()
+    return (ADT and ADT.L) or {}
+end
+
+local function RefreshLabelText()
+    if slotFrame and slotFrame.labelText then
+        slotFrame.labelText:SetText(GetL()["Recent Slot"])
+    end
+end
+
+local function RefreshTooltipIfHovered()
+    if not slotFrame then return end
+    if not GameTooltip or not GameTooltip.IsOwned or not GameTooltip:IsOwned(slotFrame) then return end
+
+    local L = GetL()
+    GameTooltip:ClearLines()
+    GameTooltip:SetOwner(slotFrame, "ANCHOR_TOP")
+    local history = ADT.History and ADT.History:GetAll()
+    if history and history[1] then
+        GameTooltip:SetText(history[1].name or L["Unknown Decor"])
+        GameTooltip:AddLine(L["Left-click: Place"], 0.7, 0.7, 0.7)
+    else
+        GameTooltip:SetText(L["Recent Slot"])
+        GameTooltip:AddLine(L["No recent placement"], 0.6, 0.6, 0.6)
+    end
+    GameTooltip:Show()
 end
 
 -- 创建槽位
@@ -72,7 +98,7 @@ function RecentSlot:Create()
     local labelCFG = CFG.RecentSlot.Label
     slotFrame.labelText = slotFrame:CreateFontString(nil, "OVERLAY", labelCFG.fontTemplate)
     slotFrame.labelText:SetPoint(labelCFG.point, slotFrame, labelCFG.relPoint, labelCFG.offsetX, labelCFG.offsetY)
-    slotFrame.labelText:SetText(L["Recent Slot"] or "最近放置")
+    slotFrame.labelText:SetText(GetL()["Recent Slot"])
     do
         local fontFile = select(1, slotFrame.labelText:GetFont())
         if fontFile then
@@ -118,11 +144,13 @@ function RecentSlot:Create()
         GameTooltip:SetOwner(self, "ANCHOR_TOP")
         local history = ADT.History and ADT.History:GetAll()
         if history and history[1] then
+            local L = GetL()
             GameTooltip:SetText(history[1].name or L["Unknown Decor"])
-            GameTooltip:AddLine(L["Left-click: Place"] or "左键：放置", 0.7, 0.7, 0.7)
+            GameTooltip:AddLine(L["Left-click: Place"], 0.7, 0.7, 0.7)
         else
-            GameTooltip:SetText(L["Recent Slot"] or "最近放置")
-            GameTooltip:AddLine(L["No recent placement"] or "暂无记录", 0.6, 0.6, 0.6)
+            local L = GetL()
+            GameTooltip:SetText(L["Recent Slot"])
+            GameTooltip:AddLine(L["No recent placement"], 0.6, 0.6, 0.6)
         end
         GameTooltip:Show()
     end)
@@ -194,6 +222,11 @@ function RecentSlot:Hide()
     if slotFrame then slotFrame:Hide() end
 end
 
+function RecentSlot:OnLocaleChanged()
+    RefreshLabelText()
+    RefreshTooltipIfHovered()
+end
+
 -- 初始化（延迟等待 QuickBar 创建）
 local function Initialize()
     D("[RecentSlot] Initialize")
@@ -201,6 +234,7 @@ local function Initialize()
     -- 等待 QuickBar 创建完成
     C_Timer.After(0.6, function()
         RecentSlot:Create()
+        RefreshLabelText()
         
         local isActive = C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive()
         if isActive then
@@ -262,4 +296,3 @@ if ADT and ADT.Settings and ADT.Settings.On then
         end
     end)
 end
-
