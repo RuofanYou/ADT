@@ -244,7 +244,7 @@ ADT.Locales.zhCN = {
     -- 动作栏设置
     ["SC Quickbar"] = "动作栏",
     ["Enable Quickbar"] = "启用动作栏",
-    ["Enable Quickbar tooltip"] = "显示底部 F1-F8 快捷栏与"最近放置"槽位；关闭后隐藏并恢复暴雪默认 HUD 布局。",
+    ["Enable Quickbar tooltip"] = "显示底部 F1-F8 快捷栏与“最近放置”槽位；关闭后隐藏并恢复暴雪默认 HUD 布局。",
     ["Quickbar Size"] = "动作栏尺寸",
     ["Quickbar Size tooltip"] = "调整快捷栏的整体大小。",
     ["Quickbar Size Large"] = "大",
