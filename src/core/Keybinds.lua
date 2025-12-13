@@ -192,11 +192,17 @@ function M:SetKeybind(actionName, key)
     end
 end
 
--- 获取动作的显示名称
+-- 获取动作的显示名称（使用本地化系统）
 function M:GetActionDisplayName(actionName)
+    local L = ADT.L or {}
+    local key = "Keybind Action " .. actionName
+    -- 优先使用本地化表中的翻译
+    if L[key] and L[key] ~= key then
+        return L[key]
+    end
+    -- 兜底：使用 ACTIONS 中的硬编码名称
     local action = ACTIONS[actionName]
     if not action then return actionName end
-    -- 根据 ADT 当前选择的语言返回（单一权威：ADT.CurrentLocale）
     local locale = ADT.CurrentLocale or (ADT.GetActiveLocale and ADT.GetActiveLocale()) or GetLocale()
     if locale == "zhCN" or locale == "zhTW" then
         return action.name
