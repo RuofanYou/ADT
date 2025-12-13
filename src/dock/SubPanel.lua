@@ -639,23 +639,38 @@ do
             
             line.LeftText:SetText(placeC .. labelSep .. stockLbl .. colon .. stockVal)
             
-            -- 右侧：染色槽信息（如果有）
+            -- 右侧：染色槽信息（直接显示颜色色块）
             local rightStr = ""
             local slots = info.dyeSlots or {}
             local total = #slots
             if total and total > 0 then
-                local used = 0
-                for i = 1, total do
-                    local s = slots[i]
-                    if s and s.dyeColorID then used = used + 1 end
+                -- 按 orderIndex 排序
+                local sortedSlots = {}
+                for i, s in ipairs(slots) do sortedSlots[i] = s end
+                table.sort(sortedSlots, function(a, b)
+                    return (a.orderIndex or 0) < (b.orderIndex or 0)
+                end)
+                
+                -- 为每个槽位生成颜色色块
+                local colorBlocks = ""
+                for i = 1, #sortedSlots do
+                    local slot = sortedSlots[i]
+                    local colorID = slot and slot.dyeColorID
+                    if colorID and colorID > 0 then
+                        -- 获取颜色信息并生成色块
+                        local colorData = C_DyeColor and C_DyeColor.GetDyeColorInfo(colorID)
+                        if colorData and colorData.swatchColorStart then
+                            local r, g, b = colorData.swatchColorStart:GetRGBAsBytes()
+                            colorBlocks = colorBlocks .. string.format("|cff%02x%02x%02x█|r", r, g, b)
+                        else
+                            colorBlocks = colorBlocks .. "|cff888888█|r"
+                        end
+                    else
+                        -- 未染色的槽位显示灰色
+                        colorBlocks = colorBlocks .. "|cff444444█|r"
+                    end
                 end
-                local usedKey = (used <= 0) and 'valueNeutral' or ((used < total) and 'valueWarn' or 'valueGood')
-                local slash = Colorize('separatorMuted', "/")
-                rightStr = string.format("|A:catalog-palette-icon:16:16|a %s%s%s",
-                    Colorize(usedKey, tostring(used)),
-                    slash,
-                    Colorize('labelMuted', tostring(total))
-                )
+                rightStr = "|A:catalog-palette-icon:16:16|a " .. colorBlocks
             end
             
             if rightStr ~= "" then

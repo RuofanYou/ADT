@@ -17,7 +17,9 @@ local CFG = {
         contentTopPadding = 14,
         headerTopNudge   = 10, -- Header 相对 Content 的下移偏移
         contentBottomPadding = 10,
-        subPanelMinHeight = 160,
+        -- SubPanel 最小高度：用于“只有一两行信息”时避免出现大面积空白。
+        -- 160 对应旧版布局的保守值；当前 SubPanel 已支持自适应高度，因此下调为更贴合内容的像素值。
+        subPanelMinHeight = 96,
         subPanelMaxHeight = 720,
         -- SubPanel 正文判空相关阈值（单一权威）
         contentAlphaThreshold = 0.01, -- alpha ≤ 阈值视为不可见（用于排除装饰/占位）
@@ -156,10 +158,10 @@ local CFG = {
 
     -- 暴雪“放置的装饰清单”按钮（PlacedDecorListButton）在 Dock.Header 内的定位（单一权威）
     PlacedListButton = {
-        point    = "LEFT",
-        relPoint = "LEFT",
-        offsetX  = 50,
-        offsetY  = -5,
+        point    = "RIGHT",
+        relPoint = "RIGHT",
+        offsetX  = -30,
+        offsetY  = -3,
         scale    = 1.0,
         strata   = nil,      -- nil=跟随 Dock 主体；也可指定 "FULLSCREEN_DIALOG" 等
         levelBias = 0,       -- 基于 Header 的提升量
