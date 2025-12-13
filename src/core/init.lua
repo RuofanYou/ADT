@@ -379,34 +379,47 @@ f:SetScript("OnEvent", function(self, event, addonName)
         -- 语言选择订阅：当 SelectedLanguage 变化时，重建模块并刷新 UI 文案
         if ADT.Settings and ADT.Settings.On then
             ADT.Settings.On('SelectedLanguage', function(newValue)
-                if ADT and ADT.ApplyLocale then
-                    local locale = newValue or (ADT.GetActiveLocale and ADT.GetActiveLocale())
+                -- KISS：语言切换必须“重新生成文本”，而不是试图在已有条目上打补丁。
+                local locale = newValue
+                if not locale then
+                    locale = (ADT.GetActiveLocale and ADT.GetActiveLocale()) or GetLocale()
+                end
+                if ADT.ApplyLocale then
                     ADT.ApplyLocale(locale)
                 end
-                if ADT and ADT.CommandDock then
-                    local CC = ADT.CommandDock
-                    if CC and CC.RebuildModules then CC:RebuildModules() end
-                    local Main = CC and CC.SettingsPanel
-                    local canRefresh = Main and Main.ModuleTab and Main.ModuleTab.ScrollView
-                    if canRefresh then
-                        if Main.RefreshCategoryList then Main:RefreshCategoryList() end
-                        local key = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or Main.currentSettingsCategory or Main.currentDecorCategory or Main.currentAboutCategory
-                        if key and CC and CC.GetCategoryByKey then
-                            local cat = CC:GetCategoryByKey(key)
-                            if cat and cat.categoryType == 'decorList' and Main.ShowDecorListCategory then
-                                Main:ShowDecorListCategory(key)
-                            elseif cat and cat.categoryType == 'about' and Main.ShowAboutCategory then
-                                Main:ShowAboutCategory(key)
-                            elseif Main.ShowSettingsCategory then
-                                Main:ShowSettingsCategory((cat and cat.categoryType=='settings') and key or 'Housing')
-                            end
-                        end
-                        if Main.RefreshLanguageLayout then Main:RefreshLanguageLayout(true) end
-                    end
+
+                local CC = ADT.CommandDock
+                if CC and CC.RebuildModules then
+                    CC:RebuildModules()
                 end
-                if ADT and ADT.Housing and ADT.Housing.OnLocaleChanged then ADT.Housing:OnLocaleChanged() end
-                if ADT and ADT.Favorites and ADT.Favorites.OnLocaleChanged then ADT.Favorites:OnLocaleChanged() end
-                if ADT and ADT.RecentSlot and ADT.RecentSlot.OnLocaleChanged then ADT.RecentSlot:OnLocaleChanged() end
+
+                local Main = CC and CC.SettingsPanel
+                local canRefresh = Main and Main.ModuleTab and Main.ModuleTab.ScrollView
+                if canRefresh then
+                    if Main.RefreshCategoryList then Main:RefreshCategoryList() end
+
+                    -- 以持久化分类为单一权威；缺省回到通用(Housing)。
+                    local key = (ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or 'Housing'
+                    local cat = (CC and CC.GetCategoryByKey) and CC:GetCategoryByKey(key) or nil
+                    local catType = cat and cat.categoryType or 'settings'
+
+                    if catType == 'decorList' and Main.ShowDecorListCategory then
+                        Main:ShowDecorListCategory(key)
+                    elseif catType == 'about' and Main.ShowAboutCategory then
+                        Main:ShowAboutCategory(key)
+                    elseif catType == 'keybinds' and Main.ShowKeybindsCategory then
+                        Main:ShowKeybindsCategory(key)
+                    elseif Main.ShowSettingsCategory then
+                        Main:ShowSettingsCategory((catType == 'settings') and key or 'Housing')
+                    end
+
+                    if Main.RefreshLanguageLayout then Main:RefreshLanguageLayout(true) end
+                end
+
+                -- 功能模块可选刷新：仅在模块提供对应回调时触发
+                if ADT.Housing and ADT.Housing.OnLocaleChanged then ADT.Housing:OnLocaleChanged() end
+                if ADT.Favorites and ADT.Favorites.OnLocaleChanged then ADT.Favorites:OnLocaleChanged() end
+                if ADT.RecentSlot and ADT.RecentSlot.OnLocaleChanged then ADT.RecentSlot:OnLocaleChanged() end
             end)
         end
         -- 若控制中心已构建，刷新一次分类与条目（避免语言切换后残留旧文案）
