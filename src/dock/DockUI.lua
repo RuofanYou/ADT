@@ -1,5 +1,4 @@
--- 指挥坞 GUI（简化版实现，文件名：gui.lua）
--- 说明：删除了 ChangelogTab/TabButton/最小化等不必要元素，仅保留
+
 -- 左侧分类、中间功能列表、右侧预览等核心交互。
 
 local ADDON_NAME, ADT = ...
@@ -1825,6 +1824,42 @@ end]]
 do  -- Left Section
     -- 高亮逻辑由 LeftPanel 注入到 MainFrame；此处不再实现
 
+    -- 单一权威：中央区域宽度 = MainFrame 总宽度 - LeftSection 占位宽度
+    -- 说明：不要依赖 CentralSection:GetWidth()（在同一帧重排/切语言动画期间可能为 0 或旧值），
+    -- 否则会出现“文本变了但宽度不跟着变，必须切换分类才更新”的体验问题。
+    function MainFrame:_GetCentralSectionWidth()
+        local total = tonumber(self.GetWidth and self:GetWidth()) or 0
+        local sidew = tonumber(self.LeftSection and self.LeftSection.GetWidth and self.LeftSection:GetWidth()) or 0
+        local w = total - sidew
+        if w < 0 then w = 0 end
+        return API.Round(w)
+    end
+
+    -- 单一权威：同步中央列表模板宽度（Entry/Header/DecorItem/KeybindEntry）
+    function MainFrame:_SyncCentralTemplateWidths(forceRender)
+        local sv = self.ModuleTab and self.ModuleTab.ScrollView
+        if not (sv and sv.CallObjectMethod) then return false end
+
+        local centralW = self:_GetCentralSectionWidth()
+        local pad = GetRightPadding()
+        local newWidth = API.Round(centralW - 2 * pad)
+        if newWidth <= 0 then return false end
+
+        self.centerButtonWidth = newWidth
+        sv:CallObjectMethod("Entry", "SetWidth", newWidth)
+        sv:CallObjectMethod("Header", "SetWidth", newWidth)
+        sv:CallObjectMethod("DecorItem", "SetWidth", newWidth)
+        sv:CallObjectMethod("KeybindEntry", "SetWidth", newWidth)
+
+        if forceRender and sv.OnSizeChanged then
+            sv:OnSizeChanged(true)
+        end
+        if self.ModuleTab and self.ModuleTab.ScrollBar and self.ModuleTab.ScrollBar.UpdateThumbRange then
+            self.ModuleTab.ScrollBar:UpdateThumbRange()
+        end
+        return true
+    end
+
     -- 运行时根据语言调整左侧栏宽度，并联动更新相关控件尺寸
     function MainFrame:_ApplySideWidth(sideWidth)
         sideWidth = API.Round(sideWidth)
@@ -1868,31 +1903,14 @@ do  -- Left Section
             self.FeaturePreview:SetSize(previewSize, previewSize)
         end
 
-        if self.CentralSection and self.ModuleTab and self.ModuleTab.ScrollView then
-            local CentralSection = self.CentralSection
-            -- 修正：条目左侧统一使用 offsetX = GetRightPadding() 进行缩进，
-            -- 因此条目真实可用宽度应为 CentralSection 宽度减去“左右各一段缩进”。
-            -- 方案A：对称扣边，保证左右视觉留白一致，避免右侧顶边。
-            local newWidth = API.Round((CentralSection:GetWidth() or 0) - 2 * GetRightPadding())
-            if newWidth > 0 then
-                self.centerButtonWidth = newWidth
-                local ScrollView = self.ModuleTab.ScrollView
-                ScrollView:CallObjectMethod("Entry", "SetWidth", newWidth)
-                ScrollView:CallObjectMethod("Header", "SetWidth", newWidth)
-                ScrollView:CallObjectMethod("DecorItem", "SetWidth", newWidth)
-                ScrollView:CallObjectMethod("KeybindEntry", "SetWidth", newWidth)
-                ScrollView:OnSizeChanged(true)
-                if self.ModuleTab.ScrollBar and self.ModuleTab.ScrollBar.UpdateThumbRange then
-                    self.ModuleTab.ScrollBar:UpdateThumbRange()
-                end
-            end
-        end
+        self:_SyncCentralTemplateWidths(true)
     end
 
-    function MainFrame:AnimateSideWidthTo(targetWidth)
+    function MainFrame:AnimateSideWidthTo(targetWidth, onDone)
         local from = self.LeftSection and self.LeftSection:GetWidth() or targetWidth
         if not from or math.abs(from - targetWidth) < 1 then
             self:_ApplySideWidth(targetWidth)
+            if type(onDone) == "function" then onDone() end
             return
         end
         local t, d = 0, 0.25
@@ -1902,6 +1920,7 @@ do  -- Left Section
             if t >= d then
                 self:SetScript("OnUpdate", nil)
                 self:_ApplySideWidth(targetWidth)
+                if type(onDone) == "function" then onDone() end
                 return
             end
             local cur
@@ -1917,12 +1936,13 @@ do  -- Left Section
     function MainFrame:RefreshLanguageLayout(animated)
         local target = ComputeSideSectionWidth()
         if animated then
-            self:AnimateSideWidthTo(target)
+            self:AnimateSideWidthTo(target, function()
+                if self.UpdateAutoWidth then self:UpdateAutoWidth() end
+            end)
         else
             self:_ApplySideWidth(target)
+            if self.UpdateAutoWidth then self:UpdateAutoWidth() end
         end
-        -- 语言切换后，文本宽度变化需要重新计算容器宽
-        if self.UpdateAutoWidth then self:UpdateAutoWidth() end
     end
 
     -- 中央“设置项”行高亮：已下沉到 EntryButtonMixin（每个条目自管），避免跨层级 frame level 混乱。
@@ -2874,29 +2894,8 @@ local function CreateUI()
         end
         self.sideSectionWidth = sidew
 
-        -- 同步中央区域内各条目实际宽度
-        -- 之前仅改变了 MainFrame 的总宽，而 ScrollView 内的对象仍保留创建时的旧宽，
-        -- 会导致 Label 的锚点虽到右侧，但父按钮过窄，从而出现“启用 C...”之类的省略号。
-        -- 这里在调整完总宽后，按 CentralSection 的最新可用宽度批量更新各模板对象尺寸。
-        local CentralSection = self.CentralSection
-        if CentralSection and self.ModuleTab and self.ModuleTab.ScrollView then
-            local newWidth = tonumber(CentralSection:GetWidth()) or 0
-            newWidth = math.floor(newWidth + 0.5)
-            -- 按左侧统一缩进扣除可用宽度
-            newWidth = newWidth - 2 * GetRightPadding()
-            if newWidth > 0 then
-                self.centerButtonWidth = newWidth
-                local ScrollView = self.ModuleTab.ScrollView
-                if ScrollView.CallObjectMethod then
-                    ScrollView:CallObjectMethod("Entry", "SetWidth", newWidth)
-                    ScrollView:CallObjectMethod("Header", "SetWidth", newWidth)
-                    ScrollView:CallObjectMethod("DecorItem", "SetWidth", newWidth)
-                    ScrollView:CallObjectMethod("KeybindEntry", "SetWidth", newWidth)
-                end
-                -- 触发一次强制重渲染，确保可见对象立即使用新宽度
-                if ScrollView.OnSizeChanged then ScrollView:OnSizeChanged(true) end
-            end
-        end
+        -- 同步中央区域内各条目实际宽度（单一权威：由 MainFrame/LeftSection 推导）
+        self:_SyncCentralTemplateWidths(true)
 
         -- 更新锚点确保紧贴右缘
         self:ApplyDockPlacement()
