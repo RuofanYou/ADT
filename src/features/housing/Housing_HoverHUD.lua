@@ -248,16 +248,6 @@ do
         end
     end
 
-    function DisplayFrameMixin:OnLoad()
-        self.alpha = 0
-        self:SetAlpha(0)
-
-        self.Control.Icon:SetAtlas("housing-hotkey-icon-leftclick")
-        self.Control.Icon:Show()
-        self.InstructionText:SetText(HOUSING_DECOR_SELECT_INSTRUCTION)
-        self.InstructionText:SetFontObject("GameFontHighlightMedium")
-    end
-
     local function FadeIn_OnUpdate(self, elapsed)
         self.alpha = self.alpha + 5 * elapsed
         if self.alpha >= 1 then
@@ -304,17 +294,15 @@ end
 
 local function Blizzard_HouseEditor_OnLoaded()
     local container = HouseEditorFrame.BasicDecorModeFrame.Instructions
-    for _, v in ipairs(container.UnselectedInstructions) do
-        v:Hide()
-    end
-    container.UnselectedInstructions = {}
 
     if not DisplayFrame then
         DisplayFrame = CreateFrame("Frame", nil, container, "ADT_HouseEditorInstructionTemplate")
         DisplayFrame:SetPoint("RIGHT", HouseEditorFrame.BasicDecorModeFrame, "RIGHT", -30, 0)
         DisplayFrame:SetWidth(420)
         Mixin(DisplayFrame, DisplayFrameMixin)
-        DisplayFrame:OnLoad()
+        -- 初始化 alpha
+        DisplayFrame.alpha = 0
+        DisplayFrame:SetAlpha(0)
 
         local SubFrame = CreateFrame("Frame", nil, DisplayFrame, "ADT_HouseEditorInstructionTemplate")
         DisplayFrame.SubFrame = SubFrame
