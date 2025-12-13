@@ -527,6 +527,8 @@ do
     local GetCatalogEntryInfoByRecordID = C_HousingCatalog and C_HousingCatalog.GetCatalogEntryInfoByRecordID
     local GetHoveredDecorInfo = C_HousingDecor and C_HousingDecor.GetHoveredDecorInfo
     local IsHoveringDecor = C_HousingDecor and C_HousingDecor.IsHoveringDecor
+    local GetSelectedDecorInfo = C_HousingDecor and C_HousingDecor.GetSelectedDecorInfo
+    local IsDecorSelected = C_HousingDecor and C_HousingDecor.IsDecorSelected
     local IsHouseEditorActive = C_HouseEditor and C_HouseEditor.IsHouseEditorActive
     
     local function GetCatalogDecorInfo(decorID)
@@ -585,15 +587,13 @@ do
         
         local line = EnsureInfoLine()
         
-        if not IsHoveringDecor or not IsHoveringDecor() then
-            -- 离开悬停：清空 Header 和 InfoLine
-            ADT.DockUI.SetSubPanelHeaderText("")
-            if line then line:Hide() end
-            ADT.DockUI.RequestSubPanelAutoResize()
-            return
+        local info
+        if IsHoveringDecor and IsHoveringDecor() then
+            info = GetHoveredDecorInfo and GetHoveredDecorInfo() or nil
+        elseif IsDecorSelected and IsDecorSelected() then
+            info = GetSelectedDecorInfo and GetSelectedDecorInfo() or nil
         end
-        
-        local info = GetHoveredDecorInfo and GetHoveredDecorInfo()
+
         if not info then
             ADT.DockUI.SetSubPanelHeaderText("")
             if line then line:Hide() end
@@ -689,11 +689,15 @@ do
     
     -- 创建事件监听帧
     local eventFrame = CreateFrame("Frame")
+    eventFrame:RegisterEvent("HOUSE_EDITOR_MODE_CHANGED")
     eventFrame:RegisterEvent("HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED")
+    eventFrame:RegisterEvent("HOUSING_EXPERT_MODE_HOVERED_TARGET_CHANGED")
+    eventFrame:RegisterEvent("HOUSING_BASIC_MODE_SELECTED_TARGET_CHANGED")
+    eventFrame:RegisterEvent("HOUSING_EXPERT_MODE_SELECTED_TARGET_CHANGED")
     eventFrame:SetScript("OnEvent", function(self, event, ...)
-        if event == "HOUSING_BASIC_MODE_HOVERED_TARGET_CHANGED" then
-            UpdateDecorHeader()
-        end
+        -- 目标：无论基础/专家模式，只要“悬停/抓取(选中)” Decor 发生变化，都刷新 SubPanel。
+        -- 说明：UpdateDecorHeader 内部自行判定优先级（悬停优先，其次选中）。
+        UpdateDecorHeader()
     end)
     
     -- 对外暴露刷新接口
