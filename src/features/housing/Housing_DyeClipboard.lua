@@ -20,8 +20,8 @@ local DyeClipboard = CreateFrame("Frame", "ADT_DyeClipboard")
 ADT.DyeClipboard = DyeClipboard
 
 -- 单一权威状态
-DyeClipboard._savedScheme = nil -- { [slotIndex]=dyeColorID(0=无色), ... }
-DyeClipboard._savedSlots = nil  -- 最近一次复制来源的 dyeSlots（用于 tooltip 展示）
+DyeClipboard._savedSchemeKey = nil -- string：最近一次复制的“染料方案指纹”（序列化后）
+DyeClipboard._savedColors = nil -- number[]：最近一次复制的颜色序列（0=无色）
 
 DyeClipboard._hookInstalled = false
 DyeClipboard._registeredMouseUp = false
@@ -30,9 +30,24 @@ DyeClipboard._registeredMouseUp = false
 -- 工具函数
 --------------------------------------------------------------------------------
 
-function DyeClipboard:_sortSlots(slots)
-    table.sort(slots, function(a, b) return a.orderIndex < b.orderIndex end)
-    return slots
+local function CopyAndSortDyeSlots(dyeSlots)
+    if not dyeSlots then
+        return nil
+    end
+    local copy = {}
+    for i = 1, #dyeSlots do
+        copy[i] = dyeSlots[i]
+    end
+    table.sort(copy, function(a, b)
+        if not a then
+            return false
+        end
+        if not b then
+            return true
+        end
+        return (a.orderIndex or 0) < (b.orderIndex or 0)
+    end)
+    return copy
 end
 
 local function IsCustomizeModeShown()
@@ -65,34 +80,72 @@ function DyeClipboard:_makeColorBlock(colorID)
     return "?"
 end
 
-function DyeClipboard:_createTooltipLineWithSwatch(prefixText, dyeSlots, numSlots)
-    self:_sortSlots(dyeSlots)
-    local line = (prefixText or "") .. ""
-    numSlots = numSlots or #dyeSlots
+local function ExtractDyeColorsFromSlots(sortedSlots)
+    if not sortedSlots then
+        return nil
+    end
+    local colors = {}
+    for i = 1, #sortedSlots do
+        local slot = sortedSlots[i]
+        local colorID = 0
+        if slot and slot.dyeColorID then
+            colorID = slot.dyeColorID
+        end
+        colors[i] = colorID
+    end
+    return colors
+end
+
+local function EncodeSchemeKey(colors)
+    if not colors then
+        return nil
+    end
+    -- 方案指纹：用“长度 + 冒号分隔”保证确定性（同时便于快速比较）
+    -- 例：3:0:120:0
+    return tostring(#colors) .. ":" .. table.concat(colors, ":")
+end
+
+function DyeClipboard:_renderSwatchLineFromSlots(prefixText, dyeSlots, numSlots)
+    local sortedSlots = CopyAndSortDyeSlots(dyeSlots)
+    if not sortedSlots then
+        return (prefixText or "")
+    end
+    numSlots = numSlots or #sortedSlots
+    local line = (prefixText or "")
     for i = 1, numSlots do
-        local colorID = dyeSlots[i] and dyeSlots[i].dyeColorID or 0
+        local slot = sortedSlots[i]
+        local colorID = (slot and slot.dyeColorID) or 0
         line = line .. self:_makeColorBlock(colorID)
     end
     return line
 end
 
+function DyeClipboard:_renderSwatchLineFromColors(prefixText, colors, numSlots)
+    if not colors then
+        return (prefixText or "")
+    end
+    numSlots = numSlots or #colors
+    local line = (prefixText or "")
+    for i = 1, numSlots do
+        line = line .. self:_makeColorBlock(colors[i] or 0)
+    end
+    return line
+end
+
 function DyeClipboard:HasSameScheme(decorInstanceInfo)
-    if not self._savedScheme then
+    if not self._savedSchemeKey then
         return false
     end
 
     local dyeSlots = decorInstanceInfo and decorInstanceInfo.dyeSlots
-    if not dyeSlots then
+    local sortedSlots = CopyAndSortDyeSlots(dyeSlots)
+    if not sortedSlots then
         return false
     end
 
-    self:_sortSlots(dyeSlots)
-    for i, v in ipairs(dyeSlots) do
-        if not (v.dyeColorID and self._savedScheme[i] == v.dyeColorID) then
-            return false
-        end
-    end
-    return true
+    local colors = ExtractDyeColorsFromSlots(sortedSlots)
+    local key = EncodeSchemeKey(colors)
+    return key == self._savedSchemeKey
 end
 
 --------------------------------------------------------------------------------
@@ -112,13 +165,10 @@ function DyeClipboard:CopyDyesFromHovered()
         return false
     end
 
-    self._savedScheme = {}
-    self._savedSlots = decorInstanceInfo.dyeSlots
-    self:_sortSlots(self._savedSlots)
-
-    for i, v in ipairs(self._savedSlots) do
-        self._savedScheme[i] = v.dyeColorID or 0
-    end
+    local sortedSlots = CopyAndSortDyeSlots(decorInstanceInfo.dyeSlots)
+    local colors = ExtractDyeColorsFromSlots(sortedSlots)
+    self._savedColors = colors
+    self._savedSchemeKey = EncodeSchemeKey(colors)
 
     -- 复制后刷新 tooltip（避免“已复制/可粘贴”提示延迟）
     local hf = _G.HouseEditorFrame
@@ -137,7 +187,7 @@ function DyeClipboard:CopyDyesFromHovered()
     end
 
     if ADT.DebugPrint then
-        ADT.DebugPrint("[DyeClipboard] 复制染料成功，槽位数=" .. tostring(#self._savedScheme))
+        ADT.DebugPrint("[DyeClipboard] 复制染料成功，槽位数=" .. tostring(colors and #colors or 0))
     end
     return true
 end
@@ -146,7 +196,7 @@ function DyeClipboard:ApplyDyesToSelected()
     if not (IsDyeClipboardEnabled() and IsCustomizeModeShown()) then
         return false
     end
-    if not self._savedScheme then
+    if not self._savedColors then
         return false
     end
 
@@ -159,21 +209,27 @@ function DyeClipboard:ApplyDyesToSelected()
     if not (dyeSlots and #dyeSlots > 0) then
         return false
     end
-    self:_sortSlots(dyeSlots)
+    local sortedSlots = CopyAndSortDyeSlots(dyeSlots)
 
     local anyDiff = false
-    for i, v in ipairs(dyeSlots) do
-        local savedColorID = self._savedScheme[i] or 0
-        if savedColorID ~= v.dyeColorID then
+    for i = 1, #sortedSlots do
+        local slot = sortedSlots[i]
+        local currentColorID = (slot and slot.dyeColorID) or 0
+        local wantedColorID = self._savedColors[i] or 0
+        if wantedColorID ~= currentColorID then
             anyDiff = true
-            v.dyeColorID = savedColorID
-
-            if savedColorID == 0 then
-                savedColorID = nil
+            if slot then
+                slot.dyeColorID = wantedColorID
             end
 
             if ApplyDyeToSelectedDecor then
-                ApplyDyeToSelectedDecor(v.ID, savedColorID)
+                local apiColorID = wantedColorID
+                if apiColorID == 0 then
+                    apiColorID = nil
+                end
+                if slot and slot.ID then
+                    ApplyDyeToSelectedDecor(slot.ID, apiColorID)
+                end
             end
         end
     end
@@ -251,15 +307,7 @@ function DyeClipboard:OnShowDecorInstanceTooltip(modeFrame, decorInstanceInfo)
         return
     end
 
-    local currentLine = self:_createTooltipLineWithSwatch("", decorInstanceInfo.dyeSlots)
-    if self:HasSameScheme(decorInstanceInfo) then
-        tooltip:AddDoubleLine(L["Dyes Copied"] or "已复制此方案", currentLine, 0.5, 0.5, 0.5, 1, 1, 1)
-    else
-        tooltip:AddDoubleLine("SHIFT+C 复制染料", currentLine, 1, 0.82, 0, 1, 1, 1)
-        if self._savedSlots then
-            tooltip:AddDoubleLine("SHIFT+左键 粘贴染料", self:_createTooltipLineWithSwatch("", self._savedSlots, numSlots), 1, 0.82, 0, 1, 1, 1)
-        end
-    end
+
 
     tooltip:Show()
     self:RegisterGlobalMouseUp()
