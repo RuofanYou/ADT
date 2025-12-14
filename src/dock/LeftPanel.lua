@@ -134,6 +134,8 @@ local function CreateCategoryButton(parent)
         local cat = CommandDock:GetCategoryByKey(self.categoryKey)
         if cat and cat.categoryType == 'decorList' and main.ShowDecorListCategory then
             main:ShowDecorListCategory(self.categoryKey)
+        elseif cat and cat.categoryType == 'dyePresetList' and main.ShowDyePresetsCategory then
+            main:ShowDyePresetsCategory(self.categoryKey)
         elseif cat and cat.categoryType == 'about' and main.ShowAboutCategory then
             main:ShowAboutCategory(self.categoryKey)
         elseif cat and cat.categoryType == 'keybinds' and main.ShowKeybindsCategory then

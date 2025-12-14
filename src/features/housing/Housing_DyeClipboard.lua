@@ -342,3 +342,119 @@ boot:SetScript("OnEvent", function(_, event, arg1)
     end
     TryInstallHook()
 end)
+
+--------------------------------------------------------------------------------
+-- 染色预设功能（持久化到 ADT_DB.DyePresets）
+-- 设计：
+--   1) 最多 10 个预设，FIFO 自动替换（最早的被挤掉）
+--   2) 保存时无需命名，自动以当前颜色序列为指纹
+--   3) 点击预设 = 加载到剪贴板
+--   4) 右键删除预设
+--------------------------------------------------------------------------------
+
+local MAX_PRESETS = 10
+
+-- 获取预设列表
+function DyeClipboard:GetPresets()
+    local db = ADT.GetDBValue and ADT.GetDBValue("DyePresets")
+    if type(db) ~= "table" then
+        db = {}
+        if ADT.SetDBValue then ADT.SetDBValue("DyePresets", db) end
+    end
+    return db
+end
+
+-- 保存当前剪贴板为预设（FIFO）
+function DyeClipboard:SavePreset()
+    if not self._savedColors or #self._savedColors == 0 then
+        if ADT.Notify then ADT.Notify(L["No dye copied"] or "未复制任何染色", "error") end
+        return false
+    end
+
+    local presets = self:GetPresets()
+    local newKey = EncodeSchemeKey(self._savedColors)
+
+    -- 去重：如果已存在相同配色，先移除旧的
+    for i = #presets, 1, -1 do
+        if presets[i] and presets[i].key == newKey then
+            table.remove(presets, i)
+        end
+    end
+
+    -- 插入到头部
+    table.insert(presets, 1, {
+        key = newKey,
+        colors = {unpack(self._savedColors)},
+        createdAt = time(),
+    })
+
+    -- 限制最大数量（FIFO：超出的从尾部移除）
+    while #presets > MAX_PRESETS do
+        table.remove(presets)
+    end
+
+    if ADT.SetDBValue then ADT.SetDBValue("DyePresets", presets) end
+    if ADT.Notify then ADT.Notify(L["Dye preset saved"] or "染色预设已保存", "success") end
+
+    -- 通知 UI 刷新
+    if self.OnPresetsChanged then
+        self:OnPresetsChanged()
+    end
+    return true
+end
+
+-- 加载预设到剪贴板
+function DyeClipboard:LoadPreset(index)
+    local presets = self:GetPresets()
+    local preset = presets[index]
+    if not preset or not preset.colors then return false end
+
+    self._savedColors = {unpack(preset.colors)}
+    self._savedSchemeKey = EncodeSchemeKey(self._savedColors)
+
+    if ADT.Notify then ADT.Notify(L["Dye preset loaded"] or "染色预设已加载", "success") end
+
+    -- 如果当前已选中可染色装饰，自动应用预览
+    if IsDecorSelected and IsDecorSelected() then
+        local info = GetSelectedDecorInfo and GetSelectedDecorInfo()
+        if self:CanCustomizeDecor(info) then
+            self:ApplyDyesToSelected()
+        end
+    end
+
+    return true
+end
+
+-- 删除预设
+function DyeClipboard:DeletePreset(index)
+    local presets = self:GetPresets()
+    if not presets[index] then return false end
+
+    table.remove(presets, index)
+    if ADT.SetDBValue then ADT.SetDBValue("DyePresets", presets) end
+    if ADT.Notify then ADT.Notify(L["Dye preset deleted"] or "染色预设已删除", "info") end
+
+    -- 通知 UI 刷新
+    if self.OnPresetsChanged then
+        self:OnPresetsChanged()
+    end
+    return true
+end
+
+-- 生成色块显示文本（供 UI 使用）
+function DyeClipboard:GetPresetColorBlocks(index)
+    local presets = self:GetPresets()
+    local preset = presets[index]
+    if not preset or not preset.colors then return "" end
+
+    local line = ""
+    for i = 1, #preset.colors do
+        line = line .. self:_makeColorBlock(preset.colors[i] or 0)
+    end
+    return line
+end
+
+-- 获取预设数量
+function DyeClipboard:GetPresetCount()
+    return #self:GetPresets()
+end

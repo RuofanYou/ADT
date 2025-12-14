@@ -443,8 +443,46 @@ local function buildModules()
         emptyText = string.format("%s\n%s", L['History Empty Line1'], L['History Empty Line2']),
     }
 
-    -- 自动旋转分类（设置类）——需位于“信息”之上
+    -- 染色预设分类（专用预设列表类）
     modules[4] = {
+        key = 'DyePresets',
+        categoryName = L['SC DyePresets'],
+        categoryType = 'dyePresetList', -- 染色预设专用类型
+        modules = {},
+        numModules = 0,
+        -- 获取预设列表数据
+        getListData = function()
+            if ADT and ADT.DyeClipboard and ADT.DyeClipboard.GetPresets then
+                return ADT.DyeClipboard:GetPresets() or {}
+            end
+            return {}
+        end,
+        -- 点击预设项的回调
+        onItemClick = function(index, button)
+            if button == 'RightButton' then
+                -- 右键：删除预设
+                if ADT and ADT.DyeClipboard and ADT.DyeClipboard.DeletePreset then
+                    ADT.DyeClipboard:DeletePreset(index)
+                end
+            else
+                -- 左键：加载预设到剪贴板
+                if ADT and ADT.DyeClipboard and ADT.DyeClipboard.LoadPreset then
+                    ADT.DyeClipboard:LoadPreset(index)
+                end
+            end
+        end,
+        -- 保存按钮回调
+        onSaveClick = function()
+            if ADT and ADT.DyeClipboard and ADT.DyeClipboard.SavePreset then
+                ADT.DyeClipboard:SavePreset()
+            end
+        end,
+        -- 空列表提示
+        emptyText = string.format("%s\n%s", L['DyePresets Empty Line1'] or "暂无染色预设", L['DyePresets Empty Line2'] or "在自定义模式下 SHIFT+C 复制染色后，点击上方按钮保存"),
+    }
+
+    -- 自动旋转分类（设置类）——需位于“信息”之上
+    modules[5] = {
         key = 'AutoRotate',
         categoryName = L['SC AutoRotate'],
         categoryType = 'settings', -- 设置类分类
@@ -453,7 +491,7 @@ local function buildModules()
     }
 
     -- 快捷键分类（设置类）——自定义按键绑定
-    modules[5] = {
+    modules[6] = {
         key = 'Keybinds',
         categoryName = L['SC Keybinds'],
         categoryType = 'keybinds', -- 快捷键专用分类类型
@@ -485,7 +523,7 @@ local function buildModules()
         categoryKeys = { 'Quickbar' },
         uiOrder = 1,
     }
-    modules[6] = {
+    modules[7] = {
         key = 'Quickbar',
         categoryName = L['SC Quickbar'],
         categoryType = 'settings',
@@ -494,7 +532,7 @@ local function buildModules()
     }
 
     -- 信息分类（关于插件的信息）
-    modules[7] = {
+    modules[8] = {
         key = 'About',
         categoryName = L['SC About'],
         categoryType = 'about', -- 关于信息类分类
@@ -550,6 +588,8 @@ local function getCategoryDisplayName(key)
         return L['SC Clipboard']
     elseif key == 'History' then
         return L['SC History']
+    elseif key == 'DyePresets' then
+        return L['SC DyePresets']
     elseif key == 'AutoRotate' then
         return L['SC AutoRotate']
     elseif key == 'Keybinds' then

@@ -267,4 +267,16 @@ ADT.Locales.enUS = {
     ["Dyes copied from %s"] = "Dyes copied from %s: ",
     ["Dyes pasted to %s"] = "Dyes pasted to %s: ",
     ["Dye clipboard cleared"] = "Dye clipboard cleared",
+
+    -- Dye Presets
+    ["SC DyePresets"] = "Dye Presets",
+    ["Preset"] = "Preset",
+    ["Save Current Dye"] = "Save Current Dye",
+    ["No dye copied"] = "No dye copied",
+    ["Dye preset saved"] = "Dye preset saved",
+    ["Dye preset loaded"] = "Dye preset loaded",
+    ["Dye preset deleted"] = "Dye preset deleted",
+    ["No dye presets"] = "No dye presets",
+    ["DyePresets Empty Line1"] = "No dye presets saved",
+    ["DyePresets Empty Line2"] = "In Customize Mode, press SHIFT+C to copy dyes, then save",
 }

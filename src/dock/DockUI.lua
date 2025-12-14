@@ -2413,10 +2413,169 @@ do  -- Central
         if self.UpdateAutoWidth then self:UpdateAutoWidth() end
     end
 
+    -- 显示染色预设分类
+    function MainFrame:ShowDyePresetsCategory(categoryKey)
+        if not (self.ModuleTab and self.ModuleTab.ScrollView) then
+            self.__pendingTabKey = categoryKey
+            return
+        end
+        local cat = CommandDock:GetCategoryByKey(categoryKey)
+        if not cat or cat.categoryType ~= 'dyePresetList' then return end
+        
+        self.currentDecorCategory = nil
+        self.currentSettingsCategory = nil
+        self.currentDyePresetsCategory = categoryKey
+        if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', categoryKey) end
+        
+        local list = cat.getListData and cat.getListData() or {}
+        local content = {}
+        local n = 0
+        local buttonHeight = 32 -- 预设条目高度
+        local fromOffsetY = Def.ButtonSize
+        local offsetY = fromOffsetY
+        local buttonGap = 2
+        local offsetX = GetRightPadding()
+        
+        -- 添加分类标题
+        n = n + 1
+        content[n] = {
+            dataIndex = n,
+            templateKey = "Header",
+            setupFunc = function(obj)
+                obj:SetText(cat.categoryName)
+                if obj.Left then obj.Left:Hide() end
+                if obj.Right then obj.Right:Hide() end
+                if obj.Divider then obj.Divider:Show() end
+                obj.Label:SetJustifyH("LEFT")
+            end,
+            point = "TOPLEFT",
+            relativePoint = "TOPLEFT",
+            top = offsetY,
+            bottom = offsetY + Def.ButtonSize,
+            offsetX = GetRightPadding(),
+        }
+        offsetY = offsetY + Def.ButtonSize
+        
+        -- 添加"保存当前剪贴板"按钮
+        n = n + 1
+        local saveBtnH = 28
+        content[n] = {
+            dataIndex = n,
+            templateKey = "CenterButton",
+            setupFunc = function(btn)
+                -- 始终可点击，点击时检测剪贴板状态
+                local btnText = ADT.L["Save Current Dye"] or "保存当前染色"
+                if btn.SetText then btn:SetText(btnText) end
+                btn:Enable()
+                btn:SetScript("OnClick", function()
+                    -- 点击时检测剪贴板状态
+                    local hasClipboard = ADT.DyeClipboard and ADT.DyeClipboard._savedColors and #ADT.DyeClipboard._savedColors > 0
+                    if not hasClipboard then
+                        if ADT.Notify then ADT.Notify(ADT.L["No dye copied"] or "未复制任何染色", "error") end
+                        return
+                    end
+                    if cat.onSaveClick then
+                        cat.onSaveClick()
+                        -- 刷新列表
+                        C_Timer.After(0.05, function()
+                            MainFrame:ShowDyePresetsCategory(categoryKey)
+                        end)
+                    end
+                end)
+            end,
+            point = "TOPLEFT",
+            relativePoint = "TOPLEFT",
+            top = offsetY,
+            bottom = offsetY + saveBtnH,
+            offsetX = offsetX,
+        }
+        offsetY = offsetY + saveBtnH + 8
+        
+        -- 添加预设列表或空列表提示
+        if #list == 0 then
+            n = n + 1
+            local emptyTop = offsetY + (Def.EmptyStateTopGap or 0)
+            local emptyBottom = emptyTop + Def.ButtonSize
+            content[n] = {
+                dataIndex = n,
+                templateKey = "Header",
+                setupFunc = function(obj)
+                    local text = cat.emptyText
+                    if not text then text = ADT.L["No dye presets"] or "暂无染色预设" end
+                    local firstLine = text:match("^([^\n]*)") or text
+                    obj:SetText(firstLine)
+                    SetTextColor(obj.Label, Def.TextColorDisabled)
+                    if obj.Left then obj.Left:Hide() end
+                    if obj.Right then obj.Right:Hide() end
+                    if obj.Divider then obj.Divider:Hide() end
+                    obj.Label:SetJustifyH("LEFT")
+                end,
+                point = "TOPLEFT",
+                relativePoint = "TOPLEFT",
+                top = emptyTop,
+                bottom = emptyBottom,
+                offsetX = offsetX,
+            }
+            offsetY = emptyBottom
+            
+            -- 第二行提示
+            if cat.emptyText and cat.emptyText:find("\n") then
+                local secondLine = cat.emptyText:match("\n(.*)$")
+                if secondLine and secondLine ~= "" then
+                    n = n + 1
+                    content[n] = {
+                        dataIndex = n,
+                        templateKey = "Header",
+                        setupFunc = function(obj)
+                            obj:SetText(secondLine)
+                            SetTextColor(obj.Label, Def.TextColorDisabled)
+                            if obj.Left then obj.Left:Hide() end
+                            if obj.Right then obj.Right:Hide() end
+                            if obj.Divider then obj.Divider:Hide() end
+                            obj.Label:SetJustifyH("LEFT")
+                        end,
+                        point = "TOPLEFT",
+                        relativePoint = "TOPLEFT",
+                        top = offsetY,
+                        bottom = offsetY + Def.ButtonSize,
+                        offsetX = offsetX,
+                    }
+                end
+            end
+        else
+            -- 渲染预设列表（显示色块）
+            for i, preset in ipairs(list) do
+                n = n + 1
+                local top = offsetY
+                local bottom = offsetY + buttonHeight + buttonGap
+                local capIndex = i
+                local capCat = cat
+                local capPreset = preset
+                content[n] = {
+                    dataIndex = n,
+                    templateKey = "DyePresetItem",
+                    setupFunc = function(obj)
+                        obj:SetPresetData(capIndex, capPreset, capCat)
+                    end,
+                    point = "TOPLEFT",
+                    relativePoint = "TOPLEFT",
+                    top = top,
+                    bottom = bottom,
+                    offsetX = offsetX,
+                }
+                offsetY = bottom
+            end
+        end
+        
+        self.ModuleTab.ScrollView:SetContent(content, false)
+        if self.UpdateAutoWidth then self:UpdateAutoWidth() end
+    end
+
     -- 返回设置列表视图
     function MainFrame:ShowSettingsView()
         self.currentDecorCategory = nil
         self.currentAboutCategory = nil
+        self.currentDyePresetsCategory = nil
         self:RefreshFeatureList()
     end
 
@@ -3058,6 +3217,94 @@ local function CreateUI()
         end
 
         ScrollView:AddTemplate("DecorItem", DecorItem_Create)
+
+        -- 染色预设条目模板（显示色块序列）
+        local DyePresetItemMixin = {}
+
+        function DyePresetItemMixin:SetPresetData(index, preset, categoryInfo)
+            self.presetIndex = index
+            self.preset = preset
+            self.categoryInfo = categoryInfo
+
+            -- 构建色块显示文本
+            local colorStr = ""
+            if preset and preset.colors then
+                for _, colorID in ipairs(preset.colors) do
+                    colorStr = colorStr .. self:_makeColorBlock(colorID or 0)
+                end
+            end
+
+            -- 设置显示：预设序号 + 色块
+            local label = string.format("%s %d: %s", ADT.L["Preset"] or "预设", index, colorStr)
+            self.Label:SetText(label)
+        end
+
+        function DyePresetItemMixin:_makeColorBlock(dyeColorID)
+            -- 调用 DyeClipboard 的色块生成方法
+            if ADT.DyeClipboard and ADT.DyeClipboard._makeColorBlock then
+                return ADT.DyeClipboard:_makeColorBlock(dyeColorID)
+            end
+            -- 降级：简单色块占位
+            return "|TInterface\\BUTTONS\\WHITE8X8:12:12:0:0:8:8:0:8:0:8|t"
+        end
+
+        function DyePresetItemMixin:OnEnter()
+            self.Background:SetColorTexture(0.3, 0.3, 0.3, 0.5)
+            SetTextColor(self.Label, Def.TextColorHighlight)
+        end
+
+        function DyePresetItemMixin:OnLeave()
+            self.Background:SetColorTexture(0, 0, 0, 0.1)
+            SetTextColor(self.Label, Def.TextColorNormal)
+        end
+
+        function DyePresetItemMixin:OnClick(button)
+            if self.categoryInfo and self.categoryInfo.onItemClick then
+                self.categoryInfo.onItemClick(self.presetIndex, button)
+                -- 刷新列表
+                if button == "RightButton" then
+                    C_Timer.After(0.05, function()
+                        if MainFrame.ShowDyePresetsCategory then
+                            MainFrame:ShowDyePresetsCategory(self.categoryInfo.key)
+                        end
+                    end)
+                end
+            end
+        end
+
+        local function CreateDyePresetItemEntry(parent)
+            local f = CreateFrame("Button", nil, parent)
+            Mixin(f, DyePresetItemMixin)
+            f:SetSize(MainFrame.centerButtonWidth or Def.centerButtonWidth, 32)
+            f:RegisterForClicks("AnyUp")
+
+            -- 背景
+            local bg = f:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            bg:SetColorTexture(0, 0, 0, 0.1)
+            f.Background = bg
+
+            -- 标签（显示色块序列）
+            local label = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            label:SetJustifyH("LEFT")
+            label:SetPoint("LEFT", f, "LEFT", 8, 0)
+            label:SetPoint("RIGHT", f, "RIGHT", -8, 0)
+            f.Label = label
+
+            f:SetScript("OnEnter", f.OnEnter)
+            f:SetScript("OnLeave", f.OnLeave)
+            f:SetScript("OnClick", f.OnClick)
+
+            return f
+        end
+
+        local function DyePresetItem_Create()
+            local obj = CreateDyePresetItemEntry(ScrollView)
+            obj:SetSize(MainFrame.centerButtonWidth or Def.centerButtonWidth, 32)
+            return obj
+        end
+
+        ScrollView:AddTemplate("DyePresetItem", DyePresetItem_Create)
 
         -- 快捷键条目模板（用于快捷键分类）
         local KeybindEntryMixin = {}

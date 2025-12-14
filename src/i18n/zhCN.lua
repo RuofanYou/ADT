@@ -267,4 +267,16 @@ ADT.Locales.zhCN = {
     ["Dyes copied from %s"] = "已复制 %s 的染料：",
     ["Dyes pasted to %s"] = "已粘贴染料到 %s：",
     ["Dye clipboard cleared"] = "染料剪贴板已清空",
+
+    -- 染色预设
+    ["SC DyePresets"] = "染色预设",
+    ["Preset"] = "预设",
+    ["Save Current Dye"] = "保存当前染色",
+    ["No dye copied"] = "未复制任何染色",
+    ["Dye preset saved"] = "染色预设已保存",
+    ["Dye preset loaded"] = "染色预设已加载",
+    ["Dye preset deleted"] = "染色预设已删除",
+    ["No dye presets"] = "暂无染色预设",
+    ["DyePresets Empty Line1"] = "暂无染色预设",
+    ["DyePresets Empty Line2"] = "在自定义模式下 SHIFT+C 复制染色后，点击上方按钮保存",
 }
