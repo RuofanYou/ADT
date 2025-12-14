@@ -118,7 +118,7 @@ ADT.Locales.esES = {
     ["Keybind Action Quickbar6"] = "Barra rápida 6",
     ["Keybind Action Quickbar7"] = "Barra rápida 7",
     ["Keybind Action Quickbar8"] = "Barra rápida 8",
-    ["Keybind Action DyeCopy"] = "Copy Dye",
+    ["Keybind Action DyeCopy"] = "Copiar tinte",
 
     ["Indoor"] = "Interior",
     ["Outdoor"] = "Exterior",
@@ -249,4 +249,19 @@ ADT.Locales.esES = {
     ["Dyes copied from %s"] = "Tintes copiados de %s: ",
     ["Dyes pasted to %s"] = "Tintes pegados en %s: ",
     ["Dye clipboard cleared"] = "Portapapeles de tintes vacío",
+
+    -- Preajustes de tinte
+    ["SC DyePresets"] = "Preajustes de tinte",
+    ["Preset"] = "Preajuste",
+    ["Save Current Dye"] = "Guardar tinte actual",
+    ["No dye copied"] = "Sin tintes copiados",
+    ["Dye preset saved"] = "Preajuste de tinte guardado",
+    ["Dye preset loaded"] = "Preajuste de tinte cargado",
+    ["Dye preset deleted"] = "Preajuste de tinte eliminado",
+    ["No dye presets"] = "Sin preajustes de tinte",
+    ["DyePresets Empty Line1"] = "No hay preajustes de tinte",
+    ["DyePresets Empty Line2"] = "En Personalizar: SHIFT+C para copiar, luego guarda",
+    ["Hotkey Copy Dye"] = "Copiar tintes",
+    ["Hotkey Paste Dye"] = "Pegar tintes",
+    ["Click"] = "Clic",
 }
