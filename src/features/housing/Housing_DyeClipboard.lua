@@ -1,5 +1,4 @@
 -- Housing_DyeClipboard.lua：染料复制/粘贴（CustomizeMode）
--- 目标：核心功能逻辑与参考实现保持一致；仅按 ADT 交互方案调整触发键位
 -- 交互：
 --   1) SHIFT+C（悬停装饰）复制染料
 --   2) SHIFT+左键（悬停装饰）把剪贴板染料预览应用到“当前选中装饰”
@@ -8,7 +7,6 @@
 local ADDON_NAME, ADT = ...
 local L = (ADT and ADT.L) or {}
 
-local tsort = table.sort
 local C_HousingCustomizeMode = C_HousingCustomizeMode
 local C_DyeColor = C_DyeColor
 
@@ -22,18 +20,19 @@ local DyeClipboard = CreateFrame("Frame", "ADT_DyeClipboard")
 ADT.DyeClipboard = DyeClipboard
 
 -- 单一权威状态
-DyeClipboard.lastDyeInfo = nil  -- { [slotIndex]=dyeColorID(0=无色), ... }
-DyeClipboard.lastDyeSlots = nil -- 最近一次复制来源的 dyeSlots（用于 tooltip 展示）
+DyeClipboard._savedScheme = nil -- { [slotIndex]=dyeColorID(0=无色), ... }
+DyeClipboard._savedSlots = nil  -- 最近一次复制来源的 dyeSlots（用于 tooltip 展示）
 
 DyeClipboard._hookInstalled = false
 DyeClipboard._registeredMouseUp = false
 
 --------------------------------------------------------------------------------
--- 工具函数（对齐 Plumber 的最小集）
+-- 工具函数
 --------------------------------------------------------------------------------
 
-local function SortFunc_DyeSlots(a, b)
-    return a.orderIndex < b.orderIndex
+function DyeClipboard:_sortSlots(slots)
+    table.sort(slots, function(a, b) return a.orderIndex < b.orderIndex end)
+    return slots
 end
 
 local function IsCustomizeModeShown()
@@ -47,14 +46,14 @@ local function IsDyeClipboardEnabled()
     return not (ADT.GetDBValue and ADT.GetDBValue("EnableDyeCopy") == false)
 end
 
-function DyeClipboard:IsCustomizableDecor(decorInstanceInfo)
+function DyeClipboard:CanCustomizeDecor(decorInstanceInfo)
     if decorInstanceInfo and (not decorInstanceInfo.isLocked) and decorInstanceInfo.canBeCustomized then
         return decorInstanceInfo.dyeSlots and #decorInstanceInfo.dyeSlots > 0
     end
     return false
 end
 
-local function MakeColorBlock(colorID)
+function DyeClipboard:_makeColorBlock(colorID)
     if not colorID or colorID == 0 then
         return "|cff666666█|r"
     end
@@ -66,19 +65,19 @@ local function MakeColorBlock(colorID)
     return "?"
 end
 
-local function CreateTooltipLineWithSwatch(prefixText, dyeSlots, numSlots)
-    tsort(dyeSlots, SortFunc_DyeSlots)
+function DyeClipboard:_createTooltipLineWithSwatch(prefixText, dyeSlots, numSlots)
+    self:_sortSlots(dyeSlots)
     local line = (prefixText or "") .. ""
     numSlots = numSlots or #dyeSlots
     for i = 1, numSlots do
         local colorID = dyeSlots[i] and dyeSlots[i].dyeColorID or 0
-        line = line .. MakeColorBlock(colorID)
+        line = line .. self:_makeColorBlock(colorID)
     end
     return line
 end
 
-function DyeClipboard:IsDecorDyeCopied(decorInstanceInfo)
-    if not self.lastDyeInfo then
+function DyeClipboard:HasSameScheme(decorInstanceInfo)
+    if not self._savedScheme then
         return false
     end
 
@@ -87,10 +86,9 @@ function DyeClipboard:IsDecorDyeCopied(decorInstanceInfo)
         return false
     end
 
-    tsort(dyeSlots, SortFunc_DyeSlots)
+    self:_sortSlots(dyeSlots)
     for i, v in ipairs(dyeSlots) do
-        -- 与 Plumber 一致：只要当前 slot.dyeColorID 不存在就视为不相等（无色=0 需要走 Apply 清空链路）
-        if not (v.dyeColorID and self.lastDyeInfo[i] == v.dyeColorID) then
+        if not (v.dyeColorID and self._savedScheme[i] == v.dyeColorID) then
             return false
         end
     end
@@ -98,10 +96,10 @@ function DyeClipboard:IsDecorDyeCopied(decorInstanceInfo)
 end
 
 --------------------------------------------------------------------------------
--- 复制 / 粘贴（对齐 Plumber）
+-- 复制 / 粘贴
 --------------------------------------------------------------------------------
 
-function DyeClipboard:TryCopyDecorDyes()
+function DyeClipboard:CopyDyesFromHovered()
     if not (IsDyeClipboardEnabled() and IsCustomizeModeShown()) then
         return false
     end
@@ -110,19 +108,19 @@ function DyeClipboard:TryCopyDecorDyes()
     end
 
     local decorInstanceInfo = GetHoveredDecorInfo and GetHoveredDecorInfo()
-    if not self:IsCustomizableDecor(decorInstanceInfo) then
+    if not self:CanCustomizeDecor(decorInstanceInfo) then
         return false
     end
 
-    self.lastDyeInfo = {}
-    self.lastDyeSlots = decorInstanceInfo.dyeSlots
-    tsort(self.lastDyeSlots, SortFunc_DyeSlots)
+    self._savedScheme = {}
+    self._savedSlots = decorInstanceInfo.dyeSlots
+    self:_sortSlots(self._savedSlots)
 
-    for i, v in ipairs(self.lastDyeSlots) do
-        self.lastDyeInfo[i] = v.dyeColorID or 0
+    for i, v in ipairs(self._savedSlots) do
+        self._savedScheme[i] = v.dyeColorID or 0
     end
 
-    -- 参考实现：复制后刷新 tooltip（避免“已复制/可粘贴”提示延迟）
+    -- 复制后刷新 tooltip（避免“已复制/可粘贴”提示延迟）
     local hf = _G.HouseEditorFrame
     local modeFrame = hf and hf.CustomizeModeFrame
     if modeFrame and modeFrame.OnDecorHovered then
@@ -130,25 +128,25 @@ function DyeClipboard:TryCopyDecorDyes()
         modeFrame:OnDecorHovered()
     end
 
-    -- 参考实现：如果当前已经选中一个可染色装饰，则自动尝试粘贴（更顺滑）
+    -- 如果当前已经选中一个可染色装饰，则自动尝试粘贴（更顺滑）
     if IsDecorSelected and IsDecorSelected() then
         local openedInfo = GetSelectedDecorInfo and GetSelectedDecorInfo()
-        if self:IsCustomizableDecor(openedInfo) then
-            self:TryPasteCustomization()
+        if self:CanCustomizeDecor(openedInfo) then
+            self:ApplyDyesToSelected()
         end
     end
 
     if ADT.DebugPrint then
-        ADT.DebugPrint("[DyeClipboard] 复制染料成功，槽位数=" .. tostring(#self.lastDyeInfo))
+        ADT.DebugPrint("[DyeClipboard] 复制染料成功，槽位数=" .. tostring(#self._savedScheme))
     end
     return true
 end
 
-function DyeClipboard:TryPasteCustomization()
+function DyeClipboard:ApplyDyesToSelected()
     if not (IsDyeClipboardEnabled() and IsCustomizeModeShown()) then
         return false
     end
-    if not self.lastDyeInfo then
+    if not self._savedScheme then
         return false
     end
 
@@ -161,11 +159,11 @@ function DyeClipboard:TryPasteCustomization()
     if not (dyeSlots and #dyeSlots > 0) then
         return false
     end
-    tsort(dyeSlots, SortFunc_DyeSlots)
+    self:_sortSlots(dyeSlots)
 
     local anyDiff = false
     for i, v in ipairs(dyeSlots) do
-        local savedColorID = self.lastDyeInfo[i] or 0
+        local savedColorID = self._savedScheme[i] or 0
         if savedColorID ~= v.dyeColorID then
             anyDiff = true
             v.dyeColorID = savedColorID
@@ -188,11 +186,11 @@ end
 
 -- 对接 ADT 快捷键：SHIFT+C
 function DyeClipboard:CopyFromHovered()
-    return self:TryCopyDecorDyes()
+    return self:CopyDyesFromHovered()
 end
 
 --------------------------------------------------------------------------------
--- 事件：GLOBAL_MOUSE_UP（对齐 Plumber：仅在 tooltip 判定可交互时注册）
+-- 事件：GLOBAL_MOUSE_UP（仅在 tooltip 判定可交互时注册）
 --------------------------------------------------------------------------------
 
 function DyeClipboard:RegisterGlobalMouseUp()
@@ -216,7 +214,7 @@ function DyeClipboard:OnGlobalMouseUp(button)
         return
     end
     if button == "LeftButton" and IsShiftKeyDown() then
-        self:TryPasteCustomization()
+        self:ApplyDyesToSelected()
     end
 end
 
@@ -229,17 +227,17 @@ end
 DyeClipboard:SetScript("OnEvent", function(self, ...) self:OnEvent(...) end)
 
 --------------------------------------------------------------------------------
--- Tooltip hook：ShowDecorInstanceTooltip（对齐 Plumber 的“tooltip 驱动注册”）
+-- Tooltip hook：ShowDecorInstanceTooltip（tooltip 驱动注册）
 --------------------------------------------------------------------------------
 
 function DyeClipboard:OnShowDecorInstanceTooltip(modeFrame, decorInstanceInfo)
-    -- 参考实现：每次刷新 tooltip 都先清理注册，避免鼠标离开后依然拦截点击
+    -- 每次刷新 tooltip 都先清理注册，避免鼠标离开后依然拦截点击
     self:UnregisterGlobalMouseUp()
 
     if not (IsDyeClipboardEnabled() and IsCustomizeModeShown()) then
         return
     end
-    if not self:IsCustomizableDecor(decorInstanceInfo) then
+    if not self:CanCustomizeDecor(decorInstanceInfo) then
         return
     end
 
@@ -253,13 +251,13 @@ function DyeClipboard:OnShowDecorInstanceTooltip(modeFrame, decorInstanceInfo)
         return
     end
 
-    local currentLine = CreateTooltipLineWithSwatch("", decorInstanceInfo.dyeSlots)
-    if self:IsDecorDyeCopied(decorInstanceInfo) then
+    local currentLine = self:_createTooltipLineWithSwatch("", decorInstanceInfo.dyeSlots)
+    if self:HasSameScheme(decorInstanceInfo) then
         tooltip:AddDoubleLine(L["Dyes Copied"] or "已复制此方案", currentLine, 0.5, 0.5, 0.5, 1, 1, 1)
     else
         tooltip:AddDoubleLine("SHIFT+C 复制染料", currentLine, 1, 0.82, 0, 1, 1, 1)
-        if self.lastDyeSlots then
-            tooltip:AddDoubleLine("SHIFT+左键 粘贴染料", CreateTooltipLineWithSwatch("", self.lastDyeSlots, numSlots), 1, 0.82, 0, 1, 1, 1)
+        if self._savedSlots then
+            tooltip:AddDoubleLine("SHIFT+左键 粘贴染料", self:_createTooltipLineWithSwatch("", self._savedSlots, numSlots), 1, 0.82, 0, 1, 1, 1)
         end
     end
 
