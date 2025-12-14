@@ -26,6 +26,8 @@ local DEFAULTS = {
     EnableResetAll = true,
     -- 是否启用 L 锁定/解锁 悬停装饰
     EnableLock = true,
+    -- 是否启用染料复制（自定义模式 SHIFT+C）
+    EnableDyeCopy = true,
     DuplicateKey = 3,
     -- 记住控制中心上次选中的分类（'Housing'/'Clipboard'/'History'/...）
     LastCategoryKey = nil,

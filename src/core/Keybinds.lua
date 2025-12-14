@@ -326,9 +326,14 @@ end
 -- 注册单个绑定
 function M:RegisterBinding(actionName)
     if isInCombat then return end  -- 战斗中不修改绑定
-    -- 若为 Q/E 旋转并且用户关闭了“启用 Q/E 旋转”，则跳过注册
+    -- 若为 Q/E 旋转并且用户关闭了"启用 Q/E 旋转"，则跳过注册
     if (actionName == 'RotateCCW90' or actionName == 'RotateCW90') then
         local en = ADT.GetDBValue and ADT.GetDBValue('EnableQERotate')
+        if en == false then return end
+    end
+    -- 若为染料复制并且用户关闭了"启用染料复制"，则跳过注册
+    if actionName == 'DyeCopy' then
+        local en = ADT.GetDBValue and ADT.GetDBValue('EnableDyeCopy')
         if en == false then return end
     end
 
@@ -514,6 +519,15 @@ if ADT and ADT.Settings and ADT.Settings.On then
         else
             M:RegisterBinding('RotateCW90')
             M:RegisterBinding('RotateCCW90')
+        end
+    end)
+    -- 订阅设置变化：当"启用染料复制"被关闭/开启时，注销/注册相关绑定
+    ADT.Settings.On('EnableDyeCopy', function(enabled)
+        if not isBindingsActive then return end
+        if enabled == false then
+            M:UnregisterBinding('DyeCopy')
+        else
+            M:RegisterBinding('DyeCopy')
         end
     end)
 end
