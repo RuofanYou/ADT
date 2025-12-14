@@ -1,8 +1,8 @@
 -- Housing_DyeClipboard.lua：染料复制/粘贴（CustomizeMode）
--- 目标：交互与状态机 1:1 对齐参考实现 Referrence/Plumber/Modules/Housing/HouseEditor_CustomizeMode.lua
+-- 目标：核心功能逻辑与参考实现保持一致；仅按 ADT 交互方案调整触发键位
 -- 交互：
---   1) 右键（悬停装饰）复制染料
---   2) Ctrl+左键（悬停装饰）把剪贴板染料预览应用到“当前选中装饰”
+--   1) SHIFT+C（悬停装饰）复制染料
+--   2) SHIFT+左键（悬停装饰）把剪贴板染料预览应用到“当前选中装饰”
 -- 说明：ApplyDyeToSelectedDecor 只做预览；实际保存由暴雪 UI 自己的“应用”按钮提交。
 
 local ADDON_NAME, ADT = ...
@@ -186,7 +186,7 @@ function DyeClipboard:TryPasteCustomization()
     return anyDiff
 end
 
--- 兼容现有 Keybinds：SHIFT+C
+-- 对接 ADT 快捷键：SHIFT+C
 function DyeClipboard:CopyFromHovered()
     return self:TryCopyDecorDyes()
 end
@@ -215,9 +215,7 @@ function DyeClipboard:OnGlobalMouseUp(button)
     if not (IsDyeClipboardEnabled() and IsCustomizeModeShown()) then
         return
     end
-    if button == "RightButton" then
-        self:TryCopyDecorDyes()
-    elseif button == "LeftButton" and IsControlKeyDown() then
+    if button == "LeftButton" and IsShiftKeyDown() then
         self:TryPasteCustomization()
     end
 end
@@ -259,9 +257,9 @@ function DyeClipboard:OnShowDecorInstanceTooltip(modeFrame, decorInstanceInfo)
     if self:IsDecorDyeCopied(decorInstanceInfo) then
         tooltip:AddDoubleLine(L["Dyes Copied"] or "已复制此方案", currentLine, 0.5, 0.5, 0.5, 1, 1, 1)
     else
-        tooltip:AddDoubleLine("右键 复制染料", currentLine, 1, 0.82, 0, 1, 1, 1)
+        tooltip:AddDoubleLine("SHIFT+C 复制染料", currentLine, 1, 0.82, 0, 1, 1, 1)
         if self.lastDyeSlots then
-            tooltip:AddDoubleLine("Ctrl+左键 粘贴染料", CreateTooltipLineWithSwatch("", self.lastDyeSlots, numSlots), 1, 0.82, 0, 1, 1, 1)
+            tooltip:AddDoubleLine("SHIFT+左键 粘贴染料", CreateTooltipLineWithSwatch("", self.lastDyeSlots, numSlots), 1, 0.82, 0, 1, 1, 1)
         end
     end
 
@@ -298,4 +296,3 @@ boot:SetScript("OnEvent", function(_, event, arg1)
     end
     TryInstallHook()
 end)
-
