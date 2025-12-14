@@ -21,6 +21,9 @@ ADT.Locales.enUS = {
     ["Hotkey Store"] = "Store",
     ["Hotkey Recall"] = "Recall",
     ["Hotkey BatchPlace"] = "Batch Place",
+    ["Hotkey Copy Dye"] = "Copy Dyes",
+    ["Hotkey Paste Dye"] = "Paste Dyes",
+    ["Click"] = "Click",
     -- Reset hints
     ["Reset Current"] = "Reset",
     ["Reset All"] = "Reset All",

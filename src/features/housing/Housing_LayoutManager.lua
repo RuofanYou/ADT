@@ -94,12 +94,110 @@ local function GetDock()
 end
 local function GetSubPanel(dock)
     if not dock then return nil end
-    return dock.SubPanel or (dock.EnsureSubPanel and dock:EnsureSubPanel()) or nil
+    -- 重要：LayoutManager 不主动创建 SubPanel。
+    -- SubPanel 的创建应当由其自身业务（如 HoverHUD/提示）驱动；
+    -- LayoutManager 只在其“已存在且显示”时纳入布局，避免因 EnsureSubPanel() 早期创建导致宽度为 0 的竞态。
+    return dock.SubPanel or nil
 end
 
 local function GetLayoutCFG()
     local cfg = ADT and ADT.GetHousingCFG and ADT.GetHousingCFG()
     return cfg and cfg.Layout or {}
+end
+
+-- ===========================
+-- 宽度锚点：当 SubPanel 不存在/不可用时，仍让暴雪面板与 DockUI 的“中央区域”保持等宽
+-- 说明：
+--  - SubPanel 的真实宽度来源是 Dock.CentralSection（BOTTOMLEFT）→ Dock（BOTTOMRIGHT）
+--  - 若 SubPanel 不存在，则用一个 1px 高度的“内容锚点”复制同样的水平范围，作为官方面板的宽度裁决源
+-- ===========================
+local function GetDockCentralWidthPx(dock)
+    if not (dock and dock.GetWidth) then return nil end
+    local totalW = tonumber(dock:GetWidth() or 0) or 0
+    if totalW <= 0 then return nil end
+
+    local sideW = 0
+    if dock.LeftSection and dock.LeftSection.GetWidth then
+        sideW = tonumber(dock.LeftSection:GetWidth() or 0) or 0
+    end
+    if sideW <= 0 then
+        sideW = tonumber(dock.sideSectionWidth or 0) or 0
+    end
+
+    local centralW = totalW - math.max(0, sideW)
+    if centralW <= 0 then return nil end
+    return centralW
+end
+
+function LayoutManager:GetOfficialPanelFrameWidthPx()
+    local dock = GetDock()
+    if not dock then return nil end
+
+    local cfg = ADT and ADT.GetHousingCFG and ADT.GetHousingCFG()
+    local placedCfg = cfg and cfg.PlacedList or nil
+    if not placedCfg then return nil end
+    local dxL = tonumber(placedCfg.anchorLeftCompensation or 0) or 0
+    local dxR = tonumber(placedCfg.anchorRightCompensation or 0) or 0
+
+    -- 优先：可见 SubPanel 的实际宽度（最贴近“真实渲染结果”）
+    local sub = dock.SubPanel
+    if sub and sub.IsShown and sub:IsShown() and sub.GetWidth then
+        local w = tonumber(sub:GetWidth() or 0) or 0
+        if w > 0 then return w + dxR - dxL end
+    end
+
+    -- 否则：由 Dock 的“总宽 - 左栏宽”推导中央区域宽度
+    local centralW = GetDockCentralWidthPx(dock)
+    if not centralW then return nil end
+    return centralW + dxR - dxL
+end
+
+function LayoutManager:SyncPaneFixedWidthToDock(p)
+    if not (p and p.SetFixedWidth) then return end
+    local lp = tonumber(p.leftPadding) or 0
+    local rp = tonumber(p.rightPadding) or 0
+
+    -- 已锚定且可测量：以面板自身宽度为准（最稳）
+    local ownW = (p.GetWidth and tonumber(p:GetWidth() or 0)) or 0
+    local frameW = (ownW and ownW > 0) and ownW or (self:GetOfficialPanelFrameWidthPx() or 0)
+    if not frameW or frameW <= 0 then return end
+
+    local cw = math.max(1, frameW - lp - rp)
+    if math.abs((p.fixedWidth or 0) - cw) > 0.5 then
+        p:SetFixedWidth(cw)
+        -- VerticalLayoutFrame 使用 :Layout()，这里同步触发布局以消除“首帧默认 340”竞态
+        if p.Layout then pcall(p.Layout, p) end
+    end
+end
+
+function LayoutManager:EnsureDockContentAnchor(dock)
+    if not dock then return nil end
+    if self._dockContentAnchor and self._dockContentAnchorOwner == dock then
+        return self._dockContentAnchor
+    end
+
+    local a = CreateFrame("Frame", nil, dock)
+    a:EnableMouse(false)
+    a:SetAlpha(0)
+    a:SetHeight(1)
+    a:Show()
+    self._dockContentAnchor = a
+    self._dockContentAnchorOwner = dock
+    return a
+end
+
+function LayoutManager:UpdateDockContentAnchor(dock)
+    if not dock then return nil end
+    local a = self:EnsureDockContentAnchor(dock)
+    if not a then return nil end
+    local left = (dock.CentralSection and dock.CentralSection.GetBottom and dock.CentralSection.GetLeft) and dock.CentralSection or dock
+
+    a:ClearAllPoints()
+    -- 与 SubPanel 的水平裁决保持一致：LEFT 跟随 CentralSection，RIGHT 跟随 Dock
+    a:SetPoint("BOTTOMLEFT",  left, "BOTTOMLEFT",  0, 0)
+    a:SetPoint("BOTTOMRIGHT", dock, "BOTTOMRIGHT", 0, 0)
+    a:Show()
+    return a
 end
 
 local function CalcStackGaps(Hd, Hs, Hl, gapPx)
@@ -303,7 +401,7 @@ function LayoutManager:ApplyLayout(reason)
 
     -- 3) 官方面板：永远锚到 SubPanel（若高度>0）否则锚 Dock；高度由 LayoutManager 裁决
     local cfg = ADT.GetHousingCFG().PlacedList
-    local anchor = dock
+    local anchor = self:UpdateDockContentAnchor(dock) or dock
     local gapBelow = (layout.list.height > 0 and layout.gaps.dockToList) or 0
     if sub and (layout.sub.height > 0) then
         anchor = sub
@@ -313,6 +411,10 @@ function LayoutManager:ApplyLayout(reason)
     local officialFrames = self:GetVisibleOfficialFrames()
     for _, f in ipairs(officialFrames) do
         AnchorOfficialFrame(f, anchor, cfg, gapBelow)
+        -- 自定义面板（Decor/RoomComponent）需要同步 fixedWidth，否则会被模板默认值（340）卡住
+        if f.SetFixedWidth then
+            self:SyncPaneFixedWidthToDock(f)
+        end
         if f.SetHeight then
             local Hl = layout.list.height
             if Hl <= 1 then
@@ -351,6 +453,13 @@ function LayoutManager:EnsureHooks()
         -- 重要：不监听 Dock 的 OnSizeChanged。
         -- Dock 内部会因内容/字体测量反复触发 UpdateAutoWidth → ApplyDockPlacement，
         -- 若此处再抢占布局，会导致高频重排甚至抖动。
+        -- 但“官方面板等宽”必须跟随 Dock 的动态宽度，因此只在 UpdateAutoWidth 完成后请求一次布局（带防抖）。
+        if dock.UpdateAutoWidth and hooksecurefunc and not dock._ADT_UpdateAutoWidthHooked then
+            dock._ADT_UpdateAutoWidthHooked = true
+            hooksecurefunc(dock, "UpdateAutoWidth", function()
+                LayoutManager:RequestLayout("DockAutoWidth")
+            end)
+        end
     end
 
     local sub = dock and GetSubPanel(dock)

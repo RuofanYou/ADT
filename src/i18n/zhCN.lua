@@ -21,6 +21,9 @@ ADT.Locales.zhCN = {
     ["Hotkey Store"] = "存储",
     ["Hotkey Recall"] = "读取",
     ["Hotkey BatchPlace"] = "批量放置",
+    ["Hotkey Copy Dye"] = "复制染料",
+    ["Hotkey Paste Dye"] = "粘贴染料",
+    ["Click"] = "点击",
     -- Reset hints
     ["Reset Current"] = "重置",
     ["Reset All"] = "全部重置",

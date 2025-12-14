@@ -371,6 +371,80 @@ local function Blizzard_HouseEditor_OnLoaded()
     if IsDecorSelected() then
         DisplayFrame:Hide()
     end
+    
+    -- ============== CustomizeMode 染料提示（独立容器）==============
+    local cmf = HouseEditorFrame.CustomizeModeFrame
+    if cmf and not EL.DyeHintFrame then
+        local dyeFrame = CreateFrame("Frame", nil, cmf, "ADT_HouseEditorInstructionTemplate")
+        -- 锚点往下偏移，避免与暴雪"选中装饰"提示重叠（约 -60 像素）
+        dyeFrame:SetPoint("RIGHT", cmf, "RIGHT", -30, -60)
+        dyeFrame:SetWidth(420)
+        Mixin(dyeFrame, DisplayFrameMixin)
+        dyeFrame.alpha = 1
+        dyeFrame:SetAlpha(1)
+        -- 降低层级，避免覆盖染料选择弹窗
+        dyeFrame:SetFrameStrata("BACKGROUND")
+        
+        -- 获取真实键位
+        local SHIFT = SHIFT_KEY_TEXT or "Shift"
+        local dyeCopyKey = SHIFT.."+C"
+        if ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds.GetKeybind then
+            local rawKey = ADT.Keybinds:GetKeybind("DyeCopy")
+            if rawKey and rawKey ~= "" then
+                dyeCopyKey = ADT.Keybinds:GetKeyDisplayName(rawKey)
+            end
+        end
+        dyeFrame:SetHotkey(L["Hotkey Copy Dye"] or "Copy Dyes", dyeCopyKey)
+        if dyeFrame.LockStatusText then dyeFrame.LockStatusText:Hide() end
+        
+        -- 粘贴提示
+        local pasteFrame = CreateFrame("Frame", nil, cmf, "ADT_HouseEditorInstructionTemplate")
+        pasteFrame:SetPoint("TOPRIGHT", dyeFrame, "BOTTOMRIGHT", 0, 0)
+        pasteFrame:SetWidth(420)
+        Mixin(pasteFrame, DisplayFrameMixin)
+        pasteFrame:SetHotkey(L["Hotkey Paste Dye"] or "Paste Dyes", SHIFT.."+"..(L["Click"] or "Click"))
+        if pasteFrame.LockStatusText then pasteFrame.LockStatusText:Hide() end
+        -- 同样降低层级
+        pasteFrame:SetFrameStrata("BACKGROUND")
+        
+        EL.DyeHintFrame = dyeFrame
+        EL.DyePasteHintFrame = pasteFrame
+        
+        -- 统一宽度
+        local function normalizeDyeKeycaps()
+            local maxW = 0
+            for _, f in ipairs({ dyeFrame, pasteFrame }) do
+                if f and f.Control and f.Control.Text then
+                    local w = f.Control.Text:GetWrappedWidth() or 0
+                    if w > maxW then maxW = w end
+                end
+            end
+            local kw = maxW + 20
+            for _, f in ipairs({ dyeFrame, pasteFrame }) do
+                if f and f.Control and f.Control.Background and f.InstructionText then
+                    f.Control.Background:SetWidth(kw)
+                    f.Control:SetWidth(kw)
+                    f.InstructionText:ClearAllPoints()
+                    f.InstructionText:SetPoint("RIGHT", f, "RIGHT", -kw - 5, 0)
+                end
+            end
+        end
+        normalizeDyeKeycaps()
+        
+        -- 根据开关决定显隐
+        local function updateDyeHintVisibility()
+            local enabled = ADT.GetDBValue and ADT.GetDBValue("EnableDyeCopy")
+            if enabled == nil then enabled = true end
+            dyeFrame:SetShown(enabled)
+            pasteFrame:SetShown(enabled)
+        end
+        updateDyeHintVisibility()
+        
+        -- 监听设置变化
+        if ADT.Settings and ADT.Settings.On then
+            ADT.Settings.On("EnableDyeCopy", updateDyeHintVisibility)
+        end
+    end
 end
 
 --
