@@ -376,7 +376,9 @@ end
 local MainFrame = CreateFrame("Frame", nil, UIParent, "ADTSettingsPanelLayoutTemplate")
 CommandDock.SettingsPanel = MainFrame
 do
-    local frameKeys = {"LeftSection", "RightSection", "CentralSection", "SideTab", "TabButtonContainer", "ModuleTab", "ChangelogTab", "TopTabOwner"}
+    -- 清理废弃：仍不使用 SideTab/TabButtonContainer；
+    -- 但为兼容性保留 LeftSection/RightSection（模板已 hidden，并在此仅作为占位键读取）。
+    local frameKeys = {"LeftSection", "RightSection", "CentralSection", "ModuleTab", "ChangelogTab", "TopTabOwner"}
     for _, key in ipairs(frameKeys) do
         MainFrame[key] = MainFrame.FrameContainer[key]
     end
@@ -1825,10 +1827,13 @@ do  -- Left Section
     -- 高亮逻辑由 LeftPanel 注入到 MainFrame；此处不再实现
 
     -- 单一权威：中央区域宽度 = MainFrame 总宽度 - LeftSection 占位宽度
-    -- 说明：不要依赖 CentralSection:GetWidth()（在同一帧重排/切语言动画期间可能为 0 或旧值），
-    -- 否则会出现“文本变了但宽度不跟着变，必须切换分类才更新”的体验问题。
+    -- 说明：当 Dock 主体宽度仅包含“右侧内容区”时（_widthIsCentralOnly=true），
+    -- 直接返回 MainFrame 宽度；否则按 “总宽 - 左栏宽度”。
     function MainFrame:_GetCentralSectionWidth()
         local total = tonumber(self.GetWidth and self:GetWidth()) or 0
+        if self._widthIsCentralOnly then
+            return API.Round(total)
+        end
         local sidew = tonumber(self.LeftSection and self.LeftSection.GetWidth and self.LeftSection:GetWidth()) or 0
         local w = total - sidew
         if w < 0 then w = 0 end
@@ -2858,8 +2863,9 @@ local function CreateUI()
     MainFrame.rightSectionWidth = rightSectionWidth
     local centralSectionWidth = 340  -- 中间：图标 + 长装饰名称(如"小型锯齿奥格瑞玛栅栏") + 数量
 
-    -- 总宽度 = 左侧 + 中间 + 右侧（之前漏算右侧导致中间极窄）
-    MainFrame:SetSize(sideSectionWidth + centralSectionWidth + rightSectionWidth, pageHeight)
+    -- KISS：Dock 主体只包裹“右侧内容区”，不再把左侧/右侧栏并入自身宽度，
+    -- 以免在 /fstack 中出现超出可见区域的大命中框。
+    MainFrame:SetSize(centralSectionWidth, pageHeight)
     -- 记录 Dock 的“期望高度”（单一权威）：LayoutManager 会按此值在大屏恢复显示行数，
     -- 小屏仅裁剪，不改变该期望。
     MainFrame._ADT_DesiredHeight = pageHeight
@@ -2883,15 +2889,23 @@ local function CreateUI()
         local headerHeight = Def.HeaderHeight or 68
         local Header = CreateFrame("Frame", nil, MainFrame)
         MainFrame.Header = Header
-        -- Header 仅覆盖右侧区域（不延伸到左侧分类区），并且左边始终贴合 LeftSection 的右缘
-        Header:SetPoint("TOPLEFT", MainFrame.LeftSection or MainFrame, MainFrame.LeftSection and "TOPRIGHT" or "TOPLEFT", 0, 0)
+        -- Header 仅覆盖右侧内容区：左缘始终贴 MainFrame 本身，不再参考模板 LeftSection
+        Header:SetPoint("TOPLEFT", MainFrame, "TOPLEFT", 0, 0)
         Header:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
         Header:SetHeight(headerHeight)
 
+        -- Header 局部背景（只填充 Header 高度，避免再次制造“大范围背景”）
+        -- 背景填充层（BACKGOUND）：与内容区同底色，保证与下方 CenterBG 过渡自然
+        local fill = Header:CreateTexture(nil, "BACKGROUND")
+        MainFrame.HeaderBackgroundFill = fill
+        fill:SetAtlas("housing-basic-panel-background")
+        fill:SetPoint("TOPLEFT", Header, "TOPLEFT", 0, 0)
+        fill:SetPoint("BOTTOMRIGHT", Header, "BOTTOMRIGHT", 0, 0)
+
+        -- 装饰性顶端弧形（ARTWORK）：仅覆盖 Header 内部，不越界
         local bg = Header:CreateTexture(nil, "ARTWORK")
         MainFrame.HeaderBackground = bg
         bg:SetAtlas("house-chest-header-bg")
-        -- 直接铺满 Header 区域（Header 高度 68），并放在 ARTWORK 层级，以确保不被右侧黑底覆盖
         bg:SetAllPoints(Header)
 
         local title = Header:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
@@ -3043,8 +3057,8 @@ local function CreateUI()
                 maxTotal = math.floor(viewport * r)
             end
         end
-        -- 无右侧栏：总宽 = 左栏 + 中央需求 + 边距
-        local targetTotal = sidew + wantedCenter
+        -- Dock 主体宽度 = 中央区需求（不再把左侧栏并入自身宽度），避免出现“看似更大”的透明命中区域
+        local targetTotal = wantedCenter
         if targetTotal > maxTotal then targetTotal = maxTotal end
         targetTotal = math.floor(targetTotal + 0.5)
         local currentTotal = math.floor((self:GetWidth() or 0) + 0.5)
@@ -3052,6 +3066,7 @@ local function CreateUI()
             self:SetWidth(targetTotal)
         end
         self.sideSectionWidth = sidew
+        self._widthIsCentralOnly = true
 
         -- 同步中央区域内各条目实际宽度（单一权威：由 MainFrame/LeftSection 推导）
         self:_SyncCentralTemplateWidths(true)
@@ -3066,12 +3081,20 @@ local function CreateUI()
     MainFrame.FrameContainer:EnableMouseMotion(false)
     MainFrame.FrameContainer:EnableMouseWheel(true)
     MainFrame.FrameContainer:SetScript("OnMouseWheel", function(self, delta) end)
-    -- 模板中带的 TabButtonContainer 默认可交互；我们未使用，显式关闭避免遮挡左窗
-    if MainFrame.TabButtonContainer then
-        MainFrame.TabButtonContainer:Hide()
-        MainFrame.TabButtonContainer:EnableMouse(false)
-        MainFrame.TabButtonContainer:EnableMouseMotion(false)
+    -- 收缩 FrameContainer：避免在 /fstack 中出现一个覆盖右上角的大透明框体。
+    -- 说明：FrameContainer 仅作为模板键转发的占位容器；实际可见内容都由 Header/CentralSection/MainFrame 创建并重新锚定。
+    -- 因此把 FrameContainer 改为 1x1 的不可交互框体，放在 MainFrame 左上角即可。
+    do
+        local FC = MainFrame.FrameContainer
+        if FC then
+            FC:ClearAllPoints()
+            FC:SetPoint("TOPLEFT", MainFrame, "TOPLEFT", 0, 0)
+            FC:SetSize(1, 1)
+            -- 注意：不要设置父容器 Alpha，否则其子元素（CentralSection/ModuleTab）会被一并透明，导致“内容存在但不可见”。
+            -- 仅缩小尺寸、禁用鼠标即可避免 /fstack 出现覆盖全屏的大框。
+        end
     end
+    -- TabButtonContainer 已从模板移除，无需显式关闭
 
 
 
@@ -3082,17 +3105,22 @@ local function CreateUI()
     local RightSection = MainFrame.RightSection
     local Tab1 = MainFrame.ModuleTab
 
-    -- 顶部标签布局：左侧容器仅用于占位/锚点，不承担交互
-    LeftSection:SetWidth(sideSectionWidth)
-    if LeftSection.EnableMouse then LeftSection:EnableMouse(false) end
-    if LeftSection.EnableMouseMotion then LeftSection:EnableMouseMotion(false) end
+    -- 顶部标签布局：模板 LeftSection 仅用于提供锚点；
+    -- 实际可见左窗由 LeftPanel.Build 创建的 LeftSlideContainer 实现。
+    if LeftSection then
+        LeftSection:SetWidth(sideSectionWidth)
+        if LeftSection.EnableMouse then LeftSection:EnableMouse(false) end
+        if LeftSection.EnableMouseMotion then LeftSection:EnableMouseMotion(false) end
+    end
     
     -- 移除整个右侧区域：不再占据任何宽度，也不创建任何子内容
-    RightSection:Hide()
-    RightSection:SetWidth(0)
-    RightSection:ClearAllPoints()
-    RightSection:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
-    RightSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
+    if RightSection then
+        RightSection:Hide()
+        RightSection:SetWidth(0)
+        RightSection:ClearAllPoints()
+        RightSection:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
+        RightSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
+    end
 
     -- CentralSection：顶部必须“紧贴 Header 底部”作为锚点，
     -- 不能再与 LeftSection 顶部对齐（那样会把内容顶到 Header 区域内部）。
@@ -3123,17 +3151,14 @@ local function CreateUI()
 
     -- 右侧整栏已移除；下面创建中央区域与其背景
     do  -- CentralSection（设置列表所在区域）
-        -- 右侧统一背景：从 Header 左缘一路覆盖到面板右下，保证 Header 区域下方也有底纹
-        if MainFrame.RightUnifiedBackground then MainFrame.RightUnifiedBackground:Hide() end
-        local RBG = MainFrame:CreateTexture(nil, "BACKGROUND")
-        MainFrame.RightUnifiedBackground = RBG
-        RBG:SetAtlas("housing-basic-panel-background")
-        RBG:ClearAllPoints()
-        RBG:SetPoint("TOPLEFT", MainFrame.Header or MainFrame, "TOPLEFT", 0, 0)
-        RBG:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", Def.RightBGInsetRight or -2, Def.RightBGInsetBottom or 2)
-        -- 再创建中央区域独立背景，层级同为 BACKGROUND，不影响点击
-        --（保留以强化中央区的对比度；两者叠加仍在 BACKGROUND 图层）
-        
+        -- KISS：不再创建“统一右侧背景”（RightUnifiedBackground）。
+        -- 该大面积贴图会在 /fstack 中对应到 MainFrame，从而被误认为“幽灵面板”。
+        -- 我们仅保留 CentralSection 自身的局部背景即可。
+        if MainFrame.RightUnifiedBackground then
+            MainFrame.RightUnifiedBackground:Hide()
+            MainFrame.RightUnifiedBackground = nil
+        end
+
         -- 中央区域独立背景
         if MainFrame.CenterBackground then MainFrame.CenterBackground:Hide() end
         local CenterBG = MainFrame:CreateTexture(nil, "BACKGROUND")

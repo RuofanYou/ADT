@@ -9,20 +9,24 @@
         <Frames>
             <Frame parentKey="FrameContainer" setAllPoints="true" useParentLevel="true">
                 <Frames>
-                    <Frame parentKey="LeftSection">
+                    <!-- 恢复 LeftSection/RightSection（作为纯布局占位，不参与交互/渲染）；
+                         目的：兼容 DockUI 对这些键的引用，同时避免在 /fstack 中出现“幽灵框”，
+                         因此默认 hidden="true" 且禁用鼠标。 -->
+                    <Frame parentKey="LeftSection" hidden="true" enableMouse="false" enableMouseMotion="false">
                         <Size x="8"/>
                         <Anchors>
                             <Anchor point="TOPLEFT" relativeKey="$parent" relativePoint="TOPLEFT"/>
                             <Anchor point="BOTTOMLEFT" relativeKey="$parent" relativePoint="BOTTOMLEFT"/>
                         </Anchors>
                     </Frame>
-                    <Frame parentKey="RightSection">
+                    <Frame parentKey="RightSection" hidden="true" enableMouse="false" enableMouseMotion="false">
                         <Size x="8"/>
                         <Anchors>
                             <Anchor point="TOPRIGHT" relativeKey="$parent" relativePoint="TOPRIGHT"/>
                             <Anchor point="BOTTOMRIGHT" relativeKey="$parent" relativePoint="BOTTOMRIGHT"/>
                         </Anchors>
                     </Frame>
+                    <!-- CentralSection 作为右侧“内容区域”的容器；具体锚点由 DockUI 在运行时覆盖到 Header 之下。 -->
                     <Frame parentKey="CentralSection">
                         <Anchors>
                             <Anchor point="TOPLEFT" relativeKey="$parent.LeftSection" relativePoint="TOPRIGHT"/>
@@ -30,8 +34,7 @@
                         </Anchors>
                     </Frame>
 
-                    <Frame parentKey="SideTab"/>
-                    <Frame parentKey="TabButtonContainer" enableMouse="true" enableMouseMotion="true"/>
+                    <!-- SideTab / TabButtonContainer 已废弃，不再在模板中创建。 -->
 
                     <Frame parentKey="ModuleTab"/>
                     <Frame parentKey="ChangelogTab" hidden="true"/>
