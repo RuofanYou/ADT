@@ -218,6 +218,12 @@ local function _GetAnyDecorCount()
     return nil
 end
 
+-- 对外导出：供 DockUI 在 Header 内锚定齿轮按钮时查询 DecorCount 位置
+ADT.HousingGraft = ADT.HousingGraft or {}
+function ADT.HousingGraft.GetAnyDecorCount()
+    return _GetAnyDecorCount()
+end
+
 -- 对齐函数：必须位于任何使用它的钩子之前（避免前向引用为 nil）
 local function _AnchorDecorCount(dc, header)
     if not (dc and header) then return end
@@ -238,6 +244,11 @@ local function _AnchorDecorCount(dc, header)
         dc:SetFrameLevel((header:GetFrameLevel() or 10) + bias)
         if dc.SetAlpha then dc:SetAlpha(1) end
     end)
+
+    -- 装饰计数位置变更后，通知 Dock 重新锚定 Header 内部的小部件（齿轮按钮等）
+    if ADT and ADT.DockUI and ADT.DockUI.ReanchorHeaderWidgets then
+        pcall(ADT.DockUI.ReanchorHeaderWidgets)
+    end
 end
 
 -- 钩住所有子模式的 DecorCount：无论当前激活哪种模式，出现就对齐一次
@@ -277,6 +288,9 @@ local function ShowBudgetInHeader()
     if dc._ADTForceHidden then dc._ADTForceHidden = nil end
     _AnchorDecorCount(dc, dock.Header)
     if dc.Show then dc:Show() end
+    if ADT and ADT.DockUI and ADT.DockUI.ReanchorHeaderWidgets then
+        pcall(ADT.DockUI.ReanchorHeaderWidgets)
+    end
     -- 首帧和后续尺寸变化都再对齐一次（不加循环，仅一次性延后）
     C_Timer.After(0, function() if dc and dock and dock.Header then _AnchorDecorCount(dc, dock.Header) end end)
     -- 一次性挂钩：当 DecorCount 再次 Show 时，重新对齐

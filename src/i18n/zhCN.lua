@@ -144,6 +144,11 @@ ADT.Locales.zhCN = {
     ["Credits Label"] = "制作信息",
     ["Bilibili Label"] = "bilibili:",
     ["QQ Group Label"] = "魔兽家宅装修QQ群:",
+
+    -- Dock 折叠/展开
+    ["Compact Dock"] = "紧凑显示 Dock",
+    ["Expand Dock"] = "展开 Dock",
+    ["Toggle Dock Body"] = "显示/隐藏 Dock 主体",
     
     -- 交互/锁定
     ["LOCKED"] = "已锁定",

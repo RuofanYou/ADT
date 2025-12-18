@@ -121,6 +121,11 @@ ADT.Locales.esMX = {
     ["Keybind Action DyeCopy"] = "Copiar tinte",
     ["SC DyePresets"] = "Preajustes de tinte",
     ["Save Current Dye"] = "Guardar tinte actual",
+    
+    -- Compactar/expandir Dock
+    ["Compact Dock"] = "Compactar Dock",
+    ["Expand Dock"] = "Expandir Dock",
+    ["Toggle Dock Body"] = "Mostrar/ocultar cuerpo del Dock",
     ["Hotkey Copy Dye"] = "Copiar tintes",
     ["Hotkey Paste Dye"] = "Pegar tintes",
     ["Click"] = "Clic",

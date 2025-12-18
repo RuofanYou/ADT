@@ -268,6 +268,11 @@ ADT.Locales.enUS = {
     ["Dyes pasted to %s"] = "Dyes pasted to %s: ",
     ["Dye clipboard cleared"] = "Dye clipboard cleared",
 
+    -- Dock collapse/expand
+    ["Compact Dock"] = "Compact Dock",
+    ["Expand Dock"] = "Expand Dock",
+    ["Toggle Dock Body"] = "Show/Hide Dock body",
+
     -- Dye Presets
     ["SC DyePresets"] = "Dye Presets",
     ["Preset"] = "Preset",

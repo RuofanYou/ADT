@@ -143,7 +143,7 @@ local CFG = {
         -- 锚点：将官方 DecorCount 贴到 Dock.Header 的哪个点位
         point    = "CENTER",
         relPoint = "CENTER",
-        offsetX  = -0,
+        offsetX  = -10,
         offsetY  = -2,
         -- 缩放：整体缩放比（不改变父级/显隐）
         scale    = 0.65,
@@ -165,6 +165,21 @@ local CFG = {
         strata   = nil,      -- nil=跟随 Dock 主体；也可指定 "FULLSCREEN_DIALOG" 等
         levelBias = 0,       -- 基于 Header 的提升量
         levelBiasOverBorder = 1, -- 若存在 Dock.BorderFrame，则在其之上再提升的量
+    },
+
+    -- Header 齿轮按钮（折叠/展开 Dock 主体）的定位与尺寸（单一权威）
+    GearButton = {
+        -- 统一锚到 Dock.Header 的右上角附近，保持与关闭按钮、DecorCount 的相对关系稳定
+        point    = "LEFT",
+        relPoint = "LEFT",
+        offsetX  = 30,
+        offsetY  = -3,
+        -- 尺寸（像素）：若未设置，则回落到 DockUI 的 Def.ButtonSize
+        size     = 28,
+        -- 层级（可选）：nil 表示跟随 Header；若需要可指定 "FULLSCREEN_DIALOG"/"TOOLTIP" 等
+        strata   = nil,
+        -- 基于 Header 的 FrameLevel 偏移（正数抬高）
+        levelBias = 2,
     },
     -- Dock 列表（Clipboard/Recent）的库存数字与名称间距（配置驱动，分类可独立）
     DockDecorList = {

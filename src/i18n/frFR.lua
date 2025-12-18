@@ -258,6 +258,11 @@ ADT.Locales.frFR = {
     -- Préréglages de teinture
     ["SC DyePresets"] = "Préréglages de teinture",
     ["Preset"] = "Préréglage",
+    
+    -- Replier/déployer le Dock
+    ["Compact Dock"] = "Compacter le Dock",
+    ["Expand Dock"] = "Déployer le Dock",
+    ["Toggle Dock Body"] = "Afficher/masquer le corps du Dock",
     ["Save Current Dye"] = "Enregistrer la teinture actuelle",
     ["No dye copied"] = "Aucune teinture copiée",
     ["Dye preset saved"] = "Préréglage de teinture enregistré",

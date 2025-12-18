@@ -258,6 +258,11 @@ ADT.Locales.itIT = {
     -- Preimpostazioni tinte
     ["SC DyePresets"] = "Preimpostazioni tinte",
     ["Preset"] = "Preimpostazione",
+
+    -- Comprimi/espandi Dock
+    ["Compact Dock"] = "Compatta Dock",
+    ["Expand Dock"] = "Espandi Dock",
+    ["Toggle Dock Body"] = "Mostra/nascondi corpo Dock",
     ["Save Current Dye"] = "Salva tinta attuale",
     ["No dye copied"] = "Nessuna tinta copiata",
     ["Dye preset saved"] = "Preimpostazione tinta salvata",

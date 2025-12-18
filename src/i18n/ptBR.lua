@@ -263,6 +263,11 @@ ADT.Locales.ptBR = {
     ["Dye preset saved"] = "Predefinição de tinta salva",
     ["Dye preset loaded"] = "Predefinição de tinta carregada",
     ["Dye preset deleted"] = "Predefinição de tinta excluída",
+
+    -- Compactar/expandir Dock
+    ["Compact Dock"] = "Compactar Dock",
+    ["Expand Dock"] = "Expandir Dock",
+    ["Toggle Dock Body"] = "Mostrar/ocultar corpo do Dock",
     ["No dye presets"] = "Sem predefinições de tinta",
     ["DyePresets Empty Line1"] = "Sem predefinições de tinta",
     ["DyePresets Empty Line2"] = "No Personalizar: SHIFT+C para copiar, depois salve",

@@ -131,6 +131,99 @@ ADT.DockUI = ADT.DockUI or {}
 ADT.DockUI.Def = Def
 ADT.DockUI.GetRightPadding = GetRightPadding
 
+-- 折叠（仅保留 Header）的显隐裁决（单一权威）
+-- 语义：
+--   - 折叠时仅显示 Header 与 BorderFrame；左侧 LeftPanel 与右侧主体（CentralSection/ModuleTab/背景）全部隐藏；
+--   - SubPanel 独立；通过 LayoutManager 的高度裁决，确保其改贴 Header 底部。
+do
+    local function SetShownSafe(f, shown)
+        if not f then return end
+        if shown then f:Show() else f:Hide() end
+    end
+
+    local function ReadCollapsed()
+        if GetDBBool then return GetDBBool('DockCollapsed') end
+        return (ADT and ADT.GetDBValue and ADT.GetDBValue('DockCollapsed')) and true or false
+    end
+
+    function ADT.DockUI.IsCollapsed()
+        return not not ReadCollapsed()
+    end
+
+    function ADT.DockUI.SetCollapsed(state)
+        local v = not not state
+        if ADT and ADT.SetDBValue then ADT.SetDBValue('DockCollapsed', v, true) end
+        ADT.DockUI.ApplyCollapsedAppearance()
+        if ADT and ADT.HousingLayoutManager and ADT.HousingLayoutManager.RequestLayout then
+            ADT.HousingLayoutManager:RequestLayout('DockCollapsedChanged')
+        end
+    end
+
+    function ADT.DockUI.ToggleCollapsed()
+        ADT.DockUI.SetCollapsed(not ReadCollapsed())
+    end
+
+    -- 根据当前 DB 状态应用显隐
+    function ADT.DockUI.ApplyCollapsedAppearance()
+        local main = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+        if not main then return end
+        local collapsed = ReadCollapsed()
+
+        -- 左侧独立层（必须显式隐藏以避免透明命中）
+        SetShownSafe(main.LeftSlideContainer, not collapsed)
+        SetShownSafe(main.LeftPanelContainer, not collapsed)
+
+        -- 右侧主体
+        SetShownSafe(main.CenterBackground, not collapsed)
+        SetShownSafe(main.RightUnifiedBackground, not collapsed)
+        if main.ModuleTab then SetShownSafe(main.ModuleTab, not collapsed) end
+        if main.CentralSection then SetShownSafe(main.CentralSection, not collapsed) end
+
+        -- Header 与 Border 始终可见
+        SetShownSafe(main.Header, true)
+        if main.BorderFrame then
+            -- 折叠时边框只包住 Header，修复“点击后下方还有一块透明”的问题
+            main.BorderFrame:ClearAllPoints()
+            if collapsed and main.Header then
+                main.BorderFrame:SetPoint("TOPLEFT", main.Header, "TOPLEFT", 0, 0)
+                main.BorderFrame:SetPoint("BOTTOMRIGHT", main.Header, "BOTTOMRIGHT", 0, 0)
+            else
+                main.BorderFrame:SetAllPoints(main)
+            end
+            SetShownSafe(main.BorderFrame, true)
+        end
+
+        -- 立即把 Dock 高度收敛到 Header，避免等待布局器下一帧
+        if collapsed and main.SetHeight and main.Header and main.Header.GetHeight then
+            local hh = tonumber(main.Header:GetHeight() or 0) or 0
+            if hh > 0 then main:SetHeight(hh) end
+        end
+
+        -- 齿轮按钮选中态
+        if main._ADT_GearButton and main._ADT_GearButton.ActiveOverlay then
+            main._ADT_GearButton.ActiveOverlay:SetShown(collapsed)
+        end
+
+        -- 展开后延迟刷新一次（等待布局器复原高度后再渲染）
+        -- 根因：此前在折叠阶段把 Dock 高度收敛到 Header，若立即渲染，视口高度仍为 Header 高度，
+        --       会导致可见区计算为空；延迟到下一帧（以及再补一帧）可确保布局器已恢复尺寸。
+        if not collapsed then
+            local function _refresh()
+                local m = ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel
+                if not m then return end
+                local sv = m.ModuleTab and m.ModuleTab.ScrollView
+                if sv and sv.OnSizeChanged then sv:OnSizeChanged(true) end
+                if m._SyncCentralTemplateWidths then m:_SyncCentralTemplateWidths(true) end
+                if m.ModuleTab and m.ModuleTab.ScrollBar and m.ModuleTab.ScrollBar.UpdateThumbRange then
+                    m.ModuleTab.ScrollBar:UpdateThumbRange()
+                end
+            end
+            C_Timer.After(0, _refresh)
+            C_Timer.After(0.05, _refresh)
+        end
+    end
+end
+
 -- 面板显隐：仅控制 DockUI 的“右侧主体 + 左侧列表”，不影响 SubPanel
 -- 目的：当用户关闭“默认开启设置面板”时，仍允许 SubPanel/清单弹窗独立显示。
 do
@@ -159,6 +252,20 @@ do
 
         -- 注意：SubPanel 由业务控制，保持不变（避免“跟随主体一起被隐藏”）。
         ADT.DockUI._mainPanelsVisible = vis
+
+        -- 当从隐藏 → 显示时，下一帧刷新一次 ScrollView 视区与模板宽度，避免出现“空白直到刷新”的情况。
+        if vis then
+            C_Timer.After(0, function()
+                local m = ADT and ADT.CommandDock and ADT.CommandDock.SettingsPanel
+                if not m then return end
+                local sv = m.ModuleTab and m.ModuleTab.ScrollView
+                if sv and sv.OnSizeChanged then sv:OnSizeChanged(true) end
+                if m._SyncCentralTemplateWidths then m:_SyncCentralTemplateWidths(true) end
+                if m.ModuleTab and m.ModuleTab.ScrollBar and m.ModuleTab.ScrollBar.UpdateThumbRange then
+                    m.ModuleTab.ScrollBar:UpdateThumbRange()
+                end
+            end)
+        end
     end
 
     -- 查询当前 Dock 主体是否可见（独立于容器显示状态）
@@ -174,6 +281,10 @@ do
         local v = ADT and ADT.GetDBValue and ADT.GetDBValue('EnableDockAutoOpenInEditor')
         local shouldShowMainPanels = (v ~= false)
         ADT.DockUI.SetMainPanelsVisible(shouldShowMainPanels)
+        -- 同步折叠态（/reload、进入编辑器时都保持一致）
+        if ADT and ADT.DockUI and ADT.DockUI.ApplyCollapsedAppearance then
+            ADT.DockUI.ApplyCollapsedAppearance()
+        end
     end
 end
 
@@ -2945,6 +3056,77 @@ local function CreateUI()
             MainFrame.MouseBlocker:SetScript("OnMouseUp", nil)
             MainFrame.MouseBlocker:EnableMouse(false)
             MainFrame.MouseBlocker = nil
+        end
+
+        -- Header 工具按钮：齿轮（Atlas：decor-controls-settings-*）
+        do
+            local cfg = (ADT and ADT.HousingInstrCFG and ADT.HousingInstrCFG.GearButton) or {}
+            local size = tonumber(cfg.size) or (Def.ButtonSize or 28)
+            local btn = CreateFrame('Button', nil, Header)
+            MainFrame._ADT_GearButton = btn
+            btn:SetSize(size, size)
+            -- 层级与 FrameLevel 可由配置调整
+            if cfg.strata then btn:SetFrameStrata(cfg.strata) end
+            local baseLvl = Header:GetFrameLevel() or 0
+            local biasLvl = tonumber(cfg.levelBias) or 2
+            btn:SetFrameLevel(baseLvl + biasLvl)
+            btn:SetNormalAtlas('decor-controls-settings-default')
+            btn:SetPushedAtlas('decor-controls-settings-pressed')
+            btn:SetHighlightAtlas('decor-controls-settings-active')
+            btn:GetHighlightTexture():SetAlpha(0.35)
+
+            -- 选中覆盖层：表现“折叠已开启”
+            local sel = btn:CreateTexture(nil, 'OVERLAY')
+            btn.ActiveOverlay = sel
+            sel:SetAllPoints(btn)
+            sel:SetAtlas('decor-controls-settings-active')
+            sel:SetAlpha(1.0)
+            sel:Hide()
+
+            -- 简化版：始终锚到 Header 的右上角，固定偏移。
+            -- 说明：DecorCount 先后会被我们 graft 到 Header 右侧（偏移约 -12），
+            -- 齿轮固定 -44，视觉上稳定地位于 DecorCount 左侧，无需等待时序。
+            local function AnchorToDecorCount()
+                btn:ClearAllPoints()
+                local p  = cfg.point or 'RIGHT'
+                local rp = cfg.relPoint or p
+                local x  = tonumber(cfg.offsetX) or -44
+                local y  = tonumber(cfg.offsetY) or -2
+                btn:SetPoint(p, Header, rp, x, y)
+                btn:Show(); btn:SetAlpha(1)
+                return true
+            end
+
+            -- 一次到位，无需轮询
+            AnchorToDecorCount()
+
+            btn:SetScript('OnClick', function()
+                if ADT and ADT.DockUI and ADT.DockUI.ToggleCollapsed then
+                    ADT.DockUI.ToggleCollapsed()
+                end
+                if ADT and ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.button') end
+            end)
+
+            btn:SetScript('OnEnter', function(self)
+                if GameTooltip then
+                    GameTooltip:SetOwner(self, 'ANCHOR_RIGHT')
+                    local collapsed = ADT and ADT.DockUI and ADT.DockUI.IsCollapsed and ADT.DockUI.IsCollapsed()
+                    GameTooltip:SetText(collapsed and (ADT.L and ADT.L['Expand Dock'] or 'Expand Dock') or (ADT.L and ADT.L['Compact Dock'] or 'Compact Dock'))
+                    GameTooltip:Show()
+                end
+            end)
+            btn:SetScript('OnLeave', function() if GameTooltip then GameTooltip:Hide() end end)
+
+            -- 初始根据 DB 同步一次外观
+            if ADT and ADT.DockUI and ADT.DockUI.ApplyCollapsedAppearance then
+                C_Timer.After(0, ADT.DockUI.ApplyCollapsedAppearance)
+            end
+
+            -- 对外：当官方 DecorCount 出现或移动后，允许请求我们重新贴紧它
+            ADT.DockUI.ReanchorHeaderWidgets = function()
+                if not (MainFrame and MainFrame.Header and MainFrame._ADT_GearButton) then return end
+                AnchorToDecorCount()
+            end
         end
     end
 

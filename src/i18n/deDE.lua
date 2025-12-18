@@ -258,6 +258,11 @@ ADT.Locales.deDE = {
     ["Dye preset saved"] = "Farbvoreinstellung gespeichert",
     ["Dye preset loaded"] = "Farbvoreinstellung geladen",
     ["Dye preset deleted"] = "Farbvoreinstellung gelöscht",
+    
+    -- Dock einklappen/ausklappen
+    ["Compact Dock"] = "Dock komprimieren",
+    ["Expand Dock"] = "Dock erweitern",
+    ["Toggle Dock Body"] = "Dock-Inhalt ein-/ausblenden",
     ["No dye presets"] = "Keine Farbvoreinstellungen",
     ["DyePresets Empty Line1"] = "Keine Farbvoreinstellungen gespeichert",
     ["DyePresets Empty Line2"] = "Im Anpassen-Modus: SHIFT+C, dann speichern",

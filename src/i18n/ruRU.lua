@@ -258,6 +258,11 @@ ADT.Locales.ruRU = {
     -- Наборы красок
     ["SC DyePresets"] = "Наборы красок",
     ["Preset"] = "Набор",
+    
+    -- Свернуть/развернуть Dock
+    ["Compact Dock"] = "Свернуть Dock",
+    ["Expand Dock"] = "Развернуть Dock",
+    ["Toggle Dock Body"] = "Показать/скрыть содержимое Dock",
     ["Save Current Dye"] = "Сохранить текущую окраску",
     ["No dye copied"] = "Краски не скопированы",
     ["Dye preset saved"] = "Набор красок сохранён",

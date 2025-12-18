@@ -258,6 +258,11 @@ ADT.Locales.zhTW = {
     ["Dye preset saved"] = "染色預設已保存",
     ["Dye preset loaded"] = "染色預設已載入",
     ["Dye preset deleted"] = "染色預設已刪除",
+    
+    -- Dock 摺疊/展開
+    ["Compact Dock"] = "緊湊顯示 Dock",
+    ["Expand Dock"] = "展開 Dock",
+    ["Toggle Dock Body"] = "顯示/隱藏 Dock 主體",
     ["No dye presets"] = "暫無染色預設",
     ["DyePresets Empty Line1"] = "暫無染色預設",
     ["DyePresets Empty Line2"] = "在自訂模式下 SHIFT+C 複製後再保存",

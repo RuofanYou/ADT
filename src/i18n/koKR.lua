@@ -258,6 +258,11 @@ ADT.Locales.koKR = {
     -- 염료 프리셋
     ["SC DyePresets"] = "염료 프리셋",
     ["Preset"] = "프리셋",
+
+    -- Dock 접기/펼치기
+    ["Compact Dock"] = "Dock 접기",
+    ["Expand Dock"] = "Dock 펼치기",
+    ["Toggle Dock Body"] = "Dock 본문 표시/숨기기",
     ["Save Current Dye"] = "현재 염료 저장",
     ["No dye copied"] = "복사된 염료 없음",
     ["Dye preset saved"] = "염료 프리셋 저장됨",

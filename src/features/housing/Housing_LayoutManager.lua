@@ -244,6 +244,18 @@ function LayoutManager:ComputeLayout()
         end
     end
 
+    -- 折叠模式：Dock 期望高度改为 Header 高度（KISS）
+    do
+        local isCollapsed = ADT and ADT.DockUI and ADT.DockUI.IsCollapsed and ADT.DockUI.IsCollapsed()
+        if isCollapsed then
+            local hh = (dock.Header and dock.Header.GetHeight and dock.Header:GetHeight()) or 0
+            if hh <= 0 and ADT and ADT.DockUI and ADT.DockUI.Def then
+                hh = tonumber(ADT.DockUI.Def.HeaderHeight) or hh
+            end
+            if hh and hh > 0 then desiredDockH = hh end
+        end
+    end
+
     local sub = GetSubPanel(dock)
     local desiredSubH = 0
     if sub and sub.IsShown and sub:IsShown() then

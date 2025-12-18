@@ -258,6 +258,11 @@ ADT.Locales.esES = {
     ["Dye preset saved"] = "Preajuste de tinte guardado",
     ["Dye preset loaded"] = "Preajuste de tinte cargado",
     ["Dye preset deleted"] = "Preajuste de tinte eliminado",
+
+    -- Plegar/desplegar Dock
+    ["Compact Dock"] = "Compactar Dock",
+    ["Expand Dock"] = "Expandir Dock",
+    ["Toggle Dock Body"] = "Mostrar/ocultar cuerpo del Dock",
     ["No dye presets"] = "Sin preajustes de tinte",
     ["DyePresets Empty Line1"] = "No hay preajustes de tinte",
     ["DyePresets Empty Line2"] = "En Personalizar: SHIFT+C para copiar, luego guarda",
