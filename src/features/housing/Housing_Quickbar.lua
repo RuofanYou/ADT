@@ -12,6 +12,7 @@ local L = ADT.L or {}
 -- 常量
 -- ===========================
 
+-- 默认键位仅作回退显示，实际显示一律从 ADT.Keybinds 读取（单一权威）
 local SLOT_KEYS = { "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8" }
 local NUM_SLOTS = #SLOT_KEYS
 
@@ -37,6 +38,17 @@ end
 
 local function Notify(msg, typ)
     if ADT and ADT.Notify then ADT.Notify(msg, typ or 'info') end
+end
+
+-- 统一：根据玩家当前配置返回 Quickbar 槽位的按键显示文本
+local function GetSlotKeyDisplay(slotIndex)
+    if ADT and ADT.Keybinds and ADT.Keybinds.GetQuickbarKeyDisplay then
+        local disp = ADT.Keybinds:GetQuickbarKeyDisplay(slotIndex)
+        if disp and disp ~= '' then
+            return disp
+        end
+    end
+    return SLOT_KEYS[slotIndex]
 end
 
 -- 检测是否在住宅编辑器中
@@ -256,7 +268,7 @@ end
 
 function M:ClearSlot(slotIndex)
     self:SetSlotData(slotIndex, nil)
-    Notify(string.format(L["Quickbar slot %s cleared"], SLOT_KEYS[slotIndex]), 'info')
+    Notify(string.format(L["Quickbar slot %s cleared"], GetSlotKeyDisplay(slotIndex)), 'info')
     PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
 end
 
@@ -279,7 +291,7 @@ function M:OnQuickbarKeyPressed(slotIndex)
     end
     
     D(string.format("[Quickbar] Key %s pressed: slotIndex=%d, isPlacing=%s, isPlacingNew=%s, isSelected=%s, slotHasData=%s, currentRID=%s",
-        SLOT_KEYS[slotIndex], slotIndex, tostring(isPlacing), tostring(isPlacingNew), tostring(isSelected), tostring(slotData ~= nil), tostring(currentRID)))
+        GetSlotKeyDisplay(slotIndex), slotIndex, tostring(isPlacing), tostring(isPlacingNew), tostring(isSelected), tostring(slotData ~= nil), tostring(currentRID)))
     
     if isPlacing then
         -- 当前有抓取
@@ -308,7 +320,8 @@ function M:OnQuickbarKeyPressed(slotIndex)
                     local cancelled = CancelActiveEditing()
                     D("[Quickbar] CancelActiveEditing called after bind (preview or no selection), ok=" .. tostring(cancelled))
                 end
-                Notify(string.format(L["Decor bound to quickbar %s"], SLOT_KEYS[slotIndex]), 'success')
+                -- 文本采用占位符 + 实时读取的按键显示（支持玩家改键后即时反映）
+                Notify(string.format(L["Decor bound to quickbar %s"], GetSlotKeyDisplay(slotIndex)), 'success')
                 PlaySound(SOUNDKIT.UI_70_ARTIFACT_FORGE_APPEARANCE_LOCKED)
             end
         end

@@ -164,14 +164,9 @@ function UI:CreateSlot(parent, slotIndex)
     local INSETS = assert(QBCFG.SlotTextInsets, "QuickbarUI.SlotTextInsets 缺失")
     slot.keyText = slot:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     slot.keyText:SetPoint("TOPRIGHT", slot, "TOPRIGHT", -INSETS.keyRight, -INSETS.keyTop)
-    -- 键帽显示与 Keybinds 保持一致（单一权威）。若玩家在 UI 中换绑为其它键位，这里自动更新。
-    local keyText = SLOT_KEYS[slotIndex]
-    if ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds.GetKeyDisplayName then
-        local key = ADT.Keybinds:GetKeybind('Quickbar'..tostring(slotIndex))
-        local disp = ADT.Keybinds:GetKeyDisplayName(key)
-        if disp and disp ~= '' then keyText = disp end
-    end
-    slot.keyText:SetText(keyText)
+    -- 键帽显示与 Keybinds 保持一致（单一权威）。若玩家改键，这里自动更新。
+    local keyText = (ADT.Keybinds and ADT.Keybinds.GetQuickbarKeyDisplay and ADT.Keybinds:GetQuickbarKeyDisplay(slotIndex)) or SLOT_KEYS[slotIndex]
+    slot.keyText:SetText((keyText ~= '' and keyText) or SLOT_KEYS[slotIndex])
     slot.keyText:SetTextColor(0.8, 0.8, 0.8, 0.9)
     
     -- 库存数量：右下角（内收像素改为配置驱动；初始隐藏）
@@ -211,8 +206,9 @@ function UI:CreateSlot(parent, slotIndex)
             local right = L["Right-click: Clear"]
             GameTooltip:AddLine(string.format("%s | %s", left, right), 0.7, 0.7, 0.7)
         else
-            -- 空槽位提示：采用占位符格式，保持多语言
-            GameTooltip:SetText(string.format(L["Empty slot %s"], SLOT_KEYS[self.slotIndex]))
+            -- 空槽位提示：占位符显示玩家当前绑定键
+            local disp = (ADT.Keybinds and ADT.Keybinds.GetQuickbarKeyDisplay and ADT.Keybinds:GetQuickbarKeyDisplay(self.slotIndex)) or SLOT_KEYS[self.slotIndex]
+            GameTooltip:SetText(string.format(L["Empty slot %s"], disp))
             GameTooltip:AddLine(L["Quickbar bind hint"], 0.6, 0.6, 0.6)
         end
         GameTooltip:Show()
@@ -228,10 +224,9 @@ function UI:Refresh()
         local slot = slotFrames[i]
         if slot then
             -- 刷新键帽文本：从 Keybinds 实时读取
-            if ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds.GetKeyDisplayName then
-                local key = ADT.Keybinds:GetKeybind('Quickbar'..tostring(i))
-                local disp = ADT.Keybinds:GetKeyDisplayName(key) or SLOT_KEYS[i]
-                slot.keyText:SetText((disp ~= '' and disp) and disp or SLOT_KEYS[i])
+            if ADT.Keybinds and ADT.Keybinds.GetQuickbarKeyDisplay then
+                local disp = ADT.Keybinds:GetQuickbarKeyDisplay(i)
+                slot.keyText:SetText((disp and disp ~= '' and disp) or SLOT_KEYS[i])
             else
                 slot.keyText:SetText(SLOT_KEYS[i])
             end

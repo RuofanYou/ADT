@@ -60,6 +60,25 @@ function ADT.DockUI.ApplyCollapsedAppearance()
     local main = CommandDock and CommandDock.SettingsPanel
     if not main then return end
     local collapsed = ReadCollapsed()
+    -- 关键修复：当“默认开启设置面板”被关闭（或用户主动隐藏主体面板）时，
+    -- 此函数不应再次根据折叠状态把主体各区块显示出来。
+    -- 之前的实现会在 ApplyPanelsDefaultVisibility() 之后被调用，
+    -- 由于这里无条件按“折叠状态”改写显隐，导致进入编辑器时面板又被显示。
+    -- 现在按 ADT.DockUI._mainPanelsVisible 作为总开关：为 false 时，
+    -- 直接隐藏主体相关元素并返回，保持 SubPanel 独立工作。
+    local mainPanelsVisible = not not ADT.DockUI._mainPanelsVisible
+    if not mainPanelsVisible then
+        SetShownSafe(main.LeftSlideContainer, false)
+        SetShownSafe(main.LeftPanelContainer, false)
+        SetShownSafe(main.CenterBackground, false)
+        SetShownSafe(main.RightUnifiedBackground, false)
+        if main.ModuleTab then SetShownSafe(main.ModuleTab, false) end
+        if main.CentralSection then SetShownSafe(main.CentralSection, false) end
+        -- 头部与边框也一并隐藏，避免“已关闭默认开启”仍出现齿轮与木框
+        SetShownSafe(main.Header, false)
+        if main.BorderFrame then SetShownSafe(main.BorderFrame, false) end
+        return
+    end
     local Def = ADT.DockUI.Def
 
     -- 左侧独立层
@@ -72,7 +91,7 @@ function ADT.DockUI.ApplyCollapsedAppearance()
     if main.ModuleTab then SetShownSafe(main.ModuleTab, not collapsed) end
     if main.CentralSection then SetShownSafe(main.CentralSection, not collapsed) end
 
-    -- Header 与 Border 始终可见
+    -- Header 与 Border 在主体可见时始终可见
     SetShownSafe(main.Header, true)
     if main.BorderFrame then
         main.BorderFrame:ClearAllPoints()

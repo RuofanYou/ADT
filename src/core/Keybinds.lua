@@ -163,6 +163,25 @@ function M:GetKeybind(actionName)
     return db[actionName] or DEFAULTS[actionName] or ""
 end
 
+-- 获取某个动作当前“显示用”的按键文本（本地化后的友好格式）
+-- 说明：统一入口，避免各处手写 GetKeybind+GetKeyDisplayName 的重复逻辑（单一权威）
+function M:GetActionKeyDisplay(actionName)
+    if not actionName or actionName == "" then return "" end
+    local raw = self:GetKeybind(actionName)
+    return self:GetKeyDisplayName(raw)
+end
+
+-- Quickbar 专用：按索引获取当前按键（原始/显示）
+function M:GetQuickbarKey(index)
+    if not index then return "" end
+    return self:GetKeybind("Quickbar" .. tostring(index))
+end
+
+function M:GetQuickbarKeyDisplay(index)
+    if not index then return "" end
+    return self:GetActionKeyDisplay("Quickbar" .. tostring(index))
+end
+
 -- 设置用户配置的快捷键
 function M:SetKeybind(actionName, key)
     if not ADT.SetDBValue then return end
