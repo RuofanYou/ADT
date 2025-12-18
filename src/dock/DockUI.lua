@@ -152,6 +152,18 @@ do
 
     function ADT.DockUI.SetCollapsed(state)
         local v = not not state
+        -- 进入折叠前，记录当前所处分类（用于展开后精准恢复）
+        if v then
+            local main = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+            if main then
+                local key = main.currentDecorCategory or main.currentDyePresetsCategory or main.currentAboutCategory or main.currentSettingsCategory
+                if not key and ADT and ADT.GetDBValue then
+                    key = ADT.GetDBValue('LastCategoryKey')
+                end
+                ADT.DockUI._lastCategoryKey = key
+            end
+        end
+
         if ADT and ADT.SetDBValue then ADT.SetDBValue('DockCollapsed', v, true) end
         ADT.DockUI.ApplyCollapsedAppearance()
         if ADT and ADT.HousingLayoutManager and ADT.HousingLayoutManager.RequestLayout then
@@ -204,7 +216,7 @@ do
             main._ADT_GearButton.ActiveOverlay:SetShown(collapsed)
         end
 
-        -- 展开后延迟刷新一次（等待布局器复原高度后再渲染）
+        -- 展开后：延迟刷新一次并恢复折叠前的页面（避免回落到“通用”或空白）
         -- 根因：此前在折叠阶段把 Dock 高度收敛到 Header，若立即渲染，视口高度仍为 Header 高度，
         --       会导致可见区计算为空；延迟到下一帧（以及再补一帧）可确保布局器已恢复尺寸。
         if not collapsed then
@@ -217,9 +229,30 @@ do
                 if m.ModuleTab and m.ModuleTab.ScrollBar and m.ModuleTab.ScrollBar.UpdateThumbRange then
                     m.ModuleTab.ScrollBar:UpdateThumbRange()
                 end
+                -- 针对“列表型页面在折叠→展开后空白”的情况，
+                -- 仅按“当前内存中的分类”强制重渲染一次，不读取/更改持久化键（避免误跳转）。
+                local key = m.currentDecorCategory or m.currentDyePresetsCategory or m.currentAboutCategory or m.currentSettingsCategory
+                if key and ADT and ADT.CommandDock and ADT.CommandDock.GetCategoryByKey then
+                    local cat = ADT.CommandDock:GetCategoryByKey(key)
+                    if cat then
+                        if cat.categoryType == 'decorList' and m.ShowDecorListCategory then
+                            m:ShowDecorListCategory(key)
+                        elseif cat.categoryType == 'dyePresetList' and m.ShowDyePresetsCategory then
+                            m:ShowDyePresetsCategory(key)
+                        elseif cat.categoryType == 'about' and m.ShowAboutCategory then
+                            m:ShowAboutCategory(key)
+                        elseif cat.categoryType == 'keybinds' and m.ShowKeybindsCategory then
+                            m:ShowKeybindsCategory(key)
+                        elseif m.ShowSettingsCategory then
+                            m:ShowSettingsCategory(key)
+                        end
+                    end
+                end
             end
             C_Timer.After(0, _refresh)
             C_Timer.After(0.05, _refresh)
+            -- 再补一帧：等待布局管理器恢复 Dock 高度后，确保列表按最终视口重算一次
+            C_Timer.After(0.15, _refresh)
         end
     end
 end
@@ -2273,6 +2306,7 @@ do  -- Central
         self.currentSettingsCategory = categoryKey
         self.currentDecorCategory = nil
         self.currentAboutCategory = nil
+        self.currentDyePresetsCategory = nil
         if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', categoryKey) end
 
         local content = {}
@@ -2394,6 +2428,8 @@ do  -- Central
         
         self.currentDecorCategory = categoryKey
         self.currentSettingsCategory = nil
+        self.currentAboutCategory = nil
+        self.currentDyePresetsCategory = nil
         if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', categoryKey) end
         
         local list = cat.getListData and cat.getListData() or {}
@@ -2506,6 +2542,25 @@ do  -- Central
         end
         
         self.ModuleTab.ScrollView:SetContent(content, false)
+
+        -- 临时板在折叠→展开后的竞态兜底：
+        -- 若本帧拿到的列表为空，延后一小段时间再读取一次；
+        -- 仅当当前仍停留在同一分类且确实有数据时，才二次重渲，避免无谓刷新。
+        if #list == 0 then
+            C_Timer.After(0.06, function()
+                if not (MainFrame and MainFrame.IsShown and MainFrame:IsShown()) then return end
+                if MainFrame.currentDecorCategory ~= categoryKey then return end
+                local cat2 = CommandDock:GetCategoryByKey(categoryKey)
+                local list2 = cat2 and cat2.getListData and cat2.getListData() or {}
+                if type(list2) == 'table' and #list2 > 0 then
+                    MainFrame:ShowDecorListCategory(categoryKey)
+                else
+                    -- 没有数据也强制刷新一次视口，避免残留空白态
+                    local sv = MainFrame.ModuleTab and MainFrame.ModuleTab.ScrollView
+                    if sv and sv.OnSizeChanged then sv:OnSizeChanged(true) end
+                end
+            end)
+        end
         
         -- 显示第一个装饰项的预览
         if #list > 0 then
@@ -2540,6 +2595,7 @@ do  -- Central
         
         self.currentDecorCategory = nil
         self.currentSettingsCategory = nil
+        self.currentAboutCategory = nil
         self.currentDyePresetsCategory = categoryKey
         if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', categoryKey) end
         
@@ -2707,6 +2763,7 @@ do  -- Central
         self.currentDecorCategory = nil
         self.currentAboutCategory = categoryKey
         self.currentSettingsCategory = nil
+        self.currentDyePresetsCategory = nil
         if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', categoryKey) end
         
         local content = {}
@@ -3107,15 +3164,9 @@ local function CreateUI()
                 if ADT and ADT.UI and ADT.UI.PlaySoundCue then ADT.UI.PlaySoundCue('ui.button') end
             end)
 
-            btn:SetScript('OnEnter', function(self)
-                if GameTooltip then
-                    GameTooltip:SetOwner(self, 'ANCHOR_RIGHT')
-                    local collapsed = ADT and ADT.DockUI and ADT.DockUI.IsCollapsed and ADT.DockUI.IsCollapsed()
-                    GameTooltip:SetText(collapsed and (ADT.L and ADT.L['Expand Dock'] or 'Expand Dock') or (ADT.L and ADT.L['Compact Dock'] or 'Compact Dock'))
-                    GameTooltip:Show()
-                end
-            end)
-            btn:SetScript('OnLeave', function() if GameTooltip then GameTooltip:Hide() end end)
+            -- KISS：不显示鼠标提示（防止覆盖 DecorCount 视觉/避免干扰）
+            btn:SetScript('OnEnter', nil)
+            btn:SetScript('OnLeave', nil)
 
             -- 初始根据 DB 同步一次外观
             if ADT and ADT.DockUI and ADT.DockUI.ApplyCollapsedAppearance then
@@ -3792,7 +3843,8 @@ local function CreateUI()
 
     Tab1:SetScript("OnShow", function()
         if MainFrame.ApplyDockPlacement then MainFrame:ApplyDockPlacement() end
-        local key = (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey')) or MainFrame.currentDecorCategory or MainFrame.currentAboutCategory or MainFrame.currentSettingsCategory
+        -- KISS：优先使用“当前内存中的已选分类”，仅在无当前状态时才回退到持久化记录
+        local key = MainFrame.currentDecorCategory or MainFrame.currentDyePresetsCategory or MainFrame.currentAboutCategory or MainFrame.currentSettingsCategory or (ADT and ADT.GetDBValue and ADT.GetDBValue('LastCategoryKey'))
         -- 首次无记录时，显式记录并使用 "Housing" 作为默认分类
         if (not ADT.GetDBValue('LastCategoryKey')) then
             if ADT and ADT.SetDBValue then ADT.SetDBValue('LastCategoryKey', 'Housing') end
@@ -3816,10 +3868,13 @@ local function CreateUI()
             return
         end
 
-        -- 旧布局回退逻辑
+        -- 旧布局回退逻辑（补齐对染色预设分类的支持）
         local cat = key and CommandDock:GetCategoryByKey(key) or nil
         if cat and cat.categoryType == 'decorList' then
             MainFrame:ShowDecorListCategory(key)
+            MainFrame:HighlightCategoryByKey(key)
+        elseif cat and cat.categoryType == 'dyePresetList' then
+            MainFrame:ShowDyePresetsCategory(key)
             MainFrame:HighlightCategoryByKey(key)
         elseif cat and cat.categoryType == 'about' then
             MainFrame:ShowAboutCategory(key)
