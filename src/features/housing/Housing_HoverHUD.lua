@@ -830,17 +830,24 @@ do
     end
 end
 
--- 语言切换时，刷新右侧提示行的本地化文本
 function EL:OnLocaleChanged()
     if not DisplayFrame then return end
     local L = ADT and ADT.L or {}
     local CTRL = CTRL_KEY_TEXT or "CTRL"
-    -- 顶部重复提示（键帽文本可能因设置不同而变）
+    -- 顶部 Duplicate：从 ADT.Keybinds 读取（单一权威）
     if DisplayFrame.SubFrame then
-        local keyName = (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or (CTRL.."+D")
-        DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", keyName)
+        local dup = ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds:GetKeybind('Duplicate')
+        local disp = (ADT.Keybinds and ADT.Keybinds.GetKeyDisplayName and ADT.Keybinds:GetKeyDisplayName(dup))
+            or (ADT.GetDuplicateKeyName and ADT.GetDuplicateKeyName()) or (CTRL.."+D")
+        DisplayFrame.SubFrame:SetHotkey(L["Duplicate"] or "Duplicate", disp)
     end
-    -- 其他提示行
+    -- 其他提示行：严格从 ADT.Keybinds 拉取显示用按键
+    local function KD(name, fb)
+        if ADT.Keybinds and ADT.Keybinds.GetKeybind and ADT.Keybinds.GetKeyDisplayName then
+            return ADT.Keybinds:GetKeyDisplayName(ADT.Keybinds:GetKeybind(name)) or fb
+        end
+        return fb
+    end
     local map = {
         [1] = L["Hotkey Cut"]    or "Cut",
         [2] = L["Hotkey Copy"]   or "Copy",
@@ -853,14 +860,14 @@ function EL:OnLocaleChanged()
         [9] = L["Lock/Unlock"] or "Lock",
     }
     local keycaps = {
-        [1] = CTRL.."+X",
-        [2] = CTRL.."+C",
-        [3] = CTRL.."+V",
-        [4] = CTRL.."+S",
-        [5] = CTRL.."+R",
-        [6] = CTRL,
-        [7] = "T",
-        [8] = CTRL.."+T",
+        [1] = KD('Cut',   CTRL.."+X"),
+        [2] = KD('Copy',  CTRL.."+C"),
+        [3] = KD('Paste', CTRL.."+V"),
+        [4] = KD('Store', CTRL.."+S"),
+        [5] = KD('Recall',CTRL.."+R"),
+        [6] = CTRL, -- 批量放置提示保留 CTRL
+        [7] = KD('Reset', 'T'),
+        [8] = KD('ResetAll', CTRL.."+T"),
         [9] = "L",
     }
     if DisplayFrame.HintFrames then
@@ -872,9 +879,17 @@ function EL:OnLocaleChanged()
     end
     if DisplayFrame.NormalizeKeycapWidth then
         DisplayFrame:NormalizeKeycapWidth()
+        if ADT and ADT.ApplyHousingInstructionStyle then
+            ADT.ApplyHousingInstructionStyle(DisplayFrame)
+        end
     end
     -- 重新应用可见性（用户开关可能影响）
     if self.UpdateHintVisibility then self:UpdateHintVisibility() end
+end
+
+-- 新增：集中刷新键帽文本，供 ADT.Keybinds 调用
+function EL:RefreshKeycaps()
+    self:OnLocaleChanged()
 end
 
 --
@@ -1141,23 +1156,12 @@ do
         end)
     end
 
+    -- 单一权威：此处仅覆盖“非可配置键”，其余全部交由 ADT.Keybinds 统一注册。
+    -- 这样可以避免出现“修改了自定义键，但默认键仍然生效”的冲突。
     local OVERRIDE_KEYS = {
-        -- 仅强制覆盖这六大类：S/R/X/C/V/D + Q
-        -- 临时板：存入/取出
-        { key = "CTRL-S", button = function() return btnTempStore end },
-        { key = "CTRL-R", button = function() return btnTempRecall end },
-        -- 住宅剪切板：复制/粘贴/剪切
-        { key = "CTRL-C", button = function() return btnCopy end },
-        { key = "CTRL-V", button = function() return btnPaste end },
-        { key = "CTRL-X", button = function() return btnCut end },
-        -- 住宅：悬停复制同款（新的默认：CTRL-D）
-        { key = "CTRL-D", button = function() return btnDuplicate end },
         -- 设置面板：开关（等价 /adt）
         { key = "CTRL-Q", button = function() return btnToggleUI end },
-        -- 一键重置变换
-        { key = "T", button = function() return btnResetSubmode end },
-        { key = "CTRL-T", button = function() return btnResetAll end },
-        -- 误操作保护：锁定/解锁
+        -- 误操作保护：锁定/解锁（固定 L 键，不纳入可配置项）
         { key = "L", button = function() return btnToggleLock end },
     }
 
@@ -1169,19 +1173,11 @@ do
     function EL:ApplyOverrides()
         EnsureOwner()
         ClearOverrideBindings(owner)
-        -- 注意：优先级覆盖，确保高于默认与其他非优先覆盖
+        -- 注意：仅覆盖固定键，开关由各自模块控制
         for _, cfg in ipairs(OVERRIDE_KEYS) do
             local btn = cfg.button()
             local allowed = true
-            if cfg.key == "T" then
-                local en = ADT.GetDBValue("EnableResetT")
-                if en == nil then en = true end
-                allowed = en
-            elseif cfg.key == "CTRL-T" then
-                local en2 = ADT.GetDBValue("EnableResetAll")
-                if en2 == nil then en2 = true end
-                allowed = en2
-            elseif cfg.key == "L" then
+            if cfg.key == "L" then
                 local en3 = ADT.GetDBValue("EnableLock")
                 if en3 == nil then en3 = true end
                 allowed = en3
