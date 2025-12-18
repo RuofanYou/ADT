@@ -51,6 +51,9 @@ local CFG = {
         -- 子面板在计算“所需中心宽度”时的硬上限占比（防极端超长 token 拉爆）。
         -- 仅用于 SubPanel 内部测量，不直接决定 Dock 总宽。
         subPanelMaxViewportRatio = 0.80,
+        -- 子面板“清空信息”防抖时间（秒）：当官方清单/选中态在极短时间内抖动为 nil 时，
+        -- 保留最近一次非空信息以避免高度在 0 与非 0 间快速切换造成的“弹跳”。
+        subPanelClearDelaySec = 0.15,
     },
     -- 每一“行”说明（HouseEditorInstructionTemplate）的视觉参数
     Row = {

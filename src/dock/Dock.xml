@@ -11,6 +11,7 @@
     <Script file="DockUI_Dropdown.lua"/>
     <Script file="DockUI_EntryFactory.lua"/>
     <Script file="DockUI_Collapse.lua"/>
+    <Script file="DockUI_Templates.lua"/>
     <Script file="DockPageRegistry.lua"/>
     
     <!-- 8个独立页面模块（每个分类一个） -->
@@ -20,7 +21,7 @@
     <Script file="pages/Page_DyePresets.lua"/>
     <Script file="pages/Page_AutoRotate.lua"/>
     <Script file="pages/Page_Keybinds.lua"/>
-    <Script file="pages/Page_ActionBar.lua"/>
+    <Script file="pages/Page_Quickbar.lua"/>
     <Script file="pages/Page_About.lua"/>
 
 
@@ -254,5 +255,7 @@
     <Script file="DockUI.lua"/>
     <!-- 子面板拆分为独立脚本（依赖 DockUI 暴露的共享构造） -->
     <Script file="SubPanel.lua"/>
+    <!-- Controller 层：事件监听与交互逻辑（MVC 架构） -->
+    <Script file="DockUI_Controller.lua"/>
 
 </Ui>

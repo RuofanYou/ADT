@@ -254,12 +254,18 @@ local function AttachTo(main)
                 if not (sub and sub.Content and sub.Header) then return end
                 local hasBody, _ = EvaluateContent(sub.Content, sub.Header)
                 local hasHeaderText = HeaderHasMeaningfulText(sub.Header)
+                -- 修复：在“清单悬停”场景下，内容与标题可能因官方事件高频抖动为“有/无”。
+                -- 过去这里会 Hide/Show 子面板，触发 LayoutManager 的 OnShow/OnHide 钩子，
+                -- 导致连续 RequestLayout → SubShow/SubHide 循环，从而产生视觉“弹跳”。
+                -- 新策略：子面板一旦创建后保持显示，仅通过高度 0/非 0 控制占位，
+                -- 由 LayoutManager 根据“目标高度是否>0”决定是否作为锚点参与布局，避免抖动。
                 if not hasBody and not hasHeaderText then
                     sub._ADT_DesiredHeight = 0
                     sub:SetHeight(0)
-                    if sub.IsShown and sub:IsShown() then sub:Hide() end
+                    -- 不再调用 sub:Hide()，避免触发 SubHide 重排风暴
                 else
-                    if sub.IsShown and not sub:IsShown() then sub:Show() end
+                    -- 需要显示内容：确保至少显示（若此前被外部隐藏也拉起）
+                    if sub.Show and (not sub.IsShown or not sub:IsShown()) then sub:Show() end
                 end
             end
 
@@ -400,8 +406,7 @@ local function AttachTo(main)
                 sub.Content:HookScript("OnSizeChanged", function() RequestAutoResize() end)
             end
             
-            -- 对外暴露：允许业务侧在特殊时点主动触发判空
-            ADT.DockUI.EvaluateSubPanelAutoHide = EvaluateAutoHide
+            -- 内部自管理显隐：不再对外暴露手动判空接口，避免 API 面增长导致误用。
         end
         -- 规则调整：创建即显示，避免调用方忘记显式打开导致“再入编辑模式后子面板缺失”。
         sub:Show()
@@ -538,8 +543,22 @@ do
         return GetCatalogEntryInfoByRecordID(1, decorID, true)
     end
 
-    -- 单一权威：根据当前编辑模式选用对应 API，避免“看起来能用”的跨命名空间假设。
+    -- 单一权威优先：统一通过 C_HousingDecor 读取悬停/选中信息；
+    -- 兼容：若极端情况下 C_HousingDecor 返回空，再退回到当前模式命名空间。
     local function GetActiveDecorInfo()
+        -- 1) 首选：全局 Decor 命名空间（对“官方清单鼠标悬停”更稳定）
+        if C_HousingDecor then
+            if C_HousingDecor.IsHoveringDecor and C_HousingDecor.IsHoveringDecor() then
+                local info = C_HousingDecor.GetHoveredDecorInfo and C_HousingDecor.GetHoveredDecorInfo()
+                if info then return info end
+            end
+            if C_HousingDecor.IsDecorSelected and C_HousingDecor.IsDecorSelected() then
+                local info = C_HousingDecor.GetSelectedDecorInfo and C_HousingDecor.GetSelectedDecorInfo()
+                if info then return info end
+            end
+        end
+
+        -- 2) 退而求其次：按当前模式读取
         local mode = GetActiveHouseEditorMode and GetActiveHouseEditorMode() or nil
         local api
         if mode == BasicMode then
@@ -557,17 +576,13 @@ do
         if api and api.IsHoveringDecor and api.IsHoveringDecor() then
             return api.GetHoveredDecorInfo and api.GetHoveredDecorInfo() or nil
         end
-
         if api and api.IsDecorSelected and api.IsDecorSelected() then
             return api.GetSelectedDecorInfo and api.GetSelectedDecorInfo() or nil
         end
-
-        -- 清理模式：官方 API 未提供“选中 Decor 信息”读取接口，仅提供“悬停 Decor 信息”。
-        -- 若用户在清理模式通过点击/列表产生“选中态”，这里以 C_HousingDecor 作为唯一可用的数据源。
+        -- Cleanup 退一路：仍为空则尝试 C_HousingDecor 的选中
         if mode == CleanupMode and C_HousingDecor and C_HousingDecor.IsDecorSelected and C_HousingDecor.IsDecorSelected() then
             return C_HousingDecor.GetSelectedDecorInfo and C_HousingDecor.GetSelectedDecorInfo() or nil
         end
-
         return nil
     end
     
@@ -617,17 +632,43 @@ do
     end
     
     -- 更新 Header 和 InfoLine 显示悬停的 Decor 信息
+    local lastInfo, lastNonEmptyAt, lastLeftStr, lastRightStr, lastHeaderText
+    -- 从配置读取清空防抖时间（单一权威）
+    local CLEAR_DELAY = (ADT and ADT.GetHousingCFG and ADT.GetHousingCFG() and ADT.GetHousingCFG().Layout and ADT.GetHousingCFG().Layout.subPanelClearDelaySec) or 0.15
+
+    local function IsMouseOverPlacedList()
+        local LM = ADT and ADT.HousingLayoutManager
+        local list = LM and LM.GetPlacedDecorListFrame and LM:GetPlacedDecorListFrame()
+        if list and list.IsMouseOver then
+            return list:IsMouseOver()
+        end
+        return false
+    end
+
     local function UpdateDecorHeader()
         if not IsHouseEditorActive or not IsHouseEditorActive() then return end
-        
         local line = EnsureInfoLine()
-        
+
         local info = GetActiveDecorInfo()
+        -- 防抖：若短时间内出现空值，而鼠标仍在“清单”上，则继续使用上一条非空信息，避免抖动
+        if not info and lastInfo and IsMouseOverPlacedList() then
+            info = lastInfo
+        end
+        -- 记忆非空时刻
+        if info then lastInfo, lastNonEmptyAt = info, GetTime() end
+
+        -- 若 info 仍为空，但在稳定期内（CLEAR_DELAY），则保留上次显示，不清空
+        if not info and lastNonEmptyAt and (GetTime() - lastNonEmptyAt) <= CLEAR_DELAY then
+            return -- 保持现状，不触发任何改动
+        end
 
         if not info then
-            ADT.DockUI.SetSubPanelHeaderText("")
-            if line then line:Hide() end
-            ADT.DockUI.RequestSubPanelAutoResize()
+            if lastHeaderText ~= "" then
+                ADT.DockUI.SetSubPanelHeaderText("")
+                lastHeaderText = ""
+                if line then line:Hide() end
+                ADT.DockUI.RequestSubPanelAutoResize()
+            end
             return
         end
         
@@ -639,8 +680,13 @@ do
                 displayName = "|A:BonusChest-Lock:16:16|a " .. displayName
             end
         end
-        ADT.DockUI.SetSubPanelHeaderText(displayName)
-        ADT.DockUI.SetSubPanelHeaderAlpha(1)
+        local changed = false
+        if lastHeaderText ~= displayName then
+            ADT.DockUI.SetSubPanelHeaderText(displayName)
+            ADT.DockUI.SetSubPanelHeaderAlpha(1)
+            lastHeaderText = displayName
+            changed = true
+        end
         
         -- InfoLine：显示详细信息
         if line then
@@ -667,7 +713,12 @@ do
                 and Colorize('valueGood', tostring(stored))
                 or Colorize('valueBad', tostring(stored or 0))
             
-            line.LeftText:SetText(placeC .. labelSep .. stockLbl .. colon .. stockVal)
+            local newLeft = placeC .. labelSep .. stockLbl .. colon .. stockVal
+            if lastLeftStr ~= newLeft then
+                line.LeftText:SetText(newLeft)
+                lastLeftStr = newLeft
+                changed = true
+            end
             
             -- 右侧：染色槽信息（直接显示颜色色块）
             local rightStr = ""
@@ -704,17 +755,27 @@ do
             end
             
             if rightStr ~= "" then
-                line.RightText:SetText(rightStr)
+                if lastRightStr ~= rightStr then
+                    line.RightText:SetText(rightStr)
+                    lastRightStr = rightStr
+                    changed = true
+                end
                 line.RightText:Show()
             else
-                line.RightText:SetText("")
+                if lastRightStr ~= "" then
+                    line.RightText:SetText("")
+                    lastRightStr = ""
+                    changed = true
+                end
                 line.RightText:Hide()
             end
-            
+
             line:Show()
         end
-        
-        ADT.DockUI.RequestSubPanelAutoResize()
+        -- 仅在文本变化时请求一次自适应高度
+        if changed then
+            ADT.DockUI.RequestSubPanelAutoResize()
+        end
     end
     
     -- 创建事件监听帧

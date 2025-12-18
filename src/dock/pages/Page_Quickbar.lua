@@ -1,5 +1,5 @@
--- Page_ActionBar.lua
--- 动作栏页面
+-- Page_Quickbar.lua
+-- 快捷栏设置页面
 
 local ADDON_NAME, ADT = ...
 if not ADT.IsToCVersionEqualOrNewerThan(110000) then return end
@@ -8,10 +8,10 @@ local CommandDock = ADT.CommandDock
 local Def = ADT.DockUI.Def
 local GetRightPadding = ADT.DockUI.GetRightPadding
 
-local PageActionBar = {}
+local PageQuickbar = {}
 
-function PageActionBar:Render(mainFrame, categoryKey)
-    categoryKey = categoryKey or "QuickBar"
+function PageQuickbar:Render(mainFrame, categoryKey)
+    categoryKey = categoryKey or "Quickbar"
     
     if not (mainFrame.ModuleTab and mainFrame.ModuleTab.ScrollView) then
         mainFrame.__pendingTabKey = categoryKey
@@ -106,5 +106,5 @@ function PageActionBar:Render(mainFrame, categoryKey)
     return true
 end
 
-ADT.DockPages:Register("QuickBar", PageActionBar)
-ADT.DockPages.PageActionBar = PageActionBar
+ADT.DockPages:Register("Quickbar", PageQuickbar)
+ADT.DockPages.PageQuickbar = PageQuickbar
