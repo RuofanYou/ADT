@@ -108,9 +108,6 @@ function EntryButtonMixin:OnEnter()
     local MainFrame = ADT.CommandDock and ADT.CommandDock.SettingsPanel
     if MainFrame and MainFrame.HighlightButton then MainFrame:HighlightButton(self) end
     self:UpdateVisual()
-    if not self.isChangelogButton and MainFrame then
-        MainFrame:ShowFeaturePreview(self.data, self.parentDBKey)
-    end
 end
 
 function EntryButtonMixin:OnLeave()
@@ -490,9 +487,6 @@ function DecorItemMixin:OnEnter()
     if not self.isDisabled then
         self.Highlight:Show()
         SetTextColor(self.Name, Def.TextColorHighlight)
-    end
-    if MainFrame then
-        MainFrame:ShowDecorPreview(self.itemData, self.available)
     end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:AddLine(self.Name:GetText() or "", 1, 1, 1)

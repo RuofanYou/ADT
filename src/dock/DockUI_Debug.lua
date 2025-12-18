@@ -42,11 +42,9 @@ local function traceTick()
     local focusName = focus and (focus.GetName and focus:GetName()) or tostring(focus)
     local L = MainFrame and MainFrame.LeftSlideContainer
     local H = MainFrame and MainFrame.LeftSlideHandle
-    local R = MainFrame and MainFrame.RightSection
     ADT.DebugPrint(string.format("[DockTrace] focus=%s", tostring(focusName)))
     if L then ADT.DebugPrint("[DockTrace] LeftSlide  "..FrameInfo(L)) end
     if H then ADT.DebugPrint("[DockTrace] LeftHandle "..FrameInfo(H)) end
-    if R then ADT.DebugPrint("[DockTrace] RightSect  "..FrameInfo(R)) end
 end
 
 function ADT.DockUI.SetTrace(state)

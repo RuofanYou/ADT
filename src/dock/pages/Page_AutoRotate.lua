@@ -97,10 +97,6 @@ function PageAutoRotate:Render(mainFrame, categoryKey)
 
     mainFrame.firstModuleData = (cat.modules or {})[1]
     mainFrame.ModuleTab.ScrollView:SetContent(content, false)
-    
-    if mainFrame.firstModuleData and mainFrame.ShowFeaturePreview then
-        mainFrame:ShowFeaturePreview(mainFrame.firstModuleData)
-    end
     if mainFrame.UpdateAutoWidth then mainFrame:UpdateAutoWidth() end
     
     return true

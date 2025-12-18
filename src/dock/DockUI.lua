@@ -79,9 +79,8 @@ ADT.DockUI.ComputeSideSectionWidth = ComputeSideSectionWidth
 local MainFrame = CreateFrame("Frame", nil, UIParent, "ADTSettingsPanelLayoutTemplate")
 CommandDock.SettingsPanel = MainFrame
 do
-    -- 清理废弃：仍不使用 SideTab/TabButtonContainer；
-    -- 但为兼容性保留 LeftSection/RightSection（模板已 hidden，并在此仅作为占位键读取）。
-    local frameKeys = {"LeftSection", "RightSection", "CentralSection", "ModuleTab", "ChangelogTab", "TopTabOwner"}
+    -- 提升：LeftSection/CentralSection 等布局容器仅引用模板键
+    local frameKeys = {"LeftSection", "CentralSection", "ModuleTab", "ChangelogTab", "TopTabOwner"}
     for _, key in ipairs(frameKeys) do
         MainFrame[key] = MainFrame.FrameContainer[key]
     end
@@ -521,12 +520,6 @@ do  -- Left Section
             end
         end
 
-        -- 右侧预览图尺寸与滚动区联动（中央区随锚点自动伸缩，但滚动条需手动刷新）
-        local previewSize = math.max(64, sideWidth - 2*Def.ButtonSize)
-        if self.FeaturePreview and self.FeaturePreview.SetSize then
-            self.FeaturePreview:SetSize(previewSize, previewSize)
-        end
-
         self:_SyncCentralTemplateWidths(true)
     end
 
@@ -573,38 +566,7 @@ do  -- Left Section
 end
 
 
-do  -- Right Section (已移除，保留函数但添加空检查)
-    function MainFrame:ShowFeaturePreview(moduleData, parentDBKey)
-        -- 仅更新预览贴图；已移除说明文字
-        if not self.FeaturePreview then return end
-        if not moduleData then return end
-        local desc = moduleData.description
-        local additonalDesc = moduleData.descriptionFunc and moduleData.descriptionFunc() or nil
-        if additonalDesc then
-            if desc then
-                desc = desc.."\n\n"..additonalDesc
-            else
-                desc = additonalDesc
-            end
-        end
-        self.FeaturePreview:SetTexture("Interface/AddOns/AdvancedDecorationTools/Art/CommandDock/Preview_"..(parentDBKey or moduleData.dbKey))
-    end
-
-    -- 显示装饰项预览（右侧预览区已移除，函数保留但不执行任何操作）
-    function MainFrame:ShowDecorPreview(itemData, available)
-        -- 仅更新预览贴图
-        if not self.FeaturePreview then return end
-        if not itemData then return end
-        -- 设置预览图标
-        local icon = itemData.icon or 134400
-        local entryInfo = C_HousingCatalog and C_HousingCatalog.GetCatalogEntryInfoByRecordID
-            and C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, itemData.decorID, true)
-        if entryInfo and entryInfo.iconTexture then
-            icon = entryInfo.iconTexture
-        end
-        self.FeaturePreview:SetTexture(icon)
-    end
-end
+-- 右侧预览区已完全移除（原 Right Section）
 
 
 do  -- Search
@@ -748,10 +710,6 @@ do  -- Central
 
         local retainPosition = true
         self.ModuleTab.ScrollView:SetContent(content, retainPosition)
-
-        if self.firstModuleData then
-            self:ShowFeaturePreview(self.firstModuleData)
-        end
         if self.UpdateAutoWidth then self:UpdateAutoWidth() end
     end
 
@@ -819,9 +777,6 @@ local function CreateUI()
     -- 紧凑布局：左侧宽度按“分类文本宽度”动态计算
     local sideSectionWidth = ComputeSideSectionWidth()
     MainFrame.sideSectionWidth = sideSectionWidth
-    -- 右侧仅保留预览，默认更窄；后续在 UpdateAutoWidth 中会按可用空间动态压缩/放宽
-    local rightSectionWidth = math.min(sideSectionWidth, 160)
-    MainFrame.rightSectionWidth = rightSectionWidth
     local centralSectionWidth = 340  -- 中间：图标 + 长装饰名称(如"小型锯齿奥格瑞玛栅栏") + 数量
 
     -- KISS：Dock 主体只包裹“右侧内容区”，不再把左侧/右侧栏并入自身宽度，
@@ -886,15 +841,6 @@ local function CreateUI()
             MainFrame.LeftSection:ClearAllPoints()
             -- 左侧分类容器顶对 Header 底部，高度稍后按内容动态设置
             MainFrame.LeftSection:SetPoint("TOPLEFT", MainFrame, "TOPLEFT", 0, -headerHeight)
-        end
-
-        if MainFrame.RightSection then
-            -- 右侧面板已废弃：保持隐藏且不参与布局
-            MainFrame.RightSection:Hide()
-            MainFrame.RightSection:ClearAllPoints()
-            MainFrame.RightSection:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
-            MainFrame.RightSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
-            MainFrame.RightSection:SetWidth(0)
         end
 
         -- 根因治理：移除“右侧鼠标阻挡层”。
@@ -1128,7 +1074,6 @@ local function CreateUI()
 
     local LeftSection = MainFrame.LeftSection
     local CentralSection = MainFrame.CentralSection
-    local RightSection = MainFrame.RightSection
     local Tab1 = MainFrame.ModuleTab
 
     -- 顶部标签布局：模板 LeftSection 仅用于提供锚点；
@@ -1137,15 +1082,6 @@ local function CreateUI()
         LeftSection:SetWidth(sideSectionWidth)
         if LeftSection.EnableMouse then LeftSection:EnableMouse(false) end
         if LeftSection.EnableMouseMotion then LeftSection:EnableMouseMotion(false) end
-    end
-    
-    -- 移除整个右侧区域：不再占据任何宽度，也不创建任何子内容
-    if RightSection then
-        RightSection:Hide()
-        RightSection:SetWidth(0)
-        RightSection:ClearAllPoints()
-        RightSection:SetPoint("TOPRIGHT", MainFrame, "TOPRIGHT", 0, 0)
-        RightSection:SetPoint("BOTTOMRIGHT", MainFrame, "BOTTOMRIGHT", 0, 0)
     end
 
     -- CentralSection：顶部必须“紧贴 Header 底部”作为锚点，
@@ -1212,14 +1148,13 @@ local function CreateUI()
         ScrollView:SetNoContentAlertText(CATALOG_SHOP_NO_SEARCH_RESULTS or "")
 
 
-        -- 初始右侧可用宽度，随着窗口缩放动态更新
+        -- 初始中央区域可用宽度，随着窗口缩放动态更新
         local function ComputeCenterWidth()
             local w = tonumber(CentralSection:GetWidth()) or 0
             if w <= 0 then
                 local total = tonumber(MainFrame:GetWidth()) or 0
                 local leftw = tonumber(MainFrame.sideSectionWidth) or 0
-                local rightw = tonumber(MainFrame.rightSectionWidth) or leftw
-                w = math.max(0, total - leftw - rightw)
+                w = math.max(0, total - leftw)
             end
             -- 不在此处扣除外层 margin，避免与模板自身内边距叠加导致有效文本宽度过窄。
             w = API.Round(w)
