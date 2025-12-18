@@ -11,6 +11,18 @@
     <Script file="DockUI_Dropdown.lua"/>
     <Script file="DockUI_EntryFactory.lua"/>
     <Script file="DockUI_Collapse.lua"/>
+    <Script file="DockPageRegistry.lua"/>
+    
+    <!-- 8个独立页面模块（每个分类一个） -->
+    <Script file="pages/Page_General.lua"/>
+    <Script file="pages/Page_Clipboard.lua"/>
+    <Script file="pages/Page_Recent.lua"/>
+    <Script file="pages/Page_DyePresets.lua"/>
+    <Script file="pages/Page_AutoRotate.lua"/>
+    <Script file="pages/Page_Keybinds.lua"/>
+    <Script file="pages/Page_ActionBar.lua"/>
+    <Script file="pages/Page_About.lua"/>
+
 
 
     <Frame name="ADTSettingsPanelLayoutTemplate" hidden="true" virtual="true">
@@ -224,7 +236,7 @@
         </Layers>
     </Frame>
 
-    <!-- 已迁移为自研 ListView（不使用参考插件的滚动条/滚动视图实现） -->
+
 
     <Button name="ADTTabButtonTemplate" virtual="true">
         <Size x="100" y="40"/>
