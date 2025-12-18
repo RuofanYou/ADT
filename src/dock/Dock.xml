@@ -3,6 +3,15 @@
     <Script file="DockList.lua"/>
     <!-- 左侧面板剥离为独立脚本，需在 DockUI 之前加载 -->
     <Script file="LeftPanel.lua"/>
+    
+    <!-- DockUI 子模块（按依赖顺序加载） -->
+    <Script file="DockUI_Def.lua"/>
+    <Script file="DockUI_Debug.lua"/>
+    <Script file="DockUI_Highlight.lua"/>
+    <Script file="DockUI_Dropdown.lua"/>
+    <Script file="DockUI_EntryFactory.lua"/>
+    <Script file="DockUI_Collapse.lua"/>
+
 
     <Frame name="ADTSettingsPanelLayoutTemplate" hidden="true" virtual="true">
         <Size x="128" y="128"/>
