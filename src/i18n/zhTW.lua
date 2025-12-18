@@ -271,8 +271,3 @@ ADT.Locales.zhTW = {
     ["Hotkey Paste Dye"] = "貼上染料",
     ["Click"] = "點擊",
 }
-    ["SC DyePresets"] = "染色預設",
-    ["Save Current Dye"] = "保存目前染色",
-    ["Hotkey Copy Dye"] = "複製染料",
-    ["Hotkey Paste Dye"] = "貼上染料",
-    ["Click"] = "點擊",
