@@ -128,6 +128,7 @@ ADT.Locales.ruRU = {
     ["Indoor"] = "В помещении",
     ["Outdoor"] = "На улице",
     ["Indoor & Outdoor"] = "Внутр./Наруж.",
+    ["Cannot place indoor-only decor outdoors"] = "Невозможно разместить внутренний декор снаружи",
     ["Stock"] = "В наличии",
     ["Category Colon"] = "Категория: ",
 

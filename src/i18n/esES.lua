@@ -123,6 +123,7 @@ ADT.Locales.esES = {
     ["Indoor"] = "Interior",
     ["Outdoor"] = "Exterior",
     ["Indoor & Outdoor"] = "Int./Ext.",
+    ["Cannot place indoor-only decor outdoors"] = "No se puede colocar decoración de interior en el exterior",
     ["Stock"] = "Stock",
     ["Category Colon"] = "Categoría: ",
 

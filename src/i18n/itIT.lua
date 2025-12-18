@@ -128,6 +128,7 @@ ADT.Locales.itIT = {
     ["Indoor"] = "Interno",
     ["Outdoor"] = "Esterno",
     ["Indoor & Outdoor"] = "Int./Est.",
+    ["Cannot place indoor-only decor outdoors"] = "Impossibile posizionare decorazioni da interni all'esterno",
     ["Stock"] = "Scorta",
     ["Category Colon"] = "Categoria: ",
 

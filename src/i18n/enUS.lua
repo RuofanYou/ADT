@@ -132,6 +132,7 @@ ADT.Locales.enUS = {
     ["Indoor"] = "Indoor",
     ["Outdoor"] = "Outdoor",
     ["Indoor & Outdoor"] = "In/Outdoor",
+    ["Cannot place indoor-only decor outdoors"] = "Cannot place indoor-only decor outdoors",
     ["Stock"] = "Stock",
     ["Category Colon"] = "Category: ",
     

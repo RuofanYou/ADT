@@ -59,42 +59,40 @@ function History:Clear()
     end
 end
 
--- 从历史：进入“悬停放置”状态（不立即落地）。
+-- 从历史：进入"悬停放置"状态（不立即落地）。
+-- 重构：统一使用 ADT.Housing:StartPlacingByRecordID 单一权威入口，
+-- 该入口已包含室内/室外限制检查。
 function History:StartPlacing(decorID)
     if not decorID then return false end
-    local entryInfo = C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, decorID, true)
-    if not entryInfo or not entryInfo.entryID then
-        if ADT and ADT.Notify then ADT.Notify(L["Cannot Place Decor"], 'error') end
+    if not (C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive()) then
+        if ADT and ADT.Notify then ADT.Notify(ADT.L["Enter editor then choose history"], 'info') end
         return false
     end
     -- 关键点：延后一小段时间再开始放置，避免与点击列表同一鼠标事件重叠，
-    -- 导致客户端把这次点击当作“确认落地”。
+    -- 导致客户端把这次点击当作"确认落地"。
     C_Timer.After(0.05, function()
-        if C_HouseEditor and C_HouseEditor.IsHouseEditorActive and C_HouseEditor.IsHouseEditorActive() then
-            C_HousingBasicMode.StartPlacingNewDecor(entryInfo.entryID)
-        else
-            if ADT and ADT.Notify then ADT.Notify(ADT.L["Enter editor then choose history"], 'info') end
+        if ADT.Housing and ADT.Housing.StartPlacingByRecordID then
+            ADT.Housing:StartPlacingByRecordID(decorID)
         end
     end)
     return true
 end
 
 -- 从历史：快速落地（保留该能力，后续可能做成高级选项/快捷操作）。
+-- 重构：统一使用 ADT.Housing:StartPlacingByRecordID 单一权威入口。
 function History:QuickPlaceAtCursor(decorID)
     if not decorID then return false end
-    local entryInfo = C_HousingCatalog.GetCatalogEntryInfoByRecordID(1, decorID, true)
-    if not entryInfo or not entryInfo.entryID then
-        if ADT and ADT.Notify then ADT.Notify(L["Cannot Place Decor"], 'error') end
-        return false
-    end
+    if not (ADT.Housing and ADT.Housing.StartPlacingByRecordID) then return false end
     -- 进入放置后，下一帧尝试直接确认（如果客户端支持）。
-    C_HousingBasicMode.StartPlacingNewDecor(entryInfo.entryID)
-    C_Timer.After(0, function()
-        if C_HousingBasicMode.FinishPlacingNewDecor then
-            pcall(C_HousingBasicMode.FinishPlacingNewDecor)
-        end
-    end)
-    return true
+    local ok = ADT.Housing:StartPlacingByRecordID(decorID)
+    if ok then
+        C_Timer.After(0, function()
+            if C_HousingBasicMode.FinishPlacingNewDecor then
+                pcall(C_HousingBasicMode.FinishPlacingNewDecor)
+            end
+        end)
+    end
+    return ok
 end
 
 -- 安全地从 entryID 表获取装饰信息并记录

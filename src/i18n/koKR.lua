@@ -128,6 +128,7 @@ ADT.Locales.koKR = {
     ["Indoor"] = "실내",
     ["Outdoor"] = "실외",
     ["Indoor & Outdoor"] = "실내/실외",
+    ["Cannot place indoor-only decor outdoors"] = "실내 전용 장식은 실외에 배치할 수 없습니다",
     ["Stock"] = "재고",
     ["Category Colon"] = "분류: ",
 

@@ -128,6 +128,7 @@ ADT.Locales.frFR = {
     ["Indoor"] = "Intérieur",
     ["Outdoor"] = "Extérieur",
     ["Indoor & Outdoor"] = "Int./Ext.",
+    ["Cannot place indoor-only decor outdoors"] = "Impossible de placer une décoration d'intérieur à l'extérieur",
     ["Stock"] = "Stock",
     ["Category Colon"] = "Catégorie : ",
 

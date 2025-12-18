@@ -29,6 +29,19 @@ function EL:StartPlacingByRecordID(recordID)
     local entryInfo = GetCatalogDecorInfo(recordID)
     if not entryInfo or not entryInfo.entryID then return false end
 
+    -- 室内/室外限制检查（单一权威）
+    local isPlayerIndoors = C_Housing and C_Housing.IsInsideHouse and C_Housing.IsInsideHouse()
+    local decorAllowsIndoors = entryInfo.isAllowedIndoors
+    local decorAllowsOutdoors = entryInfo.isAllowedOutdoors
+    
+    -- 玩家在室外，但装饰仅允许室内
+    if not isPlayerIndoors and decorAllowsIndoors and not decorAllowsOutdoors then
+        if ADT and ADT.Notify then
+            ADT.Notify(L["Cannot place indoor-only decor outdoors"], "warning")
+        end
+        return false
+    end
+
     local decorPlaced = C_HousingDecor.GetSpentPlacementBudget()
     local maxDecor = C_HousingDecor.GetMaxPlacementBudget()
     local hasMaxDecor = C_HousingDecor.HasMaxPlacementBudget()
@@ -38,6 +51,7 @@ function EL:StartPlacingByRecordID(recordID)
     C_HousingBasicMode.StartPlacingNewDecor(entryInfo.entryID)
     return true
 end
+
 
 --
 -- 简易剪切板（仅当前会话，单一权威）
@@ -682,23 +696,20 @@ do
 
     -- StartPlacingByRecordID 提升为顶层函数，避免局部作用域问题
 
+    -- 重构：TryDuplicateItem 使用单一权威入口，确保室内外限制生效
     function EL:TryDuplicateItem()
         if not self.dupeEnabled then return end
         if not IsHouseEditorActive() then return end
         if IsDecorSelected() then return end
 
-        local entryID = self:GetHoveredDecorEntryID()
-        if not entryID then return end
+        -- 获取悬停装饰的 recordID（而非 entryID），使用 StartPlacingByRecordID 单一权威
+        local recordID, _, _ = self:GetHoveredDecorRecordIDAndName()
+        if not recordID then return end
 
-        local decorPlaced = C_HousingDecor.GetSpentPlacementBudget()
-        local maxDecor = C_HousingDecor.GetMaxPlacementBudget()
-        local hasMaxDecor = C_HousingDecor.HasMaxPlacementBudget()
-        if hasMaxDecor and decorPlaced >= maxDecor then
-            return
-        end
-
-        C_HousingBasicMode.StartPlacingNewDecor(entryID)
+        -- 预算检查已在 StartPlacingByRecordID 中处理，室内外限制也已含其中
+        self:StartPlacingByRecordID(recordID)
     end
+
 
     function EL:OnEditorModeChanged()
         -- 保留扩展点

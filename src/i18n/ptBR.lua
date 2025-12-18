@@ -128,6 +128,7 @@ ADT.Locales.ptBR = {
     ["Indoor"] = "Interno",
     ["Outdoor"] = "Externo",
     ["Indoor & Outdoor"] = "Int./Ext.",
+    ["Cannot place indoor-only decor outdoors"] = "Não é possível colocar decoração de interior no exterior",
     ["Stock"] = "Estoque",
     ["Category Colon"] = "Categoria: ",
 

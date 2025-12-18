@@ -124,6 +124,7 @@ ADT.Locales.deDE = {
     ["Indoor"] = "Innen",
     ["Outdoor"] = "Außen",
     ["Indoor & Outdoor"] = "Innen/Außen",
+    ["Cannot place indoor-only decor outdoors"] = "Innendekoration kann nicht draußen platziert werden",
     ["Stock"] = "Vorrat",
     ["Category Colon"] = "Kategorie: ",
 

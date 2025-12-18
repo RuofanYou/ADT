@@ -135,6 +135,7 @@ ADT.Locales.zhCN = {
     ["Indoor"] = "室内",
     ["Outdoor"] = "室外",
     ["Indoor & Outdoor"] = "室内/外",
+    ["Cannot place indoor-only decor outdoors"] = "室内装饰无法在室外放置",
     ["Stock"] = "库存",
     ["Category Colon"] = "分类：",
 
