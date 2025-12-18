@@ -326,6 +326,25 @@ local CFG = {
             colorZero   = { r = 1, g = 0.3, b = 0.3, a = 1 },
         },
     },
+
+    -- DockUI 边框装饰（木框九宫格 + 藤蔓角落装饰）视觉参数（配置驱动，单一权威）
+    DockBorder = {
+        -- 主体木框（housing-wood-frame 九宫格）
+        WoodFrame = {
+            atlas = "housing-wood-frame",
+            sliceMargins = 16,  -- 九宫格边距（四边统一）
+        },
+        -- 四个角落藤蔓装饰（housing-dashboard-filigree-corner-*）
+        -- 基础尺寸（素材原始尺寸约为 54×42 / 66×50）
+        CornerBaseSize = { width = 54, height = 42 },
+        -- 缩放系数：1.0 = 原始大小，1.5 = 放大 50%，0.8 = 缩小 20%
+        CornerScale = 1.2,
+        -- 各角落偏移（相对 BorderFrame 边缘）
+        CornerTL = { x = -4, y = 2 },   -- 左上角
+        CornerTR = { x = 4, y = 2 },    -- 右上角
+        CornerBL = { x = -4, y = -6 },  -- 左下角
+        CornerBR = { x = 4, y = -6 },   -- 右下角
+    },
 }
 
 -- 导出为全局唯一权威

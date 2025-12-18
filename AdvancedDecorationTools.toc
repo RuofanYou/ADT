@@ -6,7 +6,7 @@
 ## Category-zhCN: 住宅增强
 ## IconTexture: Interface\AddOns\AdvancedDecorationTools\ADTicon.png
 ## Author: 瑟瑟
-## Version: 251218.39
+## Version: 251219.10
 ## SavedVariables: ADT_DB
 ## Bindings: Bindings.xml
 
@@ -18,5 +18,6 @@ src/core/scroll.lua
 src/core/ui.lua
 bindings/Bindings.lua
 src/i18n/Localization.xml
+src/features/housing/Housing_Config.lua
 src/dock/Dock.xml
 src/features/housing/index.xml

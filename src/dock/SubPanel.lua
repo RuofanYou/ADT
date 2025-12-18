@@ -43,15 +43,55 @@ local function AttachTo(main)
         borderFrame:SetFrameLevel(sub:GetFrameLevel() + 100)
         sub.BorderFrame = borderFrame
 
-        -- 与 DockUI 主框体保持一致：边框严格贴合容器，不做 ±4 像素外扩，
-        -- 以免视觉上比右侧面板“略宽”。
-        local border = borderFrame:CreateTexture(nil, "OVERLAY")
-        border:SetPoint("TOPLEFT", borderFrame, "TOPLEFT", 0, 0)
-        border:SetPoint("BOTTOMRIGHT", borderFrame, "BOTTOMRIGHT", 0, 0)
-        border:SetAtlas("housing-wood-frame")
-        border:SetTextureSliceMargins(16, 16, 16, 16)
-        border:SetTextureSliceMode(Enum.UITextureSliceMode.Stretched)
-        borderFrame.WoodFrame = border
+        -- 与 DockUI 主框体保持一致（统一配置驱动）
+        -- 从统一配置读取边框参数（与 DockUI 共用 DockBorder）
+        local BCFG = (ADT.HousingInstrCFG and ADT.HousingInstrCFG.DockBorder) or {}
+        local wfCfg = BCFG.WoodFrame or {}
+        local cornerBase = BCFG.CornerBaseSize or { width = 54, height = 42 }
+        local cornerScale = BCFG.CornerScale or 1.2
+        local tlOff = BCFG.CornerTL or { x = -4, y = 2 }
+        local trOff = BCFG.CornerTR or { x = 4, y = 2 }
+        local blOff = BCFG.CornerBL or { x = -4, y = -6 }
+        local brOff = BCFG.CornerBR or { x = 4, y = -6 }
+
+        -- 主体：housing-wood-frame 九宫格边框（BORDER 层）
+        local woodFrame = borderFrame:CreateTexture(nil, "BORDER")
+        woodFrame:SetPoint("TOPLEFT", borderFrame, "TOPLEFT", 0, 0)
+        woodFrame:SetPoint("BOTTOMRIGHT", borderFrame, "BOTTOMRIGHT", 0, 0)
+        woodFrame:SetAtlas(wfCfg.atlas or "housing-wood-frame")
+        local margins = wfCfg.sliceMargins or 16
+        woodFrame:SetTextureSliceMargins(margins, margins, margins, margins)
+        woodFrame:SetTextureSliceMode(Enum.UITextureSliceMode.Stretched)
+        borderFrame.WoodFrame = woodFrame
+
+        -- 四个角落藤蔓装饰（ARTWORK 层，覆盖木框角落）
+        local cw = API.Round(cornerBase.width * cornerScale)
+        local ch = API.Round(cornerBase.height * cornerScale)
+
+        local cornerTL = borderFrame:CreateTexture(nil, "ARTWORK")
+        cornerTL:SetAtlas("housing-dashboard-filigree-corner-TL")
+        cornerTL:SetSize(cw, ch)
+        cornerTL:SetPoint("TOPLEFT", borderFrame, "TOPLEFT", tlOff.x, tlOff.y)
+        borderFrame.CornerTL = cornerTL
+
+        local cornerTR = borderFrame:CreateTexture(nil, "ARTWORK")
+        cornerTR:SetAtlas("housing-dashboard-filigree-corner-TR")
+        cornerTR:SetSize(cw, ch)
+        cornerTR:SetPoint("TOPRIGHT", borderFrame, "TOPRIGHT", trOff.x, trOff.y)
+        borderFrame.CornerTR = cornerTR
+
+        local cornerBL = borderFrame:CreateTexture(nil, "ARTWORK")
+        cornerBL:SetAtlas("housing-dashboard-filigree-corner-BL")
+        cornerBL:SetSize(cw, ch)
+        cornerBL:SetPoint("BOTTOMLEFT", borderFrame, "BOTTOMLEFT", blOff.x, blOff.y)
+        borderFrame.CornerBL = cornerBL
+
+        local cornerBR = borderFrame:CreateTexture(nil, "ARTWORK")
+        cornerBR:SetAtlas("housing-dashboard-filigree-corner-BR")
+        cornerBR:SetSize(cw, ch)
+        cornerBR:SetPoint("BOTTOMRIGHT", borderFrame, "BOTTOMRIGHT", brOff.x, brOff.y)
+        borderFrame.CornerBR = cornerBR
+
 
         local bg = sub:CreateTexture(nil, "BACKGROUND")
         bg:SetAtlas("housing-basic-panel-background")

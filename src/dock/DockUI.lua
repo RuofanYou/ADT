@@ -95,15 +95,59 @@ do
     MainFrame.BorderFrame = BorderFrame
     BorderFrame:EnableMouse(false) -- 仅视觉，不拦截鼠标
     
-    -- 使用 housing-wood-frame Atlas 九宫格边框
-    local border = BorderFrame:CreateTexture(nil, "OVERLAY")
-    -- 让右侧边框严格贴合自身容器，避免“向左溢出”覆盖左窗
-    border:SetPoint("TOPLEFT", BorderFrame, "TOPLEFT", 0, 0)
-    border:SetPoint("BOTTOMRIGHT", BorderFrame, "BOTTOMRIGHT", 0, 0)
-    border:SetAtlas("housing-wood-frame")
-    border:SetTextureSliceMargins(16, 16, 16, 16)
-    border:SetTextureSliceMode(Enum.UITextureSliceMode.Stretched)
-    BorderFrame.WoodFrame = border
+    -- 使用 Housing 风格边框（木框九宫格 + 藤蔓角落装饰）
+    -- 配置驱动：从 Housing_Config.lua 的 DockBorder 读取参数
+    -- 注意：BorderFrame 层级很高(+100)，不能在此放背景
+    local BCFG = (ADT.HousingInstrCFG and ADT.HousingInstrCFG.DockBorder) or {}
+    local wfCfg = BCFG.WoodFrame or {}
+    local cornerBase = BCFG.CornerBaseSize or { width = 54, height = 42 }
+    local cornerScale = BCFG.CornerScale or 1.2
+    local tlOff = BCFG.CornerTL or { x = -4, y = 2 }
+    local trOff = BCFG.CornerTR or { x = 4, y = 2 }
+    local blOff = BCFG.CornerBL or { x = -4, y = -2 }
+    local brOff = BCFG.CornerBR or { x = 4, y = -2 }
+    
+    -- 主体：housing-wood-frame 九宫格边框（BORDER 层）
+    local woodFrame = BorderFrame:CreateTexture(nil, "BORDER")
+    woodFrame:SetPoint("TOPLEFT", BorderFrame, "TOPLEFT", 0, 0)
+    woodFrame:SetPoint("BOTTOMRIGHT", BorderFrame, "BOTTOMRIGHT", 0, 0)
+    woodFrame:SetAtlas(wfCfg.atlas or "housing-wood-frame")
+    local margins = wfCfg.sliceMargins or 16
+    woodFrame:SetTextureSliceMargins(margins, margins, margins, margins)
+    woodFrame:SetTextureSliceMode(Enum.UITextureSliceMode.Stretched)
+    BorderFrame.WoodFrame = woodFrame
+
+    -- 四个角落藤蔓装饰（ARTWORK 层，覆盖木框角落）
+    local cw = API.Round(cornerBase.width * cornerScale)
+    local ch = API.Round(cornerBase.height * cornerScale)
+    
+    -- 左上角 TL
+    local cornerTL = BorderFrame:CreateTexture(nil, "ARTWORK")
+    cornerTL:SetAtlas("housing-dashboard-filigree-corner-TL")
+    cornerTL:SetSize(cw, ch)
+    cornerTL:SetPoint("TOPLEFT", BorderFrame, "TOPLEFT", tlOff.x, tlOff.y)
+    BorderFrame.CornerTL = cornerTL
+
+    -- 右上角 TR
+    local cornerTR = BorderFrame:CreateTexture(nil, "ARTWORK")
+    cornerTR:SetAtlas("housing-dashboard-filigree-corner-TR")
+    cornerTR:SetSize(cw, ch)
+    cornerTR:SetPoint("TOPRIGHT", BorderFrame, "TOPRIGHT", trOff.x, trOff.y)
+    BorderFrame.CornerTR = cornerTR
+
+    -- 左下角 BL
+    local cornerBL = BorderFrame:CreateTexture(nil, "ARTWORK")
+    cornerBL:SetAtlas("housing-dashboard-filigree-corner-BL")
+    cornerBL:SetSize(cw, ch)
+    cornerBL:SetPoint("BOTTOMLEFT", BorderFrame, "BOTTOMLEFT", blOff.x, blOff.y)
+    BorderFrame.CornerBL = cornerBL
+
+    -- 右下角 BR
+    local cornerBR = BorderFrame:CreateTexture(nil, "ARTWORK")
+    cornerBR:SetAtlas("housing-dashboard-filigree-corner-BR")
+    cornerBR:SetSize(cw, ch)
+    cornerBR:SetPoint("BOTTOMRIGHT", BorderFrame, "BOTTOMRIGHT", brOff.x, brOff.y)
+    BorderFrame.CornerBR = cornerBR
 
     -- 使用标准暴雪关闭按钮（与 housing 边框协调）
     local CloseButton = CreateFrame("Button", nil, BorderFrame, "UIPanelCloseButton")
