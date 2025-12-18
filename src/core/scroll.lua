@@ -8,9 +8,9 @@ ADT = ADT or {}
 ADT.Scroll = ADT.Scroll or {}
 local Scroll = ADT.Scroll
 
--- 可调参数（手感收敛到参考实现）
+
 local TUNING = {
-    blend = 0.15,     -- DeltaLerp 收敛速率（与参考一致）
+    blend = 0.15,     -- DeltaLerp 收敛速率
     tick = 1/30,      -- 视图更新节流（约 30 FPS 渲染更新）
 }
 
@@ -185,7 +185,7 @@ function Scroll.AttachListView(view)
     view:EnableMouseWheel(true)
     view:SetScript('OnMouseWheel', function(self, delta)
         if not delta or delta == 0 then return end
-        -- 到边界时阻断无效滚动（与参考一致）
+        -- 到边界时阻断无效滚动
         if (delta > 0 and scroller.t <= 0) or (delta < 0 and scroller.t >= (view._range or 0)) then
             return
         end

@@ -808,8 +808,7 @@ function IsHouseEditorShown()
 end
 
 local function AdoptInstructionsIntoDock()
-    -- KISS 重构：不再劫持暴雪 Instructions 容器
-    -- 仅将 HoverHUD 挂到当前模式的 Instructions 容器中（参考 Plumber 实现）
+
     
     local active = GetActiveModeFrame()
     local instr = active and active.Instructions

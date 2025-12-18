@@ -1,7 +1,7 @@
 -- Keybinds.lua
 -- ADT 自定义快捷键核心模块
 -- 使用 SetOverrideBindingClick 实现动态快捷键绑定
--- 参考自 JST 插件的 UpdateFocusBindingClick 实现模式
+
 
 local ADDON_NAME, ADT = ...
 

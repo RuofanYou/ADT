@@ -207,7 +207,6 @@ function DockLeft.Build(MainFrame, sideSectionWidth)
     LeftSlide:EnableMouseMotion(true)
     LeftSlide:Show()
 
-    -- 恢复旧版正确皮肤（参考你提供的版本）：
     -- The War Within 卡片风格：ui-frame-thewarwithin-cardparchmentwider
     local container = LeftSlide:CreateTexture(nil, "ARTWORK")
     MainFrame.LeftPanelContainer = container

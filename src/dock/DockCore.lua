@@ -159,7 +159,6 @@ function ADT.UI.PlaySoundCue(key)
     if PlaySound then pcall(PlaySound, kit) end
 end
 
--- API.CreateObjectPool：重新实现为最简对象池（与参考插件无关的独立实现）
 function API.CreateObjectPool(createFunc, onAcquire, onRelease)
     local pool = {}
     local free, used = {}, {}

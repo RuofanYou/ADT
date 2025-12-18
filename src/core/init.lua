@@ -8,7 +8,7 @@ ADT.L = ADT.L or {}
 ADT.API = ADT.API or {}
 local API = ADT.API
 
--- 帧率无关的线性缓动：将 a 按给定速率 amount 向 b 逼近（与参考手感保持一致）
+
 function API.DeltaLerp(a, b, amount, dt)
     local t = (amount or 0.15) * (dt or 0) * 60
     if t < 0 then t = 0 elseif t > 1 then t = 1 end

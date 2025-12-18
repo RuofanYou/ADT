@@ -192,7 +192,6 @@ function UI:CreateSlot(parent, slotIndex)
     slot:SetScript("OnClick", function(self, button)
         if button == "LeftButton" then
             -- 延迟执行，避免鼠标点击被游戏解读为"放置"命令
-            -- 参考 DreamHouse: C_Timer.After(0.1, ...) 后再调用 StartPlacingNewDecor
             C_Timer.After(0.1, function()
                 if ADT.Quickbar then ADT.Quickbar:OnQuickbarKeyPressed(self.slotIndex) end
             end)

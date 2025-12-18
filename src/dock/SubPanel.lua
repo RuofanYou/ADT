@@ -55,7 +55,7 @@ local function AttachTo(main)
 
         local bg = sub:CreateTexture(nil, "BACKGROUND")
         bg:SetAtlas("housing-basic-panel-background")
-        -- 背景也与 DockUI 右侧区域的 inset 规则保持一致（参考 DockUI.Def）。
+        -- 背景也与 DockUI 右侧区域的 inset 规则保持一致。
         local rightInset = (Def.RightBGInsetRight ~= nil) and Def.RightBGInsetRight or -2
         local bottomInset = (Def.CenterBGInsetBottom ~= nil) and Def.CenterBGInsetBottom or 2
         bg:SetPoint("TOPLEFT", sub, "TOPLEFT", 0, 0)
