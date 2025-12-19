@@ -128,37 +128,10 @@ function EntryButtonMixin:OnClick(button)
     local MainFrame = ADT.CommandDock and ADT.CommandDock.SettingsPanel
     if self.dbKey and self.data then
         if self.data.type == 'dropdown' then
-            MenuUtil.CreateContextMenu(self, function(owner, root)
-                if self.data.dropdownBuilder then
-                    self.data.dropdownBuilder(owner, root)
-                else
-                    if not self.data.options then return end
-                    local function IsSelected(value)
-                        return ADT.GetDBValue(self.dbKey) == value
-                    end
-                    local function SetSelected(value)
-                        ADT.SetDBValue(self.dbKey, value, true)
-                        if self.data.toggleFunc then
-                            self.data.toggleFunc(value)
-                        end
-                        self:UpdateDropdownLabel()
-                        if MainFrame and MainFrame.UpdateSettingsEntries then
-                            MainFrame:UpdateSettingsEntries()
-                        end
-                        return MenuResponse.Close
-                    end
-                    for _, opt in ipairs(self.data.options) do
-                        if opt and opt.action == 'button' and opt.onClick then
-                            root:CreateButton(opt.text, function()
-                                opt.onClick()
-                                return MenuResponse.Close
-                            end)
-                        else
-                            root:CreateRadio(opt.text, IsSelected, SetSelected, opt.value)
-                        end
-                    end
-                end
-            end)
+            -- 使用统一下拉菜单模块（单一权威）
+            local options = self.data.options or {}
+            local toggleFunc = self.data.toggleFunc
+            ADT.DockUI.DropdownMenu:ShowMenu(self, options, self.dbKey, toggleFunc)
             return
         else
             local newState = not GetDBBool(self.dbKey)

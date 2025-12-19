@@ -170,23 +170,42 @@ do
         for i, opt in ipairs(options) do
             local item = self:AcquireItem()
             item:SetText(opt.text)
-            item:SetSelected(currentValue == opt.value)
-            item:SetPoint("TOPLEFT", self, "TOPLEFT", PADDING, -PADDING - (i - 1) * ITEM_HEIGHT)
             
-            item.onClickFunc = function()
-                ADT.SetDBValue(dbKey, opt.value, true)
-                if toggleFunc then
-                    toggleFunc(opt.value)
+            -- 支持 action='button' 类型（如"自定义..."按钮）
+            if opt.action == 'button' and opt.onClick then
+                -- 按钮类型：隐藏 Radio/Check，点击执行 onClick
+                if item.Radio then item.Radio:Hide() end
+                if item.Check then item.Check:Hide() end
+                item.Text:ClearAllPoints()
+                item.Text:SetPoint("LEFT", item, "LEFT", 8, 0)
+                item.Text:SetPoint("RIGHT", item, "RIGHT", -4, 0)
+                item:SetSelected(false)
+                item.onClickFunc = function()
+                    opt.onClick()
                 end
-                if owner.UpdateDropdownLabel then
-                    owner:UpdateDropdownLabel()
-                end
-                local MainFrame = ADT.CommandDock and ADT.CommandDock.SettingsPanel
-                if MainFrame and MainFrame.UpdateSettingsEntries then
-                    MainFrame:UpdateSettingsEntries()
+            else
+                -- 普通选项类型
+                if item.Radio then item.Radio:Show() end
+                item.Text:ClearAllPoints()
+                item.Text:SetPoint("LEFT", item.Radio, "RIGHT", 4, 0)
+                item.Text:SetPoint("RIGHT", item, "RIGHT", -4, 0)
+                item:SetSelected(currentValue == opt.value)
+                item.onClickFunc = function()
+                    ADT.SetDBValue(dbKey, opt.value, true)
+                    if toggleFunc then
+                        toggleFunc(opt.value)
+                    end
+                    if owner.UpdateDropdownLabel then
+                        owner:UpdateDropdownLabel()
+                    end
+                    local MainFrame = ADT.CommandDock and ADT.CommandDock.SettingsPanel
+                    if MainFrame and MainFrame.UpdateSettingsEntries then
+                        MainFrame:UpdateSettingsEntries()
+                    end
                 end
             end
             
+            item:SetPoint("TOPLEFT", self, "TOPLEFT", PADDING, -PADDING - (i - 1) * ITEM_HEIGHT)
             table.insert(self.items, item)
         end
         

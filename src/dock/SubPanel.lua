@@ -302,10 +302,19 @@ local function AttachTo(main)
                 if not hasBody and not hasHeaderText then
                     sub._ADT_DesiredHeight = 0
                     sub:SetHeight(0)
+                    -- 同步“视觉隐藏”Header 的装饰性分割线，避免在父层高为 0 时仍然“漏画一条线”。
+                    -- 说明：不强制调用 Show/Hide，改用 Alpha，避免干扰页面对 Divider 的显式显隐控制。
+                    if sub.Header and sub.Header.Divider and sub.Header.Divider.SetAlpha then
+                        sub.Header.Divider:SetAlpha(0)
+                    end
                     -- 不再调用 sub:Hide()，避免触发 SubHide 重排风暴
                 else
                     -- 需要显示内容：确保至少显示（若此前被外部隐藏也拉起）
                     if sub.Show and (not sub.IsShown or not sub:IsShown()) then sub:Show() end
+                    -- 恢复分割线可见度（若页面另行 Hide，则 Alpha 不会强制拉起）。
+                    if sub.Header and sub.Header.Divider and sub.Header.Divider.SetAlpha then
+                        sub.Header.Divider:SetAlpha(1)
+                    end
                 end
             end
 

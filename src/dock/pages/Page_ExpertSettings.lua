@@ -67,78 +67,6 @@ local function RefreshControls()
     end
 end
 
--- 创建下拉菜单按钮
-local function CreateDropdownButton(parent, width, label, options, getCVar, setCVar, cvarName)
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetSize(width, 28)
-    
-    -- 标签
-    local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    text:SetPoint("LEFT", row, "LEFT", 0, 0)
-    text:SetText(label)
-    row.label = text
-    
-    -- 下拉按钮（使用游戏内置样式）
-    local btn = CreateFrame("Button", nil, row)
-    btn:SetSize(80, 22)
-    btn:SetPoint("LEFT", row, "LEFT", 120, 0)
-    
-    -- 背景
-    btn.bg = btn:CreateTexture(nil, "BACKGROUND")
-    btn.bg:SetAllPoints()
-    btn.bg:SetAtlas("common-dropdown-c-button-open")
-    
-    -- 高亮
-    btn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
-    
-    -- 当前值文本
-    btn.valueText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    btn.valueText:SetPoint("CENTER", btn, "CENTER", 0, 0)
-    btn.valueText:SetTextColor(1, 0.82, 0)
-    
-    -- 箭头
-    local arrow = btn:CreateTexture(nil, "OVERLAY")
-    arrow:SetSize(12, 12)
-    arrow:SetPoint("RIGHT", btn, "RIGHT", -4, 0)
-    arrow:SetAtlas("common-dropdown-c-button-arrow-down")
-    
-    row.options = options
-    row.getCVar = getCVar
-    row.setCVar = setCVar
-    row.cvarName = cvarName
-    
-    -- 更新显示
-    function row:UpdateLabel()
-        local current = self.getCVar()
-        for _, opt in ipairs(self.options) do
-            if math.abs((opt.value or 0) - (current or 0)) < 0.01 then
-                btn.valueText:SetText(opt.text)
-                return
-            end
-        end
-        btn.valueText:SetText(tostring(current))
-    end
-    
-    -- 点击展开下拉菜单
-    btn:SetScript("OnClick", function()
-        MenuUtil.CreateContextMenu(btn, function(owner, root)
-            for _, opt in ipairs(options) do
-                local function IsSelected()
-                    return math.abs((getCVar() or 0) - (opt.value or 0)) < 0.01
-                end
-                local function SetSelected()
-                    setCVar(opt.value)
-                    row:UpdateLabel()
-                    return MenuResponse.Close
-                end
-                root:CreateRadio(opt.text, IsSelected, SetSelected, opt.value)
-            end
-        end)
-    end)
-    
-    return row
-end
-
 local function EnsureExpertPanel(parent, width)
     if expertPanel then
         expertPanel:SetParent(parent)
@@ -181,7 +109,7 @@ local function EnsureExpertPanel(parent, width)
     checkboxSnapOnHold = cb
     y = y - rowHeight
     
-    -- ==================== 行2：旋转精度（下拉菜单） ====================
+    -- ==================== 行2：旋转精度（下拉菜单，使用统一模块） ====================
     local rotOptions = {
         {value = 5, text = "5°"},
         {value = 10, text = "10°"},
@@ -190,7 +118,7 @@ local function EnsureExpertPanel(parent, width)
         {value = 45, text = "45°"},
         {value = 90, text = "90°"},
     }
-    dropdownRotation = CreateDropdownButton(
+    dropdownRotation = ADT.DockUI.CreateDropdownRow(
         expertPanel, innerWidth,
         (L["Rotation Snap Degrees"] or "Rotation Snap") .. ":",
         rotOptions,
@@ -199,19 +127,19 @@ local function EnsureExpertPanel(parent, width)
             SetCVarNum(CVARS.RotationSnapDegrees.name, val)
             print("|cFF00FF00[ADT]|r " .. (L["Rotation Snap Degrees"] or "Rotation Snap") .. " = " .. val .. "°")
         end,
-        CVARS.RotationSnapDegrees.name
+        { labelOffsetX = 0, buttonOffsetX = 120, buttonWidth = 80 }
     )
     dropdownRotation:SetPoint("TOPLEFT", expertPanel, "TOPLEFT", offsetX, y)
     y = y - rowHeight
     
-    -- ==================== 行3：缩放精度（下拉菜单） ====================
+    -- ==================== 行3：缩放精度（下拉菜单，使用统一模块） ====================
     local scaleOptions = {
         {value = 0.1, text = "10%"},
         {value = 0.2, text = "20%"},
         {value = 0.5, text = "50%"},
         {value = 1, text = "100%"},
     }
-    dropdownScale = CreateDropdownButton(
+    dropdownScale = ADT.DockUI.CreateDropdownRow(
         expertPanel, innerWidth,
         (L["Scale Snap"] or "Scale Snap") .. ":",
         scaleOptions,
@@ -220,7 +148,7 @@ local function EnsureExpertPanel(parent, width)
             SetCVarNum(CVARS.ScaleSnap.name, val)
             print("|cFF00FF00[ADT]|r " .. (L["Scale Snap"] or "Scale Snap") .. " = " .. (val * 100) .. "%")
         end,
-        CVARS.ScaleSnap.name
+        { labelOffsetX = 0, buttonOffsetX = 120, buttonWidth = 80 }
     )
     dropdownScale:SetPoint("TOPLEFT", expertPanel, "TOPLEFT", offsetX, y)
     y = y - rowHeight + 4
