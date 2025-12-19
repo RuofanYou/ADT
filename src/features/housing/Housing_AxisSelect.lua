@@ -10,6 +10,17 @@ local L = ADT and ADT.L or {}
 local AxisSelect = {}
 ADT.AxisSelect = AxisSelect
 
+-- 功能开关状态
+AxisSelect.isEnabled = true
+
+-- 加载设置
+local function LoadSettings()
+    AxisSelect.isEnabled = (ADT.GetDBValue and ADT.GetDBValue("EnablePulseRotate")) ~= false  -- 默认开启
+    if ADT and ADT.DebugPrint then
+        ADT.DebugPrint(string.format("[AxisSelect] LoadSettings: enabled=%s", tostring(AxisSelect.isEnabled)))
+    end
+end
+
 -- 轴对应的切换次数（重置后默认为 X）
 -- 顺序：X→Y→Z→X
 local AxisSwitchCount = {
@@ -259,6 +270,8 @@ local function CreateAxisHUD()
         axisBtn:SetPoint("TOP", hud, "TOP", 0, yOffset)
         axisBtn.axis = cfg.axis
         axisBtn:SetScript("OnClick", function(self)
+            -- 脉冲旋转期间禁止切换轴（与 +/- 按钮一致）
+            if isPulsing then return end
             AxisSelect:SelectAxis(self.axis)
             PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
         end)
@@ -314,10 +327,13 @@ local function UpdateHUDVisibility()
     if not AxisHUD then return end
     
     local show = false
-    if IsExpertMode() then
-        if IsRotateSubmode() then
-            if HasDecorSelected() then
-                show = true
+    -- 检查功能开关
+    if AxisSelect.isEnabled then
+        if IsExpertMode() then
+            if IsRotateSubmode() then
+                if HasDecorSelected() then
+                    show = true
+                end
             end
         end
     end
@@ -375,7 +391,42 @@ SlashCmdList["ADTPULSE"] = function(msg)
     end
 end
 
+--------------------------------------------------------------------------------
+-- 设置注册
+--------------------------------------------------------------------------------
+
+local function RegisterSettings()
+    if not (ADT.CommandDock and ADT.CommandDock.AddModule) then return end
+    local CC = ADT.CommandDock
+
+    CC:AddModule({
+        name = L["Enable Pulse Rotate"],
+        dbKey = 'EnablePulseRotate',
+        type = 'toggle',
+        description = L["Enable Pulse Rotate tooltip"],
+        categoryKeys = { 'AutoRotate' },
+        uiOrder = 12,  -- 排在递增角度(11)之后，脉冲角度下拉菜单之前
+    })
+end
+
+-- 订阅设置变化
+if ADT.Settings and ADT.Settings.On then
+    ADT.Settings.On("EnablePulseRotate", function()
+        LoadSettings()
+        UpdateHUDVisibility()
+    end)
+end
+
+-- 延迟注册设置
+C_Timer.After(0.5, function()
+    LoadSettings()
+    RegisterSettings()
+end)
+
+if ADT.CommandDock and ADT.CommandDock.RegisterModuleProvider then
+    ADT.CommandDock:RegisterModuleProvider(RegisterSettings)
+end
+
 if ADT and ADT.DebugPrint then
     ADT.DebugPrint("[AxisSelect] 模块已加载")
 end
-

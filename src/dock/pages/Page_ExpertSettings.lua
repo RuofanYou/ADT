@@ -1,6 +1,6 @@
 -- Page_ExpertSettings.lua
 -- 专家模式设置页面：允许玩家可视化控制专家模式相关的 CVars
--- 使用 ScrollView 的自定义模板机制，确保控件正确渲染
+-- 手动创建控件，确保 CVar 真正生效
 
 local ADDON_NAME, ADT = ...
 if not ADT.IsToCVersionEqualOrNewerThan(110000) then return end
@@ -37,106 +37,107 @@ end
 -- 设置 CVar 值
 local function SetCVarNum(cvarName, value)
     SetCVar(cvarName, value)
-    -- 调试输出
     if ADT.DebugPrint then
         ADT.DebugPrint(string.format("[ExpertSettings] SetCVar %s = %s", cvarName, tostring(value)))
     end
 end
 
--- 创建复选框设置行
-local function CreateCheckboxRow(parent, width, label, tooltip, getValue, setValue)
+-- 专家设置面板容器（延迟创建）
+local expertPanel = nil
+local checkboxSnapOnHold = nil
+local dropdownRotation = nil
+local dropdownScale = nil
+
+-- 刷新所有控件状态
+local function RefreshControls()
+    -- 复选框
+    if checkboxSnapOnHold then
+        local snapVal = GetCVarNum(CVARS.SnapOnHold.name)
+        checkboxSnapOnHold:SetChecked(snapVal == 0)
+    end
+    
+    -- 旋转下拉菜单
+    if dropdownRotation and dropdownRotation.UpdateLabel then
+        dropdownRotation:UpdateLabel()
+    end
+    
+    -- 缩放下拉菜单
+    if dropdownScale and dropdownScale.UpdateLabel then
+        dropdownScale:UpdateLabel()
+    end
+end
+
+-- 创建下拉菜单按钮
+local function CreateDropdownButton(parent, width, label, options, getCVar, setCVar, cvarName)
     local row = CreateFrame("Frame", nil, parent)
     row:SetSize(width, 28)
     
-    local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
-    cb:SetSize(24, 24)
-    cb:SetPoint("LEFT", row, "LEFT", 0, 0)
-    cb:SetScript("OnClick", function(self)
-        local checked = self:GetChecked()
-        setValue(checked)
-        PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-    end)
-    cb:SetScript("OnEnter", function(self)
-        if tooltip then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(label, 1, 1, 1)
-            GameTooltip:AddLine(tooltip, nil, nil, nil, true)
-            GameTooltip:Show()
-        end
-    end)
-    cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    row.checkbox = cb
-    
+    -- 标签
     local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    text:SetPoint("LEFT", cb, "RIGHT", 4, 0)
+    text:SetPoint("LEFT", row, "LEFT", 0, 0)
     text:SetText(label)
     row.label = text
     
-    row.Refresh = function(self)
-        self.checkbox:SetChecked(getValue())
-    end
+    -- 下拉按钮（使用游戏内置样式）
+    local btn = CreateFrame("Button", nil, row)
+    btn:SetSize(80, 22)
+    btn:SetPoint("LEFT", row, "LEFT", 120, 0)
     
-    return row
-end
-
--- 创建按钮组行
-local function CreateButtonGroupRow(parent, width, label, tooltip, options, getValue, setValue)
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetSize(width, 28)
+    -- 背景
+    btn.bg = btn:CreateTexture(nil, "BACKGROUND")
+    btn.bg:SetAllPoints()
+    btn.bg:SetAtlas("common-dropdown-c-button-open")
     
-    local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    text:SetPoint("LEFT", row, "LEFT", 0, 0)
-    text:SetText(label .. ":")
-    row.label = text
+    -- 高亮
+    btn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
     
-    local buttons = {}
-    local labelWidth = 120
-    local btnWidth = 42
-    local btnGap = 4
+    -- 当前值文本
+    btn.valueText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    btn.valueText:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    btn.valueText:SetTextColor(1, 0.82, 0)
     
-    for i, opt in ipairs(options) do
-        local btn = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-        btn:SetSize(btnWidth, 22)
-        btn:SetPoint("LEFT", row, "LEFT", labelWidth + (i-1) * (btnWidth + btnGap), 0)
-        btn:SetText(opt.text)
-        btn.value = opt.value
-        btn:SetScript("OnClick", function(self)
-            setValue(self.value)
-            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
-            row:Refresh()
-        end)
-        btn:SetScript("OnEnter", function(self)
-            if tooltip then
-                GameTooltip:SetOwner(self, "ANCHOR_TOP")
-                GameTooltip:SetText(label, 1, 1, 1)
-                GameTooltip:AddLine(tooltip, nil, nil, nil, true)
-                GameTooltip:Show()
-            end
-        end)
-        btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        buttons[#buttons + 1] = btn
-    end
-    row.buttons = buttons
+    -- 箭头
+    local arrow = btn:CreateTexture(nil, "OVERLAY")
+    arrow:SetSize(12, 12)
+    arrow:SetPoint("RIGHT", btn, "RIGHT", -4, 0)
+    arrow:SetAtlas("common-dropdown-c-button-arrow-down")
     
-    row.Refresh = function(self)
-        local current = getValue()
-        for _, btn in ipairs(self.buttons) do
-            if btn.GetNormalTexture and btn:GetNormalTexture() then
-                if math.abs((btn.value or 0) - (current or 0)) < 0.01 then
-                    btn:GetNormalTexture():SetVertexColor(0.2, 0.8, 0.2)
-                else
-                    btn:GetNormalTexture():SetVertexColor(1, 1, 1)
-                end
+    row.options = options
+    row.getCVar = getCVar
+    row.setCVar = setCVar
+    row.cvarName = cvarName
+    
+    -- 更新显示
+    function row:UpdateLabel()
+        local current = self.getCVar()
+        for _, opt in ipairs(self.options) do
+            if math.abs((opt.value or 0) - (current or 0)) < 0.01 then
+                btn.valueText:SetText(opt.text)
+                return
             end
         end
+        btn.valueText:SetText(tostring(current))
     end
+    
+    -- 点击展开下拉菜单
+    btn:SetScript("OnClick", function()
+        MenuUtil.CreateContextMenu(btn, function(owner, root)
+            for _, opt in ipairs(options) do
+                local function IsSelected()
+                    return math.abs((getCVar() or 0) - (opt.value or 0)) < 0.01
+                end
+                local function SetSelected()
+                    setCVar(opt.value)
+                    row:UpdateLabel()
+                    return MenuResponse.Close
+                end
+                root:CreateRadio(opt.text, IsSelected, SetSelected, opt.value)
+            end
+        end)
+    end)
     
     return row
 end
-
--- 专家设置面板容器（延迟创建）
-local expertPanel = nil
-local expertRows = {}
 
 local function EnsureExpertPanel(parent, width)
     if expertPanel then
@@ -144,6 +145,7 @@ local function EnsureExpertPanel(parent, width)
         expertPanel:ClearAllPoints()
         expertPanel:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
         expertPanel:SetWidth(width)
+        RefreshControls()
         return expertPanel
     end
     
@@ -155,67 +157,75 @@ local function EnsureExpertPanel(parent, width)
     local rowHeight = 32
     local y = -8
     
-    -- 行1：默认启用吸附
-    local row1 = CreateCheckboxRow(
-        expertPanel, innerWidth,
-        L["Default Snap Enabled"] or "Default Snap Enabled",
-        L["Default Snap Enabled tooltip"] or "ON: Snap by default\nOFF: No snap by default (Blizzard default)",
-        function() return GetCVarNum(CVARS.SnapOnHold.name) == 0 end,
-        function(checked)
-            SetCVarNum(CVARS.SnapOnHold.name, checked and 0 or 1)
-            print("|cFF00FF00[ADT]|r " .. (L["Default Snap Enabled"] or "Default Snap") .. " = " .. (checked and "ON" or "OFF"))
-        end
-    )
+    -- ==================== 行1：默认启用吸附（复选框） ====================
+    local row1 = CreateFrame("Frame", nil, expertPanel)
+    row1:SetSize(innerWidth, 28)
     row1:SetPoint("TOPLEFT", expertPanel, "TOPLEFT", offsetX, y)
-    expertRows[1] = row1
+    
+    local cb = CreateFrame("CheckButton", nil, row1, "UICheckButtonTemplate")
+    cb:SetSize(24, 24)
+    cb:SetPoint("LEFT", row1, "LEFT", 0, 0)
+    cb:SetScript("OnClick", function(self)
+        local checked = self:GetChecked()
+        -- checked=true 表示"默认启用吸附"，对应 CVar=0
+        -- checked=false 表示"默认不吸附"，对应 CVar=1
+        SetCVarNum(CVARS.SnapOnHold.name, checked and 0 or 1)
+        PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+        print("|cFF00FF00[ADT]|r " .. (L["Default Snap Enabled"] or "Default Snap Enabled") .. " = " .. (checked and "ON" or "OFF"))
+    end)
+    
+    local cbLabel = row1:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    cbLabel:SetPoint("LEFT", cb, "RIGHT", 4, 0)
+    cbLabel:SetText(L["Default Snap Enabled"] or "Default Snap Enabled")
+    
+    checkboxSnapOnHold = cb
     y = y - rowHeight
     
-    -- 行2：旋转精度
+    -- ==================== 行2：旋转精度（下拉菜单） ====================
     local rotOptions = {
         {value = 5, text = "5°"},
         {value = 10, text = "10°"},
         {value = 15, text = "15°"},
+        {value = 30, text = "30°"},
         {value = 45, text = "45°"},
         {value = 90, text = "90°"},
     }
-    local row2 = CreateButtonGroupRow(
+    dropdownRotation = CreateDropdownButton(
         expertPanel, innerWidth,
-        L["Rotation Snap Degrees"] or "Rotation Snap",
-        L["Rotation Snap Degrees tooltip"] or "Rotation snap degrees",
+        (L["Rotation Snap Degrees"] or "Rotation Snap") .. ":",
         rotOptions,
         function() return GetCVarNum(CVARS.RotationSnapDegrees.name) end,
         function(val)
             SetCVarNum(CVARS.RotationSnapDegrees.name, val)
             print("|cFF00FF00[ADT]|r " .. (L["Rotation Snap Degrees"] or "Rotation Snap") .. " = " .. val .. "°")
-        end
+        end,
+        CVARS.RotationSnapDegrees.name
     )
-    row2:SetPoint("TOPLEFT", expertPanel, "TOPLEFT", offsetX, y)
-    expertRows[2] = row2
+    dropdownRotation:SetPoint("TOPLEFT", expertPanel, "TOPLEFT", offsetX, y)
     y = y - rowHeight
     
-    -- 行3：缩放精度
+    -- ==================== 行3：缩放精度（下拉菜单） ====================
     local scaleOptions = {
         {value = 0.1, text = "10%"},
         {value = 0.2, text = "20%"},
         {value = 0.5, text = "50%"},
         {value = 1, text = "100%"},
     }
-    local row3 = CreateButtonGroupRow(
+    dropdownScale = CreateDropdownButton(
         expertPanel, innerWidth,
-        L["Scale Snap"] or "Scale Snap",
-        L["Scale Snap tooltip"] or "Scale snap percent",
+        (L["Scale Snap"] or "Scale Snap") .. ":",
         scaleOptions,
         function() return GetCVarNum(CVARS.ScaleSnap.name) end,
         function(val)
             SetCVarNum(CVARS.ScaleSnap.name, val)
             print("|cFF00FF00[ADT]|r " .. (L["Scale Snap"] or "Scale Snap") .. " = " .. (val * 100) .. "%")
-        end
+        end,
+        CVARS.ScaleSnap.name
     )
-    row3:SetPoint("TOPLEFT", expertPanel, "TOPLEFT", offsetX, y)
-    expertRows[3] = row3
-    y = y - rowHeight - 8
+    dropdownScale:SetPoint("TOPLEFT", expertPanel, "TOPLEFT", offsetX, y)
+    y = y - rowHeight + 4
     
-    -- 行4：恢复默认按钮
+    -- ==================== 行4：恢复默认按钮 ====================
     local resetBtn = CreateFrame("Button", nil, expertPanel, "UIPanelButtonTemplate")
     resetBtn:SetSize(100, 26)
     resetBtn:SetPoint("TOPLEFT", expertPanel, "TOPLEFT", offsetX, y)
@@ -226,21 +236,10 @@ local function EnsureExpertPanel(parent, width)
         SetCVarNum(CVARS.ScaleSnap.name, CVARS.ScaleSnap.default)
         PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
         print("|cFF00FF00[ADT]|r " .. (L["Expert Settings Reset"] or "Expert settings reset"))
-        -- 刷新
-        for _, r in ipairs(expertRows) do
-            if r.Refresh then r:Refresh() end
-        end
+        RefreshControls()
     end)
-    expertRows[4] = resetBtn
     
     return expertPanel
-end
-
--- 刷新所有控件状态
-function PageExpertSettings:RefreshControls()
-    for _, r in ipairs(expertRows) do
-        if r.Refresh then r:Refresh() end
-    end
 end
 
 -- 页面渲染
@@ -293,16 +292,15 @@ function PageExpertSettings:Render(mainFrame, categoryKey)
         dataIndex = n,
         templateKey = "ExpertSettingsPanel",
         setupFunc = function(obj)
-            -- 刷新控件状态
-            PageExpertSettings:RefreshControls()
+            RefreshControls()
         end,
         point = "TOPLEFT",
         relativePoint = "TOPLEFT",
         top = offsetY,
-        bottom = offsetY + 140,
+        bottom = offsetY + 130,
         offsetX = offsetX,
     }
-    offsetY = offsetY + 140
+    offsetY = offsetY + 130
 
     -- 注册自定义模板（如果尚未注册）
     local sv = mainFrame.ModuleTab.ScrollView

@@ -230,3 +230,94 @@ end
 
 -- 导出
 ADT.DockUI.DropdownMenu = ADTDropdownMenu
+
+--
+-- CreateDropdownRow：通用“标签 + 下拉按钮”一行控件（与 Page_ExpertSettings 保持一致样式）
+-- KISS：不引入新的模板，直接用暴雪通用贴图与 MenuUtil。
+-- 参数：
+--   parent, width        - 父容器与行宽
+--   label                - 左侧标签文本
+--   options              - 下拉项数组 { {value=..., text=...}, ... }
+--   getValue() -> any    - 读取当前值
+--   setValue(v)          - 设置新值（需自行写入 DB/CVar）
+-- 可选扩展：opts = { labelOffsetX=..., buttonOffsetX=..., buttonWidth=... }
+function ADT.DockUI.CreateDropdownRow(parent, width, label, options, getValue, setValue, opts)
+    local row = CreateFrame("Frame", nil, parent)
+    row:SetSize(width, 28)
+
+    local cfg = opts or {}
+    local labelOffsetX = tonumber(cfg.labelOffsetX) or 0
+    local buttonOffsetX = tonumber(cfg.buttonOffsetX) or 120
+    local buttonWidth   = tonumber(cfg.buttonWidth) or 80
+
+    -- 标签
+    local text = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    text:SetPoint("LEFT", row, "LEFT", labelOffsetX, 0)
+    text:SetText(label)
+    row.label = text
+
+    -- 下拉按钮
+    local btn = CreateFrame("Button", nil, row)
+    btn:SetSize(buttonWidth, 22)
+    btn:SetPoint("LEFT", row, "LEFT", buttonOffsetX, 0)
+
+    btn.bg = btn:CreateTexture(nil, "BACKGROUND")
+    btn.bg:SetAllPoints()
+    btn.bg:SetAtlas("common-dropdown-c-button-open")
+
+    btn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+
+    btn.valueText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    btn.valueText:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    btn.valueText:SetTextColor(1, 0.82, 0)
+
+    local arrow = btn:CreateTexture(nil, "OVERLAY")
+    arrow:SetSize(12, 12)
+    arrow:SetPoint("RIGHT", btn, "RIGHT", -4, 0)
+    arrow:SetAtlas("common-dropdown-c-button-arrow-down")
+
+    row.options = options or {}
+    row._get = getValue
+    row._set = setValue
+
+    function row:UpdateLabel()
+        local current = self._get and self._get() or nil
+        for _, opt in ipairs(self.options) do
+            if (opt and opt.value) ~= nil then
+                local a = tonumber(opt.value)
+                local b = tonumber(current)
+                if a and b then
+                    if math.abs(a - b) < 0.01 then
+                        btn.valueText:SetText(opt.text)
+                        return
+                    end
+                elseif opt.value == current then
+                    btn.valueText:SetText(opt.text)
+                    return
+                end
+            end
+        end
+        btn.valueText:SetText(tostring(current))
+    end
+
+    btn:SetScript("OnClick", function()
+        MenuUtil.CreateContextMenu(btn, function(owner, root)
+            for _, opt in ipairs(row.options) do
+                local function IsSelected()
+                    local cv = row._get and row._get() or nil
+                    local a, b = tonumber(cv), tonumber(opt.value)
+                    if a and b then return math.abs(a - b) < 0.01 end
+                    return cv == opt.value
+                end
+                local function SetSelected()
+                    if row._set then row._set(opt.value) end
+                    row:UpdateLabel()
+                    return MenuResponse.Close
+                end
+                root:CreateRadio(opt.text, IsSelected, SetSelected, opt.value)
+            end
+        end)
+    end)
+
+    return row
+end

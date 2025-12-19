@@ -83,6 +83,9 @@ ADT.Locales.zhCN = {
     ["Grab an item to calibrate"] = "请先抓起一个装饰以校准",
     ["Step for this decor set to %s°"] = "已为该装饰设置步进 %s°",
     ["Step for this decor cleared"] = "已清除此装饰的专属步进，改用全局值",
+    -- 按键旋转（专家模式 HUD）
+    ["Enable Pulse Rotate"] = "启用旋转操作按钮",
+    ["Enable Pulse Rotate tooltip"] = "在专家模式使用 +/- 按钮进行快速角度旋转。",
     -- 递增旋转模式
     ["Enable Increment Rotate"] = "启用递增旋转",
     ["Enable Increment Rotate tooltip"] = "按住 CTRL 批量放置时，第 n 件相对默认朝向自动多旋转 n×角度。",
@@ -157,6 +160,7 @@ ADT.Locales.zhCN = {
     ["Expert Pulse Degrees"] = "脉冲旋转角度：",
     ["Expert Pulse Degrees tooltip"] = "每次点击 +/- 按钮旋转的角度",
     ["Pulse Degrees Set"] = "脉冲旋转角度已设置为 %d°",
+    ["Pulse Rotation Disclaimer"] = "由于暴雪代码缺陷，无法实现精确角度，每次旋转后会有一定误差偏差",
     -- 悬停“信息行”
     ["Indoor"] = "室内",
     ["Outdoor"] = "室外",

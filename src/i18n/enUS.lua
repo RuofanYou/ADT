@@ -81,6 +81,9 @@ ADT.Locales.enUS = {
     ["Grab an item to calibrate"] = "Grab a decor to calibrate",
     ["Step for this decor set to %s°"] = "Step for this decor set to %s°",
     ["Step for this decor cleared"] = "Per-decor step cleared; using global",
+    -- Pulse rotation (Expert mode axis HUD)
+    ["Enable Pulse Rotate"] = "Enable Rotate Action Button",
+    ["Enable Pulse Rotate tooltip"] = "Show the +/- rotation buttons for quick angular adjustments in Expert Mode.",
     -- Increment mode
     ["Enable Increment Rotate"] = "Enable Increment Rotate",
     ["Enable Increment Rotate tooltip"] = "When holding CTRL to batch place, each subsequent item will rotate by an additional configured angle.",
@@ -154,6 +157,7 @@ ADT.Locales.enUS = {
     ["Expert Pulse Degrees"] = "Pulse Rotation Amount:",
     ["Expert Pulse Degrees tooltip"] = "Amount to rotate per +/- button click",
     ["Pulse Degrees Set"] = "Pulse degrees set to %d°",
+    ["Pulse Rotation Disclaimer"] = "Due to Blizzard API limitations, precise angles cannot be achieved. Each rotation may have minor deviation.",
     -- Hover InfoLine（室内/外 + 库存 + 染色）
     ["Indoor"] = "Indoor",
     ["Outdoor"] = "Outdoor",

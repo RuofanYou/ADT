@@ -175,6 +175,46 @@ function PageAutoRotate:Render(mainFrame, categoryKey)
     }
     offsetY = offsetY + 36
 
+    -- 注册说明文字模板（灰色小字）
+    if sv and sv._templates and not sv._templates["DisclaimerText"] then
+        sv:AddTemplate("DisclaimerText", function()
+            local textHeight = 48  -- 足够显示两行
+            local frame = CreateFrame("Frame", nil, sv)
+            frame:SetSize(panelWidth, textHeight)
+            
+            local text = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            text:SetPoint("TOPLEFT", frame, "TOPLEFT", offsetX, -4)
+            text:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -offsetX, 4)
+            text:SetJustifyH("LEFT")
+            text:SetJustifyV("TOP")
+            text:SetWordWrap(true)
+            text:SetMaxLines(3)  -- 最多3行
+            text:SetText(L["Pulse Rotation Disclaimer"] or "Due to Blizzard API limitations, precise angles cannot be achieved.")
+            frame.text = text
+            
+            return frame
+        end)
+    end
+
+    -- 添加误差说明文字
+    local disclaimerHeight = 48
+    n = n + 1
+    content[n] = {
+        dataIndex = n,
+        templateKey = "DisclaimerText",
+        setupFunc = function(obj)
+            if obj.text then
+                obj.text:SetText(L["Pulse Rotation Disclaimer"] or "Due to Blizzard API limitations, precise angles cannot be achieved.")
+            end
+        end,
+        point = "TOPLEFT",
+        relativePoint = "TOPLEFT",
+        top = offsetY,
+        bottom = offsetY + disclaimerHeight,
+        offsetX = 0,
+    }
+    offsetY = offsetY + disclaimerHeight
+
     mainFrame.firstModuleData = (cat.modules or {})[1]
     mainFrame.ModuleTab.ScrollView:SetContent(content, false)
     if mainFrame.UpdateAutoWidth then mainFrame:UpdateAutoWidth() end
