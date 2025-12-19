@@ -128,6 +128,15 @@ ADT.Locales.enUS = {
     ["Keybind Action Quickbar7"] = "Quickbar 7",
     ["Keybind Action Quickbar8"] = "Quickbar 8",
     ["Keybind Action DyeCopy"] = "Copy Dye",
+    ["Keybind Action AxisX"] = "Expert: X Axis",
+    ["Keybind Action AxisY"] = "Expert: Y Axis",
+    ["Keybind Action AxisZ"] = "Expert: Z Axis",
+    -- AxisSelect HUD
+    ["Axis"] = "Axis",
+    ["Axis X"] = "X Axis (Left/Right)",
+    ["Axis Y"] = "Y Axis (Vertical)",
+    ["Axis Z"] = "Z Axis (Front/Back)",
+    ["Click to select rotation axis"] = "Click to select rotation axis",
     -- Hover InfoLine（室内/外 + 库存 + 染色）
     ["Indoor"] = "Indoor",
     ["Outdoor"] = "Outdoor",

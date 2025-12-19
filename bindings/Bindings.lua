@@ -61,3 +61,20 @@ function ADT_Rotate_CW_90()
     if not RotateLoaded() then print("ADT: 旋转模块未加载") return end
     ADT.RotateHotkey:RotateSelectedByDegrees(90)
 end
+
+-- ===== 专家模式：快速选轴（Alt+Q/W/E → X/Y/Z） =====
+BINDING_NAME_ADT_AXIS_X = "专家模式：切换到 X 轴"
+BINDING_NAME_ADT_AXIS_Y = "专家模式：切换到 Y 轴"
+BINDING_NAME_ADT_AXIS_Z = "专家模式：切换到 Z 轴"
+
+function ADT_Axis_X()
+    if ADT and ADT.AxisSelect then ADT.AxisSelect:SelectAxisX() end
+end
+
+function ADT_Axis_Y()
+    if ADT and ADT.AxisSelect then ADT.AxisSelect:SelectAxisY() end
+end
+
+function ADT_Axis_Z()
+    if ADT and ADT.AxisSelect then ADT.AxisSelect:SelectAxisZ() end
+end

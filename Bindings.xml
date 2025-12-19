@@ -14,4 +14,15 @@
     <Binding name="ADT_ROTATE_CW_90">
         ADT_Rotate_CW_90();
     </Binding>
+    <!-- 专家模式：快速选轴 -->
+    <Binding name="ADT_AXIS_X" header="ADT_EXPERT">
+        ADT_Axis_X();
+    </Binding>
+    <Binding name="ADT_AXIS_Y">
+        ADT_Axis_Y();
+    </Binding>
+    <Binding name="ADT_AXIS_Z">
+        ADT_Axis_Z();
+    </Binding>
 </Bindings>
+

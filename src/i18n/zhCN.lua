@@ -131,6 +131,15 @@ ADT.Locales.zhCN = {
     ["Keybind Action Quickbar7"] = "快捷栏 7",
     ["Keybind Action Quickbar8"] = "快捷栏 8",
     ["Keybind Action DyeCopy"] = "复制染料",
+    ["Keybind Action AxisX"] = "专家模式：X轴",
+    ["Keybind Action AxisY"] = "专家模式：Y轴",
+    ["Keybind Action AxisZ"] = "专家模式：Z轴",
+    -- 选轴 HUD
+    ["Axis"] = "轴",
+    ["Axis X"] = "X 轴（左/右）",
+    ["Axis Y"] = "Y 轴（上/下）",
+    ["Axis Z"] = "Z 轴（前/后）",
+    ["Click to select rotation axis"] = "点击选择旋转轴",
     -- 悬停“信息行”
     ["Indoor"] = "室内",
     ["Outdoor"] = "室外",
