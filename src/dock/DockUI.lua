@@ -1111,30 +1111,27 @@ local function CreateUI()
         end
     end
 
-    -- 右侧整栏已移除；下面创建中央区域与其背景
+    -- 右侧整栏已移除；下面仅创建中央区域，不再额外铺设背景贴图
     do  -- CentralSection（设置列表所在区域）
-        -- KISS：不再创建“统一右侧背景”（RightUnifiedBackground）。
-        -- 该大面积贴图会在 /fstack 中对应到 MainFrame，从而被误认为“幽灵面板”。
-        -- 我们仅保留 CentralSection 自身的局部背景即可。
+        -- KISS：彻底移除中央区域背景（CenterBackground）。
+        -- 依据现场问题，“折叠后 Header 附近出现的大透明幽灵框”
+        -- 来源即为此处的背景贴图对象。我们直接不创建它，
+        -- 由 Header 内部的 fill 负责过渡底色，列表项各自负责可读性。
         if MainFrame.RightUnifiedBackground then
             MainFrame.RightUnifiedBackground:Hide()
             MainFrame.RightUnifiedBackground = nil
         end
-
-        -- 中央区域独立背景
-        if MainFrame.CenterBackground then MainFrame.CenterBackground:Hide() end
-        local CenterBG = MainFrame:CreateTexture(nil, "BACKGROUND")
-        MainFrame.CenterBackground = CenterBG
-        CenterBG:SetAtlas("housing-basic-panel-background")
-        CenterBG:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", 0, 0)
-        CenterBG:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", 0, Def.CenterBGInsetBottom or 2)
+        if MainFrame.CenterBackground then
+            MainFrame.CenterBackground:Hide()
+            MainFrame.CenterBackground = nil
+        end
 
         -- 暂不显示自研滚动条，后续将切换为暴雪 ScrollBox 体系
         MainFrame.ModuleTab.ScrollBar = nil
 
         local ScrollView = API.CreateListView(Tab1)
         MainFrame.ModuleTab.ScrollView = ScrollView
-        -- 列表视图顶端 = CentralSection 顶端（亦即 Header 底部）
+        -- 列表视图顶端 = CentralSection 顶端（亦即 Header 底部）。
         -- 给一段向内间距（Def.ScrollViewInsetTop），避免文字紧贴分隔线。
         ScrollView:SetPoint("TOPLEFT", CentralSection, "TOPLEFT", 0, - (Def.ScrollViewInsetTop or 6))
         ScrollView:SetPoint("BOTTOMRIGHT", CentralSection, "BOTTOMRIGHT", 0, (Def.ScrollViewInsetBottom or 2))
@@ -1323,4 +1320,3 @@ function MainFrame:HandleEscape()
 end
 
 -- Event listeners moved to DockUI_Controller.lua
-
