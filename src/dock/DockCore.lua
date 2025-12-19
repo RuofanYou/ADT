@@ -489,8 +489,17 @@ local function buildModules()
         numModules = 0,
     }
 
-    -- 快捷键分类（设置类）——自定义按键绑定
+    -- 专家模式设置分类（CVar 控制类）
     modules[6] = {
+        key = 'ExpertSettings',
+        categoryName = L['SC ExpertSettings'],
+        categoryType = 'settings', -- 设置类分类
+        modules = {},
+        numModules = 0,
+    }
+
+    -- 快捷键分类（设置类）——自定义按键绑定
+    modules[7] = {
         key = 'Keybinds',
         categoryName = L['SC Keybinds'],
         categoryType = 'keybinds', -- 快捷键专用分类类型
@@ -522,7 +531,7 @@ local function buildModules()
         categoryKeys = { 'Quickbar' },
         uiOrder = 1,
     }
-    modules[7] = {
+    modules[8] = {
         key = 'Quickbar',
         categoryName = L['SC Quickbar'],
         categoryType = 'settings',
@@ -531,7 +540,7 @@ local function buildModules()
     }
 
     -- 信息分类（关于插件的信息）
-    modules[8] = {
+    modules[9] = {
         key = 'About',
         categoryName = L['SC About'],
         categoryType = 'about', -- 关于信息类分类
@@ -593,6 +602,8 @@ local function getCategoryDisplayName(key)
         return L['SC AutoRotate']
     elseif key == 'Keybinds' then
         return L['SC Keybinds']
+    elseif key == 'ExpertSettings' then
+        return L['SC ExpertSettings']
     elseif key == 'Quickbar' then
         return L['SC Quickbar']
     elseif key == 'About' then
