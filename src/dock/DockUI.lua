@@ -1117,14 +1117,11 @@ local function CreateUI()
         -- 依据现场问题，“折叠后 Header 附近出现的大透明幽灵框”
         -- 来源即为此处的背景贴图对象。我们直接不创建它，
         -- 由 Header 内部的 fill 负责过渡底色，列表项各自负责可读性。
-        if MainFrame.RightUnifiedBackground then
-            MainFrame.RightUnifiedBackground:Hide()
-            MainFrame.RightUnifiedBackground = nil
-        end
-        if MainFrame.CenterBackground then
-            MainFrame.CenterBackground:Hide()
-            MainFrame.CenterBackground = nil
-        end
+        -- 中央区域背景贴图
+        local bg = CentralSection:CreateTexture(nil, "BACKGROUND")
+        MainFrame.CenterBackground = bg
+        bg:SetAtlas("housing-basic-panel-background")
+        bg:SetAllPoints(CentralSection)
 
         -- 暂不显示自研滚动条，后续将切换为暴雪 ScrollBox 体系
         MainFrame.ModuleTab.ScrollBar = nil

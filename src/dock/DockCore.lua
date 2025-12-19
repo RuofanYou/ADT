@@ -229,6 +229,16 @@ ADT.CommandDock = CommandDock
 
 local L = ADT.L
 
+-- 临时下线：Dock 左侧“最近放置”分类（不影响 RecentSlot）
+-- 目的：最小化改动地隐藏“最近放置”页面的导航入口，
+--       仅从 Dock 分类列表中移除 'History'，不改变功能实现与数据结构。
+-- 注意：
+--  - Page_Recent.lua 仍会注册页面键 'History'；若外部直接调用
+--    Main:ShowDecorListCategory('History')，页面模块将自行返回失败（找不到分类），
+--    不会产生报错；
+--  - Housing_RecentSlot.lua（最近放置槽）不依赖 Dock 分类，行为不受影响。
+local HIDE_DOCK_HISTORY_CATEGORY = true
+
 -- 内部：构建默认模块，并初始化映射
 local function buildModules()
     local modules = {}
@@ -576,6 +586,11 @@ local function buildModules()
         end,
     }
 
+    -- 若需临时隐藏“最近放置”分类，从列表中移除以保持数组连续
+    if HIDE_DOCK_HISTORY_CATEGORY then
+        table.remove(modules, 3)
+    end
+
     -- 初始化映射（6 个设置模块）
     CommandDock._dbKeyMap = {
         [moduleRepeat.dbKey] = moduleRepeat,
@@ -647,6 +662,13 @@ end
 
 function CommandDock:GetSortedModules()
     ensureSorted(self)
+    -- 若隐藏了 History 分类且持久化仍指向 History，则回落到 Housing（避免空白页面）
+    if HIDE_DOCK_HISTORY_CATEGORY and ADT and ADT.GetDBValue and ADT.SetDBValue then
+        local last = ADT.GetDBValue('LastCategoryKey')
+        if last == 'History' then
+            ADT.SetDBValue('LastCategoryKey', 'Housing')
+        end
+    end
     return self._sorted
 end
 
